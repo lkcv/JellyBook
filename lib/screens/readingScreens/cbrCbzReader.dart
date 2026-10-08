@@ -19,6 +19,7 @@ import 'package:jellybook/widgets/AudioPlayerWidget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:flutter/services.dart';
+import 'package:auto_size_text/auto_size_text.dart';
 
 // cbr/cbz reader
 class CbrCbzReader extends StatefulWidget {
@@ -392,14 +393,19 @@ class _CbrCbzReaderState extends State<CbrCbzReader> {
                 onPressed: _exit,
               ),
               Expanded(
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 16),
+                  child: AutoSizeText(
+                    title,
+                    maxLines: 2,
+                    minFontSize: 10,
+                    maxFontSize: 18,
+                    stepGranularity: 0.5,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ),
