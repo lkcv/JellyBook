@@ -111,6 +111,36 @@ class _CbrCbzReaderState extends State<CbrCbzReader> {
     }
   }
 
+  void _handleTap(TapUpDetails details) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final tapX = details.globalPosition.dx;
+    final zone = screenWidth * 0.2; // outer 20% of each side
+  
+    final isLeftTap = tapX < zone;
+    final isRightTap = tapX > screenWidth - zone;
+  
+    // middle of the screen toggles the overlay
+    if (!isLeftTap && !isRightTap) {
+      _toggleOverlay();
+      return;
+    }
+  
+    // RTL flips the direction
+    final goForward = direction == 'rtl' ? isLeftTap : isRightTap;
+  
+    if (goForward && _currentPage < pages.length - 1) {
+      _pageController?.nextPage(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    } else if (!goForward && _currentPage > 0) {
+      _pageController?.previousPage(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -513,7 +543,7 @@ class _CbrCbzReaderState extends State<CbrCbzReader> {
             Positioned.fill(
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onTap: _toggleOverlay,
+                onTapUp: isVertical ? (_) => _toggleOverlay() : _handleTap,
                 child: isVertical ? _buildVertical() : _buildPager(isRtl),
               ),
             ),
