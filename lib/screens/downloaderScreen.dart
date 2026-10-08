@@ -109,7 +109,9 @@ class _DownloadScreenState extends State<DownloadScreen> {
       await Directory(path).create(recursive: true);
     }
     // if (checkPermission1 == true) {
-    if (entry.folderPath != '' && forceDown == false) {
+    if (entry.folderPath != '' && entry.downloaded && forceDown == false) {
+      // Already downloaded, so hand the entry straight back
+      if (mounted) Navigator.pop(context, entry);
       return;
     }
     logger.d('About to download file');
@@ -195,21 +197,18 @@ class _DownloadScreenState extends State<DownloadScreen> {
 
     await extractFile(dir);
 
-    setState(() {
-      entry.downloaded = true;
-      entry.progress = 0.0;
-      // entry.filePath = dirLocation + '/' + fileName;
-      // pop the navigator but pass in the value of true
-      Navigator.pop(context, entry);
-    });
-    // }
+    entry.downloaded = true;
+    entry.progress = 0.0;
+    
     logger.d('title: ' + entry.title);
     logger.d('comicFolder: ' + comicFolder);
-
-    // save the comic to the database
+    
+    // save first, then close so the reader sees the saved entry
     await isar!.writeTxn(() async {
       await isar!.entrys.put(entry);
     });
+    
+    if (mounted) Navigator.pop(context, entry);
     // prefs.setString(title, comicFolder);
   }
 
