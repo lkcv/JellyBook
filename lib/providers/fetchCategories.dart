@@ -29,6 +29,9 @@ Future<(List<Entry>, List<Folder>)> getServerCategories({
 
   // check if already has books and folders
   final isar = Isar.getInstance();
+  final libraryNames = prefs.getStringList('categories') ?? [];
+  List<Folder> withoutLibraries(List<Folder> f) =>
+      f.where((folder) => !libraryNames.contains(folder.name)).toList();
   final List<Folder> foldersTemp = await isar!.folders.where().findAll();
   QueryBuilder<Entry, Entry, QAfterFilterCondition> typeNotBook =
       await isar.entrys.filter().not().typeEqualTo(EntryType.folder);
@@ -40,7 +43,7 @@ Future<(List<Entry>, List<Folder>)> getServerCategories({
       .sortByTitle()
       .findAll());
   if (foldersTemp.length > 0 && booksTemp.length > 0 && !force) {
-    return (booksTemp, foldersTemp);
+    return (booksTemp, withoutLibraries(foldersTemp));
   }
 
   // turn all the previous logger.d's into a single logger.d with multiple lines
@@ -129,7 +132,8 @@ Future<(List<Entry>, List<Folder>)> getServerCategories({
     // List<Entry> entries = await isar!.entrys.where().findAll();
 
     await CreateFolders.getFolders(categoriesList);
-    List<Folder> folders = await isar.folders.where().findAll();
+    List<Folder> folders = withoutLibraries(await isar.folders.where().findAll());
+    return (comics, folders);
 
     // Filter out library-level folders, only show series/subcategories
     folders = folders
