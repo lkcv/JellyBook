@@ -71,7 +71,14 @@ class _collectionScreenState extends State<collectionScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(name),
+        title: AutoSizeText(
+          name,
+          maxLines: 2,
+          minFontSize: 10,
+          maxFontSize: 20,
+          stepGranularity: 0.5,
+          overflow: TextOverflow.ellipsis,
+        ),
         elevation: 0,
       ),
       body: FutureBuilder(
