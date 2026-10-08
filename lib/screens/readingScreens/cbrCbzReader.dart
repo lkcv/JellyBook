@@ -358,7 +358,7 @@ class _CbrCbzReaderState extends State<CbrCbzReader> {
                                     )
                                   : PageView.builder(
                                       scrollDirection: Axis.horizontal,
-                                      reverse: direction == 'rtl',
+                                      reverse: direction.toLowerCase() == 'rtl',
                                       // scrollDirection: Axis.vertical,
                                       itemCount: pages.length,
                                       controller: PageController(
