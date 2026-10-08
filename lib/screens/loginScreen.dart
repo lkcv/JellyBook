@@ -196,8 +196,22 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         );
                       } else {
+                        // Map common errors to user-friendly messages
+                        String displayError = value;
+                        if (value.contains("SocketException") ||
+                            value.contains("Failed host lookup") ||
+                            value.contains("Connection refused")) {
+                          displayError = AppLocalizations.of(context)
+                                  ?.serverNotFound ??
+                              "Could not reach the server. Please check the URL and your connection.";
+                        } else if (value.contains("Connection timed out")) {
+                          displayError = AppLocalizations.of(context)
+                                  ?.requestTimeout ??
+                              "Request timed out. Please try again.";
+                        }
+
                         setState(() {
-                          _error = value;
+                          _error = displayError;
                           _loading = false;
                         });
                       }

@@ -67,6 +67,9 @@ class _MainMenuState extends State<MainMenu> {
   ConnectionManager? _connectionManager;
   bool _wasOffline = false;
 
+  bool _errorModalShowing = false;
+  List<Folder>? _lastFolders;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -77,6 +80,23 @@ class _MainMenuState extends State<MainMenu> {
       _wasOffline = manager.status == ConnectionStatus.offline;
       manager.addListener(_onConnectionChanged);
     }
+  }
+
+  String _friendlyError(String error) {
+    final e = error.toLowerCase();
+    if (e.contains("socketexception") ||
+        e.contains("connection") ||
+        e.contains("timed out") ||
+        e.contains("timeout") ||
+        e.contains("host lookup")) {
+      return AppLocalizations.of(context)?.serverNotFound ??
+          "Could not reach the server. Please check your connection and try again.";
+    }
+    if (e.contains("401") || e.contains("unauthorized")) {
+      return AppLocalizations.of(context)?.invalidCredentials ??
+          "Your session has expired. Please log in again.";
+    }
+    return "Couldn't refresh the library. Please try again.";
   }
 
   void _onConnectionChanged() {
@@ -95,6 +115,64 @@ class _MainMenuState extends State<MainMenu> {
         });
       }
     }
+  }
+
+  Widget _buildGrid(List<Folder> folders) {
+    return CustomScrollView(
+      slivers: <Widget>[
+        const SliverToBoxAdapter(child: SizedBox(height: 10)),
+        SliverToBoxAdapter(
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 10),
+              child: Text(
+                AppLocalizations.of(context)?.library ?? "Library",
+                style: const TextStyle(
+                  fontSize: 30,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SliverToBoxAdapter(child: SizedBox(height: 10)),
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+          sliver: SliverGrid(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              childAspectRatio: 0.63,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final folder = folders[index];
+                return SeriesCard(
+                  folder: folder,
+                  onTap: () async {
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => collectionScreen(
+                          folderId: folder.id,
+                          name: folder.name,
+                          image: folder.image,
+                          bookIds: folder.bookIds,
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+              childCount: folders.length,
+            ),
+          ),
+        ),
+        const SliverToBoxAdapter(child: SizedBox(height: 80)),
+      ],
+    );
   }
 
   Future<List<Entry>> _fetchPage(int pageKey) async {
@@ -171,6 +249,62 @@ class _MainMenuState extends State<MainMenu> {
     }
   }
 
+  void _showErrorModal(BuildContext context, String error) {
+    if (!mounted || _errorModalShowing) return;
+    _errorModalShowing = true;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: Text(
+            AppLocalizations.of(context)?.error ?? "Error",
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.cloud_off,
+                size: 48,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                error.contains("SocketException") ||
+                        error.contains("Connection")
+                    ? AppLocalizations.of(context)?.serverNotFound ??
+                        "Could not reach the server. Please check your connection and try again."
+                    : error.contains("401") || error.contains("Unauthorized")
+                        ? AppLocalizations.of(context)?.invalidCredentials ??
+                            "Your session has expired. Please log in again."
+                        : error,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+              },
+              child: const Text("Dismiss"),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                _pagingController.refresh();
+                setState(() {
+                  force = true;
+                });
+              },
+              child: const Text("Retry"),
+            ),
+          ],
+        );
+      },
+    ).then((_) => _errorModalShowing = false);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -227,7 +361,7 @@ class _MainMenuState extends State<MainMenu> {
           Consumer<ConnectionManager>(
             builder: (context, connectionManager, _) {
               final status = connectionManager.status;
-              
+
               if (status == ConnectionStatus.offline) {
                 return IconButton(
                   icon: const Icon(Icons.cloud_off),
@@ -250,7 +384,7 @@ class _MainMenuState extends State<MainMenu> {
                   ),
                 );
               }
-              
+
               // Online: no icon
               return SizedBox.shrink();
             },
@@ -274,83 +408,33 @@ class _MainMenuState extends State<MainMenu> {
         child: FutureBuilder<(List<Entry>, List<Folder>)>(
           future: getServerCategories(force: force),
           builder: (context, AsyncSnapshot snapshot) {
-            if (snapshot.connectionState == ConnectionState.done) {
-              if (snapshot.hasData && snapshot.data != null) {
-                List<Folder> folders = snapshot.data.$2 ?? [];
-
-                return CustomScrollView(
-                  slivers: <Widget>[
-                    const SliverToBoxAdapter(child: SizedBox(height: 10)),
-                    // Library header
-                    SliverToBoxAdapter(
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Padding(
-                          padding: const EdgeInsets.only(left: 10),
-                          child: Text(
-                            AppLocalizations.of(context)?.library ?? "Library",
-                            style: const TextStyle(
-                              fontSize: 30,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SliverToBoxAdapter(child: SizedBox(height: 10)),
-                    // Series grid (from folders) - non-paginated
-                    SliverPadding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                      sliver: SliverGrid(
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          childAspectRatio: 0.63,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                        ),
-                        delegate: SliverChildBuilderDelegate(
-                          (context, index) {
-                            final folder = folders[index];
-                            return SeriesCard(
-                              folder: folder,
-                              onTap: () async {
-                                await Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => collectionScreen(
-                                      folderId: folder.id,
-                                      name: folder.name,
-                                      image: folder.image,
-                                      bookIds: folder.bookIds,
-                                    ),
-                                  ),
-                                );
-                              },
-                            );
-                          },
-                          childCount: folders.length,
-                        ),
-                      ),
-                    ),
-                    const SliverToBoxAdapter(child: SizedBox(height: 80)),
-                  ],
-                );
-              } else if (snapshot.hasError) {
-                return Center(
-                  child: Text(
-                    "Error: ${snapshot.error}",
-                    style: const TextStyle(color: Colors.red),
-                  ),
-                );
-              } else {
-                return const Center(
-                  child: Text("No data found"),
-                );
-              }
-            } else {
-              return const Center(child: CircularProgressIndicator());
+            // while loading/refreshing, keep showing the last grid if we have one
+            if (snapshot.connectionState != ConnectionState.done) {
+              final cached = _lastFolders;
+              return cached != null
+                  ? _buildGrid(cached)
+                  : const Center(child: CircularProgressIndicator());
             }
+
+            if (snapshot.hasData && snapshot.data != null) {
+              final List<Folder> folders = snapshot.data.$2 ?? <Folder>[];
+              _lastFolders = folders;
+              return _buildGrid(folders);
+            }
+
+            if (snapshot.hasError) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _showErrorModal(context, snapshot.error.toString());
+              });
+              // fall back to the last grid, or whatever is cached in Isar
+              final cached = _lastFolders ??
+                  Isar.getInstance()?.folders.where().findAllSync();
+              return (cached != null && cached.isNotEmpty)
+                  ? _buildGrid(cached)
+                  : const Center(child: Icon(Icons.cloud_off, size: 48));
+            }
+
+            return const Center(child: Text("No data found"));
           },
         ),
       ),
@@ -389,11 +473,11 @@ class _SeriesCardState extends State<SeriesCard> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final folder = widget.folder;            // added
-    final progress = _calcProgress();        // added
+    final folder = widget.folder; // added
+    final progress = _calcProgress(); // added
 
     return GestureDetector(
-      onTap: widget.onTap,                   // was: onTap
+      onTap: widget.onTap, // was: onTap
       child: Container(
         padding: const EdgeInsets.all(4),
         decoration: BoxDecoration(
@@ -466,7 +550,8 @@ class _SeriesCardState extends State<SeriesCard> {
                         height: 28,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: Colors.black.withOpacity(0.75),   // matches the pill
+                          color: Colors.black
+                              .withOpacity(0.75), // matches the pill
                           border: Border.all(color: scheme.outlineVariant),
                         ),
                         child: Stack(
@@ -479,7 +564,8 @@ class _SeriesCardState extends State<SeriesCard> {
                                 value: progress,
                                 strokeWidth: 2.5,
                                 backgroundColor: Colors.white24,
-                                valueColor: AlwaysStoppedAnimation<Color>(scheme.primary),
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                    scheme.primary),
                               ),
                             ),
                             Text(

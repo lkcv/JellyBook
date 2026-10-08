@@ -66,10 +66,15 @@ Future<(List<Entry>, List<Folder>)> getServerCategories({
     bool useSentry = prefs.getBool('useSentry') ?? false;
     if (useSentry) await Sentry.captureException(e, stackTrace: s);
     logger.e(e);
+    rethrow;
   }
 
   logger.d("got response");
   logger.d(response?.statusCode.toString());
+
+  if (response?.data == null) {
+    throw Exception("Empty response from server");
+  }
   final data = response.data.items
       .where((element) => element.collectionType == CollectionType.books)
       .toList();
