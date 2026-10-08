@@ -378,10 +378,12 @@ class _CbrCbzReaderState extends State<CbrCbzReader> {
       controller: _pageController,
       itemBuilder: (context, index) {
         return InteractiveViewer(
+          clipBehavior: Clip.none,
           child: Image.file(
             File(pages[index]),
             fit: BoxFit.contain,
             gaplessPlayback: true,
+            filterQuality: FilterQuality.high,
           ),
         );
       },
