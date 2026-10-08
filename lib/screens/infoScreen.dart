@@ -22,6 +22,8 @@ import 'package:package_info_plus/package_info_plus.dart' as p_info;
 import 'package:tentacle/tentacle.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:jellybook/providers/Author.dart';
+import 'package:jellybook/providers/connectionManager.dart';
+import 'package:provider/provider.dart';
 
 class InfoScreen extends StatefulWidget {
   bool offline;
@@ -288,6 +290,18 @@ class _InfoScreenState extends State<InfoScreen> {
     checkLiked(entry.id).then((value) {
       entry.isFavorited = value;
     });
+    
+    // Get offline status from ConnectionManager if not explicitly passed
+    if (!widget.offline) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          final connectionStatus =
+              Provider.of<ConnectionManager>(context, listen: false).status;
+          offline = connectionStatus == ConnectionStatus.offline;
+        }
+      });
+    }
+    
     logger.i("isarId: ${entry.isarId}");
   }
 

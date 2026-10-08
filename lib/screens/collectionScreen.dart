@@ -15,6 +15,8 @@ import 'package:jellybook/variables.dart';
 import 'package:jellybook/widgets/roundedImageWithShadow.dart';
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:jellybook/screens/readingScreen.dart';
+import 'package:provider/provider.dart';
+import 'package:jellybook/providers/connectionManager.dart';
 
 class collectionScreen extends StatefulWidget {
   final String folderId;
@@ -103,35 +105,7 @@ class _collectionScreenState extends State<collectionScreen> {
                   return KuroStyleBookCard(
                     entry: entry,
                     onEntryTapped: () async {
-                      if (entry.type != EntryType.folder && entry.downloaded) {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => ReadingScreen(
-                              title: entry.title,
-                              comicId: entry.id,
-                            ),
-                          ),
-                        );
-                        setState(() {}); // refresh progress after reading
-                        return;
-                      }
-                      if (entry.type != EntryType.folder) {
-                        var result = await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => InfoScreen(entry: entry),
-                          ),
-                        );
-                        if (result != null) {
-                          entry.isFavorited = result.$1 ?? entry.isFavorited;
-                          entry.downloaded = result.$2 ?? entry.downloaded;
-                          await isar?.writeTxn(() async {
-                            await isar?.entrys.put(entry);
-                          });
-                          setState(() {});
-                        }
-                      } else {
+                      if (entry.type == EntryType.folder) {
                         var folder = isar!.folders
                             .where()
                             .filter()
@@ -148,6 +122,71 @@ class _collectionScreenState extends State<collectionScreen> {
                             ),
                           ),
                         );
+                        return;
+                      }
+
+                      // Check connection status
+                      if (!mounted) return;
+                      final connectionStatus = Provider.of<ConnectionManager>(
+                              context,
+                              listen: false)
+                          .status;
+                      if (connectionStatus == ConnectionStatus.offline) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Server is offline'),
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                        return;
+                      }
+
+                      // For downloaded items, open the reader directly
+                      if (entry.downloaded) {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ReadingScreen(
+                              title: entry.title,
+                              comicId: entry.id,
+                            ),
+                          ),
+                        );
+                        setState(() {});
+                        return;
+                      }
+
+                      // For CBZ/CBR, stream it
+                      bool isCbz = entry.path.toLowerCase().endsWith('.cbz') ||
+                          entry.path.toLowerCase().endsWith('.cbr');
+                      if (isCbz) {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ReadingScreen(
+                              title: entry.title,
+                              comicId: entry.id,
+                            ),
+                          ),
+                        );
+                        setState(() {});
+                        return;
+                      }
+
+                      // For other formats, show the info screen
+                      var result = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => InfoScreen(entry: entry),
+                        ),
+                      );
+                      if (result != null) {
+                        entry.isFavorited = result.isFavorited;
+                        entry.downloaded = result.downloaded;
+                        await isar?.writeTxn(() async {
+                          await isar?.entrys.put(entry);
+                        });
+                        setState(() {});
                       }
                     },
                     onEntryLongPressed: () async {
@@ -239,93 +278,99 @@ class KuroStyleBookCardState extends State<KuroStyleBookCard> {
     final bool isUnread = widget.entry.pageNum == 0;
     final double progress = widget.entry.progress.clamp(0.0, 1.0);
 
-    return GestureDetector(
-      onTap: widget.onEntryTapped,
-      onLongPress: widget.onEntryLongPressed,
-      child: Container(
-        padding: const EdgeInsets.all(4),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(_cardRadius),
-          border: Border.all(color: scheme.outlineVariant, width: 1.5),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Cover with badges
-            Expanded(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(_imageRadius),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    RoundedImageWithShadow(
-                      imageUrl: widget.entry.imagePath,
-                      radius: _imageRadius,
-                      shadowColor: Colors.transparent,
-                    ),
-                    // Status badge (top-left)
-                    Positioned(
-                      top: 2,
-                      left: 2,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: isUnread
-                              ? const Color(0xFFE91E63)
-                              : const Color(0xFF4CAF50),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          isUnread ? 'UNREAD' : 'FINISHED',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
+    // Check if offline
+    final connectionStatus =
+        Provider.of<ConnectionManager>(context).status;
+    final isOffline = connectionStatus == ConnectionStatus.offline;
+    final isUndownloaded = !widget.entry.downloaded;
+
+    return Opacity(
+      opacity: isOffline && isUndownloaded ? 0.5 : 1.0,
+      child: GestureDetector(
+        onTap: widget.onEntryTapped,
+        onLongPress: widget.onEntryLongPressed,
+        child: Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(_cardRadius),
+            border: Border.all(color: scheme.outlineVariant, width: 1.5),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(_imageRadius),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      RoundedImageWithShadow(
+                        imageUrl: widget.entry.imagePath,
+                        radius: _imageRadius,
+                        shadowColor: Colors.transparent,
                       ),
-                    ),
-                    // Favorite indicator (top-right)
-                    if (widget.entry.isFavorited == true)
                       Positioned(
-                        top: 4,
-                        right: 4,
+                        top: 2,
+                        left: 2,
                         child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.6),
-                            borderRadius: BorderRadius.circular(20),
+                            color: isUnread
+                                ? const Color(0xFFE91E63)
+                                : const Color(0xFF4CAF50),
+                            borderRadius: BorderRadius.circular(10),
                           ),
-                          padding: const EdgeInsets.all(4),
-                          child: const Icon(
-                            Icons.favorite,
-                            color: Colors.red,
-                            size: 16,
+                          child: Text(
+                            isUnread ? 'UNREAD' : 'FINISHED',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5,
+                            ),
                           ),
                         ),
                       ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 2),
-            // Thin progress bar, inset so it stays inside the card's rounded corners
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(2),
-                child: SizedBox(
-                  height: 3,
-                  child: LinearProgressIndicator(
-                    value: progress,
-                    backgroundColor: scheme.outlineVariant,
-                    valueColor: AlwaysStoppedAnimation<Color>(scheme.primary),
+                      if (widget.entry.isFavorited == true)
+                        Positioned(
+                          top: 4,
+                          right: 4,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.6),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            padding: const EdgeInsets.all(4),
+                            child: const Icon(
+                              Icons.favorite,
+                              color: Colors.red,
+                              size: 16,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ),
-            ),
-          ],
+              const SizedBox(height: 2),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(2),
+                  child: SizedBox(
+                    height: 3,
+                    child: LinearProgressIndicator(
+                      value: progress,
+                      backgroundColor: scheme.outlineVariant,
+                      valueColor:
+                          AlwaysStoppedAnimation<Color>(scheme.primary),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

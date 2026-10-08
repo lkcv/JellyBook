@@ -86,22 +86,19 @@ class _ReadingScreenState extends State<ReadingScreen> {
   }
 
   Future<void> checkDownloaded() async {
-    // get it from the database
-
-    logger.i("comicId: $comicId");
-    // final isar = await Isar.open([EntrySchema], inspector: true);
-
     final entry = await isar!.entrys.where().idEqualTo(comicId).findFirst();
-
+    
     logger.i("entry: $entry");
     logger.i("entry.path: ${entry!.path}");
     logger.i("entry.title: ${entry.title}");
 
-    // get the entry
     var downloaded = entry.downloaded;
 
-    if (downloaded == false) {
-      // if the comic hasn't been downloaded, we want to tell the user to download it first
+    // For CBZ/CBR, allow streaming even if not downloaded
+    bool isCbz = entry.path.toLowerCase().endsWith('.cbz') ||
+        entry.path.toLowerCase().endsWith('.cbr');
+
+    if (!downloaded && !isCbz) {
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
@@ -120,19 +117,13 @@ class _ReadingScreenState extends State<ReadingScreen> {
     }
   }
 
-  // check file extension
   Future<String> checkFileExtension(String id) async {
-    // get it from the database
+    final entry = await isar!.entrys.filter().idEqualTo(id).findFirst() as Entry;
 
-    // get the entry
-    // final isar = await Isar.open([EntrySchema], inspector: true);
-    final entry =
-        await isar!.entrys.filter().idEqualTo(id).findFirst() as Entry;
-
-    // get the file extension
     String fileExtension = '';
     try {
-      fileExtension = entry.filePath.split('.').last;
+      // Use entry.path instead of entry.filePath (which is empty for undownloaded items)
+      fileExtension = entry.path.split('.').last;
       logger.i("fileExtension: $fileExtension");
     } catch (e, s) {
       SharedPreferences prefs = await SharedPreferences.getInstance();
