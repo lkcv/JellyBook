@@ -223,6 +223,38 @@ class _MainMenuState extends State<MainMenu> {
           )),
         ),
         actions: <Widget>[
+          // Connection status icon
+          Consumer<ConnectionManager>(
+            builder: (context, connectionManager, _) {
+              final status = connectionManager.status;
+              
+              if (status == ConnectionStatus.offline) {
+                return IconButton(
+                  icon: const Icon(Icons.cloud_off),
+                  tooltip: 'Offline - tap to retry',
+                  onPressed: () {
+                    connectionManager.retry();
+                  },
+                );
+              } else if (status == ConnectionStatus.validating) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: Center(
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: const CircularProgressIndicator(
+                        strokeWidth: 2,
+                      ),
+                    ),
+                  ),
+                );
+              }
+              
+              // Online: no icon
+              return SizedBox.shrink();
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.logout_rounded),
             tooltip: 'Logout',
@@ -232,87 +264,95 @@ class _MainMenuState extends State<MainMenu> {
           ),
         ],
       ),
-      body: FutureBuilder<(List<Entry>, List<Folder>)>(
-        future: getServerCategories(force: force),
-        builder: (context, AsyncSnapshot snapshot) {
-          if (snapshot.connectionState == ConnectionState.done) {
-            if (snapshot.hasData && snapshot.data != null) {
-              List<Folder> folders = snapshot.data.$2 ?? [];
+      body: RefreshIndicator(
+        onRefresh: () async {
+          _pagingController.refresh();
+          setState(() {
+            force = true;
+          });
+        },
+        child: FutureBuilder<(List<Entry>, List<Folder>)>(
+          future: getServerCategories(force: force),
+          builder: (context, AsyncSnapshot snapshot) {
+            if (snapshot.connectionState == ConnectionState.done) {
+              if (snapshot.hasData && snapshot.data != null) {
+                List<Folder> folders = snapshot.data.$2 ?? [];
 
-              return CustomScrollView(
-                slivers: <Widget>[
-                  const SliverToBoxAdapter(child: SizedBox(height: 10)),
-                  // Library header
-                  SliverToBoxAdapter(
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Padding(
-                        padding: const EdgeInsets.only(left: 10),
-                        child: Text(
-                          AppLocalizations.of(context)?.library ?? "Library",
-                          style: const TextStyle(
-                            fontSize: 30,
-                            fontWeight: FontWeight.bold,
+                return CustomScrollView(
+                  slivers: <Widget>[
+                    const SliverToBoxAdapter(child: SizedBox(height: 10)),
+                    // Library header
+                    SliverToBoxAdapter(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: 10),
+                          child: Text(
+                            AppLocalizations.of(context)?.library ?? "Library",
+                            style: const TextStyle(
+                              fontSize: 30,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                  const SliverToBoxAdapter(child: SizedBox(height: 10)),
-                  // Series grid (from folders) - non-paginated
-                  SliverPadding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                    sliver: SliverGrid(
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        childAspectRatio: 0.63,
-                        crossAxisSpacing: 12,
-                        mainAxisSpacing: 12,
-                      ),
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) {
-                          final folder = folders[index];
-                          return SeriesCard(
-                            folder: folder,
-                            onTap: () async {
-                              await Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => collectionScreen(
-                                    folderId: folder.id,
-                                    name: folder.name,
-                                    image: folder.image,
-                                    bookIds: folder.bookIds,
+                    const SliverToBoxAdapter(child: SizedBox(height: 10)),
+                    // Series grid (from folders) - non-paginated
+                    SliverPadding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                      sliver: SliverGrid(
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          childAspectRatio: 0.63,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                        ),
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                            final folder = folders[index];
+                            return SeriesCard(
+                              folder: folder,
+                              onTap: () async {
+                                await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => collectionScreen(
+                                      folderId: folder.id,
+                                      name: folder.name,
+                                      image: folder.image,
+                                      bookIds: folder.bookIds,
+                                    ),
                                   ),
-                                ),
-                              );
-                            },
-                          );
-                        },
-                        childCount: folders.length,
+                                );
+                              },
+                            );
+                          },
+                          childCount: folders.length,
+                        ),
                       ),
                     ),
+                    const SliverToBoxAdapter(child: SizedBox(height: 80)),
+                  ],
+                );
+              } else if (snapshot.hasError) {
+                return Center(
+                  child: Text(
+                    "Error: ${snapshot.error}",
+                    style: const TextStyle(color: Colors.red),
                   ),
-                  const SliverToBoxAdapter(child: SizedBox(height: 80)),
-                ],
-              );
-            } else if (snapshot.hasError) {
-              return Center(
-                child: Text(
-                  "Error: ${snapshot.error}",
-                  style: const TextStyle(color: Colors.red),
-                ),
-              );
+                );
+              } else {
+                return const Center(
+                  child: Text("No data found"),
+                );
+              }
             } else {
-              return const Center(
-                child: Text("No data found"),
-              );
+              return const Center(child: CircularProgressIndicator());
             }
-          } else {
-            return const Center(child: CircularProgressIndicator());
-          }
-        },
+          },
+        ),
       ),
     );
   }

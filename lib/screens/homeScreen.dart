@@ -63,7 +63,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     // Watch the ConnectionManager from the provider
     final connectionManager = Provider.of<ConnectionManager>(context);
-    
+
     // If auth failed, redirect to login
     if (connectionManager.status == ConnectionStatus.authFailed) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
