@@ -270,16 +270,7 @@ class _MainMenuState extends State<MainMenu> {
                 color: Theme.of(context).colorScheme.error,
               ),
               const SizedBox(height: 16),
-              Text(
-                error.contains("SocketException") ||
-                        error.contains("Connection")
-                    ? AppLocalizations.of(context)?.serverNotFound ??
-                        "Could not reach the server. Please check your connection and try again."
-                    : error.contains("401") || error.contains("Unauthorized")
-                        ? AppLocalizations.of(context)?.invalidCredentials ??
-                            "Your session has expired. Please log in again."
-                        : error,
-              ),
+              Text(_friendlyError(error)),
             ],
           ),
           actions: [
