@@ -323,12 +323,6 @@ class _CbrCbzReaderState extends State<CbrCbzReader> {
                   Navigator.pop(context);
                 },
               ),
-              actions: [
-                audioPlayerWidget(),
-                const SizedBox(
-                  width: 10,
-                ),
-              ],
             ),
             body: FutureBuilder(
               // get progress requires the comicId
