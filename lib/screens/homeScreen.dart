@@ -27,34 +27,13 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  late ConnectionManager _connectionManager;
-
   @override
   void initState() {
     super.initState();
-    _connectionManager = ConnectionManager();
-    _validateCredentialsAndListen();
-  }
-
-  void _validateCredentialsAndListen() {
-    _connectionManager.addListener(_onConnectionStatusChanged);
-    _connectionManager.validateStartup();
-  }
-
-  void _onConnectionStatusChanged() {
-    if (_connectionManager.status == ConnectionStatus.authFailed) {
-      // 401: redirect to login
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => LoginScreen()),
-      );
-    }
   }
 
   @override
   void dispose() {
-    _connectionManager.removeListener(_onConnectionStatusChanged);
-    _connectionManager.dispose();
     super.dispose();
   }
 
@@ -82,6 +61,21 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Watch the ConnectionManager from the provider
+    final connectionManager = Provider.of<ConnectionManager>(context);
+    
+    // If auth failed, redirect to login
+    if (connectionManager.status == ConnectionStatus.authFailed) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => LoginScreen()),
+          );
+        }
+      });
+    }
+
     return Scaffold(
       resizeToAvoidBottomInset: true,
       extendBody: true,

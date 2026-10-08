@@ -10,6 +10,7 @@ import 'package:jellybook/models/entry.dart';
 import 'package:jellybook/models/folder.dart';
 import 'package:jellybook/models/login.dart';
 import 'package:jellybook/screens/homeScreen.dart';
+import 'package:jellybook/providers/connectionManager.dart';
 import 'dart:io';
 
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -172,6 +173,16 @@ class MyApp extends StatelessWidget {
             create: (context) => LocaleChangeNotifier(context, prefs)),
         ChangeNotifierProvider<ThemeChangeNotifier>(
             create: (context) => ThemeChangeNotifier(context, prefs)),
+        ChangeNotifierProvider<ConnectionManager>(
+          create: (context) {
+            final manager = ConnectionManager();
+            // Start monitoring after creation
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              manager.startMonitoring();
+            });
+            return manager;
+          },
+        ),
       ],
       builder: (context, _) {
         return Consumer2<LocaleChangeNotifier, ThemeChangeNotifier>(
@@ -185,7 +196,6 @@ class MyApp extends StatelessWidget {
             supportedLocales: AppLocalizations.supportedLocales,
             locale: locale,
             theme: themeData,
-            // darkTheme: ThemeData.dark(),
             home: url != null && username != null && password != null
                 ? HomeScreen()
                 : LoginScreen(),

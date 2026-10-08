@@ -16,6 +16,8 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:jellybook/variables.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
+enum LoginResult { success, rejected, unreachable }
+
 class LoginProvider {
   final String url;
   final String username;
@@ -26,6 +28,121 @@ class LoginProvider {
     required this.username,
     required this.password,
   });
+
+  // Saves everything a successful login needs (prefs, secure storage, isar)
+  static Future<void> _saveSession({
+    required String url,
+    required String username,
+    required String password,
+    required String client,
+    required String device,
+    required String deviceId,
+    required String version,
+    required AuthenticationResult? data,
+  }) async {
+    const storage = FlutterSecureStorage();
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    logger.d("saving data to cache");
+    prefs.setString("server", url);
+    prefs.setString("accessToken", data?.accessToken ?? "");
+    prefs.setString("UserId", data?.user?.id ?? "");
+    prefs.setString("ServerId", data?.serverId ?? "");
+
+    prefs.setString("client", client);
+    prefs.setString("device", device);
+    prefs.setString("deviceId", deviceId);
+    prefs.setString("version", version);
+
+    await storage.write(key: "server", value: url);
+    await storage.write(key: "username", value: username);
+    await storage.write(key: "password", value: password);
+    await storage.write(key: "accessToken", value: data?.accessToken ?? "");
+    await storage.write(key: "ServerId", value: data?.serverId ?? "");
+    await storage.write(key: "UserId", value: data?.sessionInfo?.userId ?? "");
+    await storage.write(key: "client", value: client);
+    await storage.write(key: "device", value: device);
+    await storage.write(key: "deviceId", value: deviceId);
+    await storage.write(key: "version", value: version);
+
+    final isar = Isar.getInstance();
+    final entry = await isar!.logins.where().serverUrlEqualTo(url).findFirst();
+    if (entry == null) {
+      // a different server/user was saved before, remove it
+      List<Login> others = await isar.logins.where().findAll();
+      List<int> otherIds = others
+          .where((l) => l.serverUrl != url)
+          .map((l) => l.isarId)
+          .toList();
+      await isar.writeTxn(() async {
+        isar.logins.deleteAll(otherIds);
+      });
+      await isar.writeTxn(() async {
+        await isar.logins
+            .put(Login(serverUrl: url, username: username, password: password));
+      });
+    }
+  }
+
+  // Login without a UI/BuildContext. Used by ConnectionManager to refresh an
+  // expired token with the saved credentials.
+  static Future<LoginResult> silentLogin(
+    String url,
+    String username,
+    String password,
+  ) async {
+    try {
+      String _url = url.endsWith("/") ? url.substring(0, url.length - 1) : url;
+      const client = "JellyBook";
+      String device = "Unknown Device";
+      String deviceId = "Unknown Device id";
+
+      final deviceInfo = DeviceInfoPlugin();
+      if (Platform.isAndroid) {
+        final androidInfo = await deviceInfo.androidInfo;
+        device = androidInfo.model;
+        deviceId = "Android ${androidInfo.version.release}";
+      } else if (Platform.isIOS) {
+        final iosInfo = await deviceInfo.iosInfo;
+        device = iosInfo.name;
+        deviceId = iosInfo.identifierForVendor ?? "Unknown Device id";
+      }
+      final version = (await package_info.PackageInfo.fromPlatform()).version;
+
+      final api = Tentacle(basePathOverride: _url).getAuthenticationApi();
+      final response = await api.authenticateUserByName(
+        authenticateUserByName: AuthenticateUserByName((b) => b
+          ..username = username
+          ..pw = password),
+        headers: getHeaders(_url, client, device, deviceId, version),
+      );
+
+      if (response.statusCode == 200) {
+        await _saveSession(
+          url: _url,
+          username: username,
+          password: password,
+          client: client,
+          device: device,
+          deviceId: deviceId,
+          version: version,
+          data: response.data,
+        );
+        return LoginResult.success;
+      }
+      if (response.statusCode == 401 || response.statusCode == 403) {
+        return LoginResult.rejected;
+      }
+      return LoginResult.unreachable;
+    } on DioException catch (e) {
+      final code = e.response?.statusCode;
+      logger.d("silentLogin failed: $code $e");
+      if (code == 401 || code == 403) return LoginResult.rejected;
+      return LoginResult.unreachable;
+    } catch (e) {
+      logger.d("silentLogin error: $e");
+      return LoginResult.unreachable;
+    }
+  }
 
   // a curl request to the server would look like this:
   /*
@@ -121,70 +238,16 @@ class LoginProvider {
     // logger.d("Response: ${response.data}");
 
     if (response.statusCode == 200) {
-      final SharedPreferences prefs = await SharedPreferences.getInstance();
-      logger.d("saving data to cache");
-      prefs.setString("server", _url);
-      prefs.setString("accessToken", response.data?.accessToken ?? "");
-      prefs.setString("UserId", response.data?.user?.id ?? "");
-      prefs.setString("ServerId", response.data?.serverId ?? "");
-
-      // now for the stuff that is not needed for all sessions
-      logger.d("saving data part 2");
-      prefs.setString("client", _client);
-      prefs.setString("device", _device);
-      prefs.setString("deviceId", _deviceId);
-      prefs.setString("version", _version);
-
-      // now save the username and password to the secure storage
-      logger.d("saving data part 3");
-      await storage.write(key: "server", value: _url);
-      await storage.write(key: "username", value: username);
-      await storage.write(key: "password", value: password);
-      await storage.write(
-          key: "accessToken", value: response.data?.accessToken ?? "");
-      await storage.write(
-          key: "ServerId", value: response.data?.serverId ?? "");
-      await storage.write(
-        key: "UserId",
-        value: response.data?.sessionInfo?.userId ?? "",
+      await _saveSession(
+        url: _url,
+        username: username,
+        password: password,
+        client: _client,
+        device: _device,
+        deviceId: _deviceId,
+        version: _version,
+        data: response.data,
       );
-      await storage.write(key: "client", value: _client);
-      await storage.write(key: "device", value: _device);
-      await storage.write(key: "deviceId", value: _deviceId);
-      await storage.write(key: "version", value: _version);
-      logger.d("saved data");
-
-      // now save the data to the isar database
-      logger.d("saving data to isar");
-      final isar = Isar.getInstance();
-      // check if the user already exists
-      final entry =
-          await isar!.logins.where().serverUrlEqualTo(_url).findFirst();
-      if (entry == null) {
-        // if the user does not exist but a different user does, delete the different user
-        List<Login> entry2 = await isar.logins.where().findAll();
-        List<int> entry2Ids = [];
-        for (var i = 0; i < entry2.length; i++) {
-          if (entry2[i].serverUrl != _url) {
-            entry2Ids.add(entry2[i].isarId);
-          }
-        }
-
-        await isar.writeTxn(() async {
-          isar.logins.deleteAll(entry2Ids);
-        });
-
-        Login login = Login(
-          serverUrl: _url,
-          username: username,
-          password: password,
-        );
-        // save the login to the database
-        await isar.writeTxn(() async {
-          await isar.logins.put(login);
-        });
-      }
-
       return "true";
     } else {
       if (response.statusCode == 401) {

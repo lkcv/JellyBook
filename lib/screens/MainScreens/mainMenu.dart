@@ -18,6 +18,8 @@ import 'package:jellybook/widgets/roundedImageWithShadow.dart';
 import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:provider/provider.dart';
+import 'package:jellybook/providers/connectionManager.dart';
 
 class MainMenu extends StatefulWidget {
   @override
@@ -62,6 +64,39 @@ class _MainMenuState extends State<MainMenu> {
   bool force = false;
   SharedPreferences? prefs;
 
+  ConnectionManager? _connectionManager;
+  bool _wasOffline = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final manager = context.read<ConnectionManager>();
+    if (_connectionManager != manager) {
+      _connectionManager?.removeListener(_onConnectionChanged);
+      _connectionManager = manager;
+      _wasOffline = manager.status == ConnectionStatus.offline;
+      manager.addListener(_onConnectionChanged);
+    }
+  }
+
+  void _onConnectionChanged() {
+    final status = _connectionManager!.status;
+
+    if (status == ConnectionStatus.offline) {
+      _wasOffline = true;
+    } else if (status == ConnectionStatus.online && _wasOffline) {
+      // only refresh when we are coming back from being offline
+      _wasOffline = false;
+      if (mounted) {
+        logger.d('MainMenu: connection restored, refreshing library');
+        _pagingController.refresh();
+        setState(() {
+          force = true;
+        });
+      }
+    }
+  }
+
   Future<List<Entry>> _fetchPage(int pageKey) async {
     logger.i('pageKey: $pageKey');
     try {
@@ -90,6 +125,7 @@ class _MainMenuState extends State<MainMenu> {
 
   @override
   void dispose() {
+    _connectionManager?.removeListener(_onConnectionChanged);
     _pagingController.dispose();
     super.dispose();
   }
