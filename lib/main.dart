@@ -4,8 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:jellybook/screens/loginScreen.dart';
 import 'package:isar/isar.dart';
 import 'package:isar_flutter_libs/isar_flutter_libs.dart';
-import 'package:jellybook/screens/offlineBookReader.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:jellybook/models/entry.dart';
@@ -187,32 +185,13 @@ class MyApp extends StatelessWidget {
             locale: locale,
             theme: themeData,
             // darkTheme: ThemeData.dark(),
-            home: FutureBuilder(
-              future: Connectivity().checkConnectivity(),
-              builder: (context, snapshot) {
-                SharedPreferences.getInstance().then((prefs) {
-                  ThemeChangeNotifier themeChangeNotifier =
-                      Provider.of<ThemeChangeNotifier>(context, listen: false);
-                  // get the theme from shared preferences
-                  String theme = prefs.getString('theme') ?? 'dark';
-                  // set the theme
-                  themeChangeNotifier.setTheme = theme.toString().toLowerCase();
-                });
-                if (snapshot.hasData) {
-                  if (snapshot.data == ConnectivityResult.none) {
-                    return OfflineBookReader(prefs: prefs);
-                  } else {
-                    return LoginScreen(
-                      url: url,
-                      username: username,
-                      password: password,
-                    );
-                  }
-                } else {
-                  return const CircularProgressIndicator();
-                }
-              },
-            ),
+            home: url != null && username != null && password != null
+                ? LoginScreen(
+                    url: url,
+                    username: username,
+                    password: password,
+                  )
+                : LoginScreen(),
           );
         });
       },

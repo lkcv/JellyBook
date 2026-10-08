@@ -4,7 +4,6 @@ import 'package:jellybook/providers/login.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:jellybook/providers/themeProvider.dart';
 import 'package:jellybook/screens/homeScreen.dart';
-import 'package:jellybook/screens/offlineBookReader.dart';
 import 'package:jellybook/providers/languageProvider.dart';
 
 import 'package:jellybook/l10n/app_localizations.dart';
@@ -92,7 +91,6 @@ class _LoginScreenState extends State<LoginScreen> {
   final FocusNode _focusNode2 = FocusNode();
   final FocusNode _focusNode3 = FocusNode();
   final FocusNode _focusNode4 = FocusNode();
-  final FocusNode _focusNode5 = FocusNode();
 
   @override
   Widget build(BuildContext context) {
@@ -227,40 +225,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               const SizedBox(height: 10),
-              // offline mode button
-              SizedBox(
-                width: MediaQuery.of(context).size.width - 50,
-                height: 50,
-                child: ElevatedButton(
-                  key: const Key('offlineButton'),
-                  focusNode: _focusNode5,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.grey,
-                  ),
-                  onPressed: () async {
-                    setState(() {
-                      _loading = true;
-                    });
-                    Navigator.of(context).pushReplacement(MaterialPageRoute(
-                        builder: (context) =>
-                            OfflineBookReader(prefs: prefs!)));
-                  },
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.cloud_off_outlined),
-                      SizedBox(
-                        width: 10,
-                      ),
-                      Text(
-                          AppLocalizations.of(context)
-                                  ?.pageLoginOfflineReader ??
-                              "Offline Reader",
-                          style: TextStyle(fontSize: 20)),
-                    ],
-                  ),
-                ),
-              ),
 
               const SizedBox(
                 height: 15,
