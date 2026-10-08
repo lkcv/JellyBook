@@ -104,6 +104,13 @@ class _CbrCbzReaderState extends State<CbrCbzReader> {
     });
   }
 
+  void _precacheAround(int index) {
+    for (int i = index - 1; i <= index + 2; i++) {
+      if (i < 0 || i >= pages.length) continue;
+      precacheImage(FileImage(File(pages[i])), context);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -309,6 +316,7 @@ class _CbrCbzReaderState extends State<CbrCbzReader> {
   }
 
   Future<void> _load() async {
+    PaintingBinding.instance.imageCache.maximumSizeBytes = 300 << 20; // 300 MB
     final prefs = await SharedPreferences.getInstance();
     direction = (prefs.getString('readingDirection') ?? 'ltr').toLowerCase();
   
@@ -320,6 +328,7 @@ class _CbrCbzReaderState extends State<CbrCbzReader> {
     final lastPage = pages.isEmpty ? 0 : pages.length - 1;
     _currentPage = pageNum.clamp(0, lastPage).toInt();
     _pageController = PageController(initialPage: _currentPage);
+    _precacheAround(_currentPage);
   
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     if (mounted) setState(() => _loading = false);
@@ -369,12 +378,17 @@ class _CbrCbzReaderState extends State<CbrCbzReader> {
       controller: _pageController,
       itemBuilder: (context, index) {
         return InteractiveViewer(
-          child: Image.file(File(pages[index]), fit: BoxFit.contain),
+          child: Image.file(
+            File(pages[index]),
+            fit: BoxFit.contain,
+            gaplessPlayback: true,
+          ),
         );
       },
       onPageChanged: (index) {
         setState(() => _currentPage = index);
         saveProgress(index);
+        _precacheAround(index);
       },
     );
   }
