@@ -131,6 +131,11 @@ Future<(List<Entry>, List<Folder>)> getServerCategories({
     await CreateFolders.getFolders(categoriesList);
     List<Folder> folders = await isar.folders.where().findAll();
 
+    // Filter out library-level folders, only show series/subcategories
+    folders = folders
+         .where((folder) => !categoriesList.contains(folder.id))
+         .toList();
+
     // for (int i = 0; i < comics.length; i++) {
     //   logger.d("${comics[i].title} : ${comics[i].isarId}");
     // }

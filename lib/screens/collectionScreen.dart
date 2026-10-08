@@ -1,6 +1,4 @@
 // The purpose of this file is to create a list of entries from a selected folder
-
-// import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:markdown/markdown.dart' as md;
 import 'package:isar/isar.dart';
@@ -15,6 +13,7 @@ import 'package:fancy_shimmer_image/fancy_shimmer_image.dart';
 import 'package:jellybook/l10n/app_localizations.dart';
 import 'package:jellybook/variables.dart';
 import 'package:jellybook/widgets/roundedImageWithShadow.dart';
+import 'package:auto_size_text/auto_size_text.dart';
 
 class collectionScreen extends StatefulWidget {
   final String folderId;
@@ -48,21 +47,19 @@ class _collectionScreenState extends State<collectionScreen> {
   });
 
   final isar = Isar.getInstance();
-  // make a list of entries from the the list of bookIds
+
   Future<List<Entry>> getEntries() async {
     List<Entry> entryList = await isar!.entrys
         .where()
         .filter()
         .anyOf(bookIds, (q, String id) => q.idEqualTo(id))
         .findAll();
-    // print all the ones that have EntryType.folder
     entryList.forEach((element) {
       if (element.type == EntryType.folder) {
         logger.f(element.title);
       }
     });
     return entryList;
-    // checkeach field of the entry to make sure it is not null
   }
 
   Future<List<Entry>> get entries async {
@@ -74,6 +71,7 @@ class _collectionScreenState extends State<collectionScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(name),
+        elevation: 0,
       ),
       body: FutureBuilder(
         future: entries,
@@ -81,116 +79,59 @@ class _collectionScreenState extends State<collectionScreen> {
           if (snapshot.hasData &&
               snapshot.data.length > 0 &&
               snapshot.connectionState == ConnectionState.done) {
-            return ListView.builder(
-              itemCount: snapshot.data.length,
-              itemBuilder: (BuildContext context, int index) {
-                return ListTile(
-                  onTap: () async {
-                    if (snapshot.data[index].type != EntryType.folder) {
-                      var result = await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => InfoScreen(
-                            entry: snapshot.data[index],
+            return Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 4.0, vertical: 4.0),
+              child: GridView.builder(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  childAspectRatio: 0.69,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                ),
+                itemCount: snapshot.data.length,
+                itemBuilder: (BuildContext context, int index) {
+                  Entry entry = snapshot.data[index];
+                  return KuroStyleBookCard(
+                    entry: entry,
+                    onEntryTapped: () async {
+                      if (entry.type != EntryType.folder) {
+                        var result = await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => InfoScreen(entry: entry),
                           ),
-                        ),
-                      );
-                      if (result != null) {
-                        snapshot.data[index].isFavorited =
-                            result.$1 ?? snapshot.data[index].isFavorited;
-                        snapshot.data[index].downloaded =
-                            result.$2 ?? snapshot.data[index].downloaded;
-                        await isar?.writeTxn(() async {
-                          await isar?.entrys.put(snapshot.data[index]);
-                        });
-                      }
-                    } else {
-                      var folder = isar!.folders
-                          .where()
-                          .filter()
-                          .idEqualTo(snapshot.data[index].id)
-                          .findFirstSync();
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => collectionScreen(
-                            folderId: folder!.id,
-                            name: folder.name,
-                            image: folder.image,
-                            bookIds: folder.bookIds,
-                          ),
-                        ),
-                      );
-                    }
-                  },
-                  title: Text(snapshot.data[index].title),
-                  leading: RoundedImageWithShadow(
-                    imageUrl: snapshot.data[index].imagePath,
-                    radius: 5,
-                  ),
-                  subtitle: Row(
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    children: [
-                      if (snapshot.data[index].rating >= 0)
-                        IgnorePointer(
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.start,
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.fromLTRB(0, 0, 0, 0),
-                                child: CustomRating(
-                                  max: 5,
-                                  score: snapshot.data[index].rating / 2,
-                                  star: Star(
-                                    fillColor: Color.lerp(
-                                        Colors.red,
-                                        Colors.yellow,
-                                        snapshot.data[index].rating / 10)!,
-                                    emptyColor: Colors.grey.withOpacity(0.5),
-                                  ),
-                                  onRating: (double score) {},
-                                ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.fromLTRB(8, 0, 0, 0),
-                                child: Text(
-                                  "${(snapshot.data[index].rating / 2).toStringAsFixed(2)} / 5.00",
-                                  style: const TextStyle(
-                                    fontStyle: FontStyle.italic,
-                                    fontSize: 15,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      if (snapshot.data[index].rating < 0 &&
-                          snapshot.data[index].description != '')
-                        Flexible(
-                          child: MarkdownBody(
-                            data: fixRichText(snapshot.data[index].description),
-                            extensionSet: md.ExtensionSet(
-                              md.ExtensionSet.gitHubFlavored.blockSyntaxes,
-                              <md.InlineSyntax>[
-                                md.EmojiSyntax(),
-                                ...md.ExtensionSet.gitHubFlavored.inlineSyntaxes
-                              ],
+                        );
+                        if (result != null) {
+                          entry.isFavorited = result.$1 ?? entry.isFavorited;
+                          entry.downloaded = result.$2 ?? entry.downloaded;
+                          await isar?.writeTxn(() async {
+                            await isar?.entrys.put(entry);
+                          });
+                          setState(() {});
+                        }
+                      } else {
+                        var folder = isar!.folders
+                            .where()
+                            .filter()
+                            .idEqualTo(entry.id)
+                            .findFirstSync();
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => collectionScreen(
+                              folderId: folder!.id,
+                              name: folder.name,
+                              image: folder.image,
+                              bookIds: folder.bookIds,
                             ),
-                            // prevent overflow
-                            //   style: const TextStyle(
-                            //     fontStyle: FontStyle.italic,
-                            //     fontSize: 15,
-                            //     color: Colors.grey,
-                            //   ),
-                            // ),
-                            // overflow: TextOverflow.ellipsis,
-                            // maxLines: 1,
                           ),
-                        ),
-                    ],
-                  ),
-                );
-              },
+                        );
+                      }
+                    },
+                  );
+                },
+              ),
             );
           } else if (snapshot.hasData &&
               snapshot.data.length == 0 &&
@@ -202,14 +143,12 @@ class _collectionScreenState extends State<collectionScreen> {
                   Text(
                     AppLocalizations.of(context)?.noResultsFound ??
                         'No results found in this folder',
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 25,
                     ),
                   ),
-                  SizedBox(
-                    height: 10,
-                  ),
-                  Icon(Icons.sentiment_dissatisfied, size: 100),
+                  const SizedBox(height: 10),
+                  const Icon(Icons.sentiment_dissatisfied, size: 100),
                 ],
               ),
             );
@@ -221,14 +160,12 @@ class _collectionScreenState extends State<collectionScreen> {
                   Text(
                     AppLocalizations.of(context)?.unknownError ??
                         "An unknown error has occured.",
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 25,
                     ),
                   ),
-                  SizedBox(
-                    height: 10,
-                  ),
-                  Icon(Icons.sentiment_dissatisfied, size: 100),
+                  const SizedBox(height: 10),
+                  const Icon(Icons.sentiment_dissatisfied, size: 100),
                 ],
               ),
             );
@@ -238,6 +175,123 @@ class _collectionScreenState extends State<collectionScreen> {
             );
           }
         },
+      ),
+    );
+  }
+}
+
+// Kuro Reader-inspired book card widget
+class KuroStyleBookCard extends StatefulWidget {
+  final Entry entry;
+  final VoidCallback onEntryTapped;
+
+  const KuroStyleBookCard({
+    required this.entry,
+    required this.onEntryTapped,
+  });
+
+  @override
+  KuroStyleBookCardState createState() => KuroStyleBookCardState();
+}
+
+class KuroStyleBookCardState extends State<KuroStyleBookCard> {
+  // One radius for both the card and the cover image
+  static const double _imageRadius = 10; // was 14
+  static const double _cardRadius = _imageRadius + 4 + 1.5;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final bool isUnread = widget.entry.pageNum == 0;
+    final double progress = widget.entry.progress.clamp(0.0, 1.0);
+
+    return GestureDetector(
+      onTap: widget.onEntryTapped,
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(_cardRadius),
+          border: Border.all(color: scheme.outlineVariant, width: 1.5),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Cover with badges
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(_imageRadius),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    RoundedImageWithShadow(
+                      imageUrl: widget.entry.imagePath,
+                      radius: _imageRadius,
+                      shadowColor: Colors.transparent,
+                    ),
+                    // Status badge (top-left)
+                    Positioned(
+                      top: 2,
+                      left: 2,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: isUnread
+                              ? const Color(0xFFE91E63)
+                              : const Color(0xFF4CAF50),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          isUnread ? 'UNREAD' : 'FINISHED',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Favorite indicator (top-right)
+                    if (widget.entry.isFavorited == true)
+                      Positioned(
+                        top: 4,
+                        right: 4,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.6),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          padding: const EdgeInsets.all(4),
+                          child: const Icon(
+                            Icons.favorite,
+                            color: Colors.red,
+                            size: 16,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 2),
+            // Thin progress bar, inset so it stays inside the card's rounded corners
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(2),
+                child: SizedBox(
+                  height: 3,
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    backgroundColor: scheme.outlineVariant,
+                    valueColor: AlwaysStoppedAnimation<Color>(scheme.primary),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

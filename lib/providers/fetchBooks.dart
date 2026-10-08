@@ -90,7 +90,7 @@ Future<void> getComics(String comicsId) async {
       id: element.id ?? '',
       title: element.name ?? '',
       imagePath: element.imageTags!['Primary'] != null
-          ? '$url/Items/${element.id}/Images/Primary?&quality=90&Tag=${element.imageTags!['Primary']}'
+          ? '$url/Items/${element.id}/Images/Primary?quality=90'
           : 'Asset',
       releaseDate: element.productionYear.toString(),
       path: element.path ?? '',

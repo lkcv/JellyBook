@@ -26,21 +26,6 @@ class MainMenu extends StatefulWidget {
 }
 
 class _MainMenuState extends State<MainMenu> {
-  /*
-           Heres what this should look like:
-           - should be a grid view of cards
-           - each comic should have its own card
-           - the cards should have:
-                - a photo
-                - the title
-                - the release data if known
-                - a more info button
-                - a progress bar if book has been started
-           - At the bottom will be a bar witch will contain the following sections:
-                - a library section
-                - a search section
-                - a settings section
-        */
   static const _pageSize = 20;
   late final PagingController<int, Entry> _pagingController =
       PagingController<int, Entry>(
@@ -124,7 +109,7 @@ class _MainMenuState extends State<MainMenu> {
               AppLocalizations.of(context)?.useSentry ?? "Use Sentry",
             ),
             content: Text(AppLocalizations.of(context)?.sentryExplanation ??
-                "Enable Sentry logging to quickly diagnose and fix issues! This provides us with real-time error tracking without compromising your privacy. Please help support JellyBook's development by turning on logging."),
+                "Enable Sentry logging to quickly diagnose and fix issues! This provides us with real-time error tracking without compromising your privacy. Please help support JellyBook's development!"),
             actions: [
               TextButton(
                 onPressed: () {
@@ -151,13 +136,11 @@ class _MainMenuState extends State<MainMenu> {
     }
   }
 
-// should be a futureBuilder
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
-          // icon: const Icon(Icons.home),
           icon: const Icon(Icons.refresh_rounded),
           tooltip: AppLocalizations.of(context)?.refresh ?? 'Refresh',
           onPressed: () {
@@ -174,7 +157,7 @@ class _MainMenuState extends State<MainMenu> {
           height: 40,
           decoration: BoxDecoration(
             color: Theme.of(context).primaryColor,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(17.5),
           ),
           child: Center(
               child: TextButton(
@@ -204,7 +187,6 @@ class _MainMenuState extends State<MainMenu> {
             ),
           )),
         ),
-        // title: const Text('Home'),
         actions: <Widget>[
           IconButton(
             icon: const Icon(Icons.logout_rounded),
@@ -220,174 +202,60 @@ class _MainMenuState extends State<MainMenu> {
         builder: (context, AsyncSnapshot snapshot) {
           if (snapshot.connectionState == ConnectionState.done) {
             if (snapshot.hasData && snapshot.data != null) {
-              // Wrap Column in SliverToBoxAdapter for compatibility
+              List<Folder> folders = snapshot.data.$2 ?? [];
+
               return CustomScrollView(
                 slivers: <Widget>[
                   const SliverToBoxAdapter(child: SizedBox(height: 10)),
+                  // Library header
                   SliverToBoxAdapter(
-                    child: Column(
-                      children: [
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: Padding(
-                            padding: const EdgeInsets.only(left: 10),
-                            child: Text(
-                              AppLocalizations.of(context)?.collections ??
-                                  "Collections",
-                              style: const TextStyle(
-                                  fontSize: 30, fontWeight: FontWeight.bold),
-                            ),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 10),
+                        child: Text(
+                          AppLocalizations.of(context)?.library ?? "Library",
+                          style: const TextStyle(
+                            fontSize: 30,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                        const SizedBox(height: 10),
-                        SizedBox(
-                          width: double.infinity,
-                          height: MediaQuery.of(context).size.height / 6 * 1.2,
-                          child: ListView.builder(
-                            scrollDirection: Axis.horizontal,
-                            itemCount: snapshot.data.$2?.length,
-                            itemExtent: MediaQuery.of(context).size.width / 3,
-                            itemBuilder: (context, index) {
-                              return SizedBox(
-                                child: Card(
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: InkWell(
-                                    onTap: () async {
-                                      logger.i("tapped");
-                                      await Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) =>
-                                              collectionScreen(
-                                            folderId: snapshot.data.$2
-                                                .elementAt(index)
-                                                .id,
-                                            name: snapshot.data.$2
-                                                .elementAt(index)
-                                                .name,
-                                            image: snapshot.data.$2
-                                                .elementAt(index)
-                                                .image,
-                                            bookIds: snapshot.data.$2
-                                                .elementAt(index)
-                                                .bookIds,
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                    child: Column(
-                                      children: <Widget>[
-                                        SizedBox(
-                                          height: 10 *
-                                              MediaQuery.of(context)
-                                                  .size
-                                                  .height /
-                                              1000,
-                                        ),
-                                        Padding(
-                                          padding: EdgeInsets.only(
-                                              left: 10 *
-                                                  MediaQuery.of(context)
-                                                      .size
-                                                      .width /
-                                                  1000,
-                                              right: 10 *
-                                                  MediaQuery.of(context)
-                                                      .size
-                                                      .width /
-                                                  1000),
-                                          child: AutoSizeText(
-                                            snapshot.data.$2
-                                                .elementAt(index)
-                                                .name,
-                                            textAlign: TextAlign.center,
-                                            maxLines: 2,
-                                            minFontSize: 5,
-                                            style: const TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ),
-                                        // start all images at the same height rather than same offset
-                                        SizedBox(
-                                          height: 5 *
-                                              MediaQuery.of(context)
-                                                  .size
-                                                  .height /
-                                              1000,
-                                        ),
-                                        Flexible(
-                                          child: SizedBox(
-                                            child: RoundedImageWithShadow(
-                                              imageUrl: snapshot.data.$2
-                                                      .elementAt(index)
-                                                      .image ??
-                                                  'Asset',
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(
-                                          height: 10,
-                                        ),
-                                      ],
-                                    ),
+                      ),
+                    ),
+                  ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 10)),
+                  // Series grid (from folders) - non-paginated
+                  SliverPadding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                    sliver: SliverGrid(
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        childAspectRatio: 0.63,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
+                      ),
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                          final folder = folders[index];
+                          return SeriesCard(
+                            folder: folder,
+                            onTap: () async {
+                              await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => collectionScreen(
+                                    folderId: folder.id,
+                                    name: folder.name,
+                                    image: folder.image,
+                                    bookIds: folder.bookIds,
                                   ),
                                 ),
                               );
                             },
-                          ),
-                        ),
-                        const SizedBox(
-                          height: 10,
-                        ),
-                        const Divider(
-                          height: 5,
-                          thickness: 5,
-                        ),
-                        const SizedBox(
-                          height: 10,
-                        ),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: Padding(
-                            padding: const EdgeInsets.only(left: 10),
-                            child: Text(
-                              AppLocalizations.of(context)?.library ??
-                                  "Library",
-                              style: const TextStyle(
-                                fontSize: 30,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(
-                          height: 10,
-                        ),
-                      ],
-                    ),
-                  ),
-                  PagingListener<int, Entry>(
-                    controller: _pagingController,
-                    builder: (context, state, fetchNextPage) =>
-                        PagedSliverGrid<int, Entry>(
-                      state: state,
-                      fetchNextPage: fetchNextPage,
-                      addRepaintBoundaries: true,
-                      addSemanticIndexes: true,
-                      addAutomaticKeepAlives: true,
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        childAspectRatio: 1,
-                      ),
-                      builderDelegate: PagedChildBuilderDelegate<Entry>(
-                        itemBuilder: (context, entry, index) => SizedBox(
-                          child: GridEntryWidget(entry),
-                        ),
+                          );
+                        },
+                        childCount: folders.length,
                       ),
                     ),
                   ),
@@ -395,25 +263,18 @@ class _MainMenuState extends State<MainMenu> {
                 ],
               );
             } else if (snapshot.hasError) {
-              // Handle error state
-              return SliverToBoxAdapter(
-                child: Center(
-                  child: Text(
-                    "Error: ${snapshot.error}",
-                    style: const TextStyle(color: Colors.red),
-                  ),
+              return Center(
+                child: Text(
+                  "Error: ${snapshot.error}",
+                  style: const TextStyle(color: Colors.red),
                 ),
               );
             } else {
-              // Handle null data state
-              return const SliverToBoxAdapter(
-                child: Center(
-                  child: Text("No data found"),
-                ),
+              return const Center(
+                child: Text("No data found"),
               );
             }
           } else {
-            // Handle loading state
             return const Center(child: CircularProgressIndicator());
           }
         },
@@ -422,116 +283,146 @@ class _MainMenuState extends State<MainMenu> {
   }
 }
 
-class GridEntryWidget extends StatefulWidget {
-  final Entry entry;
+class SeriesCard extends StatefulWidget {
+  final Folder folder;
+  final VoidCallback onTap;
 
-  const GridEntryWidget(this.entry);
+  const SeriesCard({super.key, required this.folder, required this.onTap});
 
-  // createState function
   @override
-  GridEntryWidgetState createState() => GridEntryWidgetState();
+  State<SeriesCard> createState() => _SeriesCardState();
 }
 
-class GridEntryWidgetState extends State<GridEntryWidget> {
+class _SeriesCardState extends State<SeriesCard> {
+  static const double _imageRadius = 12;
+  static const double _cardRadius = _imageRadius + 4 + 1.5;
+
+  // Average progress across all books in the series
+  double _calcProgress() {
+    final isar = Isar.getInstance();
+    if (isar == null || widget.folder.bookIds.isEmpty) return 0.0;
+    final entries = isar.entrys
+        .where()
+        .filter()
+        .anyOf(widget.folder.bookIds, (q, String id) => q.idEqualTo(id))
+        .findAllSync();
+    if (entries.isEmpty) return 0.0;
+    final total = entries.fold<double>(0.0, (sum, e) => sum + e.progress);
+    return (total / entries.length).clamp(0.0, 1.0);
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Card(
-      borderOnForeground: true,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: InkWell(
-        onTap: () async {
-          logger.i("tapped");
-          // logger.i(snapshot.data.$1.elementAt(index));
-          Entry? updatedEntry = await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => InfoScreen(entry: widget.entry),
-            ),
-          );
-          setState(() {
-            widget.entry.isFavorited =
-                updatedEntry?.isFavorited ?? widget.entry.isFavorited;
-          });
-        },
+    final scheme = Theme.of(context).colorScheme;
+    final folder = widget.folder;            // added
+    final progress = _calcProgress();        // added
+
+    return GestureDetector(
+      onTap: widget.onTap,                   // was: onTap
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(_cardRadius),
+          border: Border.all(color: scheme.outlineVariant, width: 1.5),
+        ),
         child: Column(
-          children: <Widget>[
-            const SizedBox(
-              height: 10,
-            ),
-            Stack(
-              children: <Widget>[
-                SizedBox(
-                  // height should be 80% of the card
-                  height: MediaQuery.of(context).size.height / 6 * 0.8,
-                  child: RoundedImageWithShadow(
-                    imageUrl: widget.entry.imagePath ?? 'Asset',
-                  ),
-                ),
-                if (widget.entry.isFavorited == true)
-                  // icon in circle in bottom $2 corner
-                  // allow it to be off the image without being cut off
-                  Positioned(
-                    bottom: 0,
-                    right: 0,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).primaryColor.withOpacity(0.8),
-                        borderRadius: BorderRadius.circular(100),
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Title lives in the card header, not on the image
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 2, 4, 6),
+              child: Row(
+                children: [
+                  Icon(Icons.chrome_reader_mode_outlined,
+                      size: 22, color: scheme.primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      folder.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
                       ),
-                      child: const Padding(
-                        padding: EdgeInsets.all(5),
-                        child: Icon(
-                          Icons.favorite,
-                          color: Colors.red,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Clean cover with just a book-count pill
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(_imageRadius),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    RoundedImageWithShadow(
+                      imageUrl: folder.image,
+                      radius: _imageRadius,
+                      shadowColor: Colors.transparent,
+                    ),
+                    Positioned(
+                      bottom: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.75),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: scheme.outlineVariant),
+                        ),
+                        child: Text(
+                          '${folder.bookIds.length} Books',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-              ],
-            ),
-            const SizedBox(
-              height: 10,
-            ),
-            // auto size text to fit the width of the card (max 2 lines)
-
-            Expanded(
-              flex: 3,
-              // give some padding to the text
-              child: Padding(
-                padding: const EdgeInsets.only(left: 5, right: 5),
-                child: AutoSizeText(
-                  widget.entry.title,
-                  maxLines: 3,
-                  minFontSize: 10,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-
-            if (widget.entry.releaseDate != "null")
-              Flexible(
-                // give some padding to the text
-                child: Padding(
-                  padding: const EdgeInsets.only(left: 5, right: 5),
-                  child: AutoSizeText(
-                    widget.entry.releaseDate,
-                    maxLines: 1,
-                    minFontSize: 10,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontStyle: FontStyle.italic,
-                      color: Colors.grey,
+                    Positioned(
+                      bottom: 8,
+                      left: 8,
+                      child: Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.black.withOpacity(0.75),   // matches the pill
+                          border: Border.all(color: scheme.outlineVariant),
+                        ),
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(
+                                value: progress,
+                                strokeWidth: 2.5,
+                                backgroundColor: Colors.white24,
+                                valueColor: AlwaysStoppedAnimation<Color>(scheme.primary),
+                              ),
+                            ),
+                            Text(
+                              '${(progress * 100).round()}%',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 8,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ),
+            ),
           ],
         ),
       ),

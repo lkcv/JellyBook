@@ -9,32 +9,37 @@ import 'package:jellybook/models/entry.dart';
 // This function takes the list of entries and creates folders if their parentId is not one of the categories
 // It adds the folder to the list of folders in a isar box
 class CreateFolders {
-  static Future<void> createFolders(
+static Future<void> createFolders(
       List<Entry> entries, List<String> categories) async {
     final isar = Isar.getInstance();
-
+  
     final prefs = await SharedPreferences.getInstance();
     List<String> categories = prefs.getStringList('categories') ?? [];
     List<Folder> newFolders = [];
     entries.forEach((entry) {
       List<Entry> bookEntries =
           isar!.entrys.filter().parentIdEqualTo(entry.id).findAllSync();
-      // get the ids of all bookEntries
       List<String> bookEntryIds = bookEntries.map((entry) => entry.id).toList();
-      // write the ids to the folder
-      // if the parentId is not in the categories list
-      if (!categories.contains(entry.parentId)) {
-        // create a new folder
+      
+      // Get folder image - use first book's image if folder doesn't have one
+      String folderImage = entry.imagePath ?? '';
+      if ((folderImage.isEmpty || folderImage == 'Asset') && bookEntries.isNotEmpty) {
+        folderImage = bookEntries.first.imagePath ?? '';
+      }
+      
+      // IMPORTANT: Only create folders for non-library items
+      // Skip if this entry IS a library category (top-level)
+      if (!categories.contains(entry.id)) {
         Folder newFolder = Folder(
           id: entry.id,
           name: entry.title,
           bookIds: bookEntryIds,
-          image: entry.imagePath,
+          image: folderImage,
         );
-        // add the folder to the list of folders
         newFolders.add(newFolder);
       }
     });
+    
     for (int i = 0; i < newFolders.length; i++) {
       var folder =
           isar!.folders.filter().idEqualTo(newFolders[i].id).findFirstSync();
@@ -45,7 +50,6 @@ class CreateFolders {
           await isar.folders.put(newFolders[i]);
         });
       } else {
-        // if it doesn't, add the folder to the database
         await isar.writeTxn(() async {
           await isar.folders.put(newFolders[i]);
         });
