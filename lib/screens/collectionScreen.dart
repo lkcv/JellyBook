@@ -14,6 +14,7 @@ import 'package:jellybook/l10n/app_localizations.dart';
 import 'package:jellybook/variables.dart';
 import 'package:jellybook/widgets/roundedImageWithShadow.dart';
 import 'package:auto_size_text/auto_size_text.dart';
+import 'package:jellybook/screens/readingScreen.dart';
 
 class collectionScreen extends StatefulWidget {
   final String folderId;
@@ -95,6 +96,19 @@ class _collectionScreenState extends State<collectionScreen> {
                   return KuroStyleBookCard(
                     entry: entry,
                     onEntryTapped: () async {
+                      if (entry.type != EntryType.folder && entry.downloaded) {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ReadingScreen(
+                              title: entry.title,
+                              comicId: entry.id,
+                            ),
+                          ),
+                        );
+                        setState(() {}); // refresh progress after reading
+                        return;
+                      }
                       if (entry.type != EntryType.folder) {
                         var result = await Navigator.push(
                           context,
@@ -127,6 +141,17 @@ class _collectionScreenState extends State<collectionScreen> {
                             ),
                           ),
                         );
+                      }
+                    },
+                    onEntryLongPressed: () async {
+                      var result = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => InfoScreen(entry: entry),
+                        ),
+                      );
+                      if (result != null) {
+                        setState(() {});
                       }
                     },
                   );
@@ -184,10 +209,12 @@ class _collectionScreenState extends State<collectionScreen> {
 class KuroStyleBookCard extends StatefulWidget {
   final Entry entry;
   final VoidCallback onEntryTapped;
+  final VoidCallback? onEntryLongPressed; // new
 
   const KuroStyleBookCard({
     required this.entry,
     required this.onEntryTapped,
+    this.onEntryLongPressed, // new
   });
 
   @override
@@ -207,6 +234,7 @@ class KuroStyleBookCardState extends State<KuroStyleBookCard> {
 
     return GestureDetector(
       onTap: widget.onEntryTapped,
+      onLongPress: widget.onEntryLongPressed,
       child: Container(
         padding: const EdgeInsets.all(4),
         decoration: BoxDecoration(

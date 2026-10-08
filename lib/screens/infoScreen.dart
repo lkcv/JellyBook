@@ -327,28 +327,29 @@ class _InfoScreenState extends State<InfoScreen> {
             width: size == -1 ? imageWidth : size,
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: entry.downloaded
-                    ? Theme.of(context).buttonTheme.colorScheme!.primary
-                    : Colors.grey,
+                backgroundColor: Theme.of(context).buttonTheme.colorScheme!.primary,
                 foregroundColor: Colors.white,
               ),
-              onPressed: () {
+              onPressed: () async {
                 if (entry.downloaded) {
-                  Navigator.push(
+                  _openReader();
+                } else if (!offline) {
+                  final result = await Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => ReadingScreen(
-                        title: entry.title,
-                        comicId: entry.id,
-                      ),
+                      builder: (context) => DownloadScreen(entry: entry),
                     ),
                   );
+                  if (result != null) {
+                    setState(() => entry = result);
+                    if (entry.downloaded) _openReader();
+                  }
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(
-                        AppLocalizations.of(context)?.downloadFirst ??
-                            "You need to download the comic first",
+                        AppLocalizations.of(context)?.downloadOffline ??
+                            "You are offline, please connect to the internet & reload this app to download this comic",
                       ),
                     ),
                   );
@@ -550,6 +551,18 @@ class _InfoScreenState extends State<InfoScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  void _openReader() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ReadingScreen(
+          title: entry.title,
+          comicId: entry.id,
+        ),
       ),
     );
   }
