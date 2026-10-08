@@ -18,6 +18,7 @@ import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:jellybook/widgets/AudioPlayerWidget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
+import 'package:flutter/services.dart';
 
 // cbr/cbz reader
 class CbrCbzReader extends StatefulWidget {
@@ -44,6 +45,10 @@ class _CbrCbzReaderState extends State<CbrCbzReader> {
   late List<String> chapters = [];
   late List<String> pages = [];
   late String direction;
+  bool _loading = true;
+  bool _showOverlay = false;
+  int _currentPage = 0;
+  PageController? _pageController;
 
   // audio variables
   String audioPath = '';
@@ -51,12 +56,6 @@ class _CbrCbzReaderState extends State<CbrCbzReader> {
   bool isPlaying = false;
   Duration audioPosition = Duration();
   String audioId = '';
-
-  void setDirection() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    direction = prefs.getString('readingDirection') ?? 'ltr';
-    logger.f("direction: $direction");
-  }
 
   Future<void> createPageList() async {
     // create a list of chapters
@@ -109,13 +108,14 @@ class _CbrCbzReaderState extends State<CbrCbzReader> {
     super.initState();
     title = widget.title;
     comicId = widget.comicId;
-    getData();
-    setDirection();
+    _load();
   }
 
   @override
   void dispose() {
+    _pageController?.dispose();
     audioPlayer.dispose();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }
 
@@ -307,94 +307,210 @@ class _CbrCbzReaderState extends State<CbrCbzReader> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder(
-      future: getChapters(),
-      builder: (BuildContext context, AsyncSnapshot snapshot) {
-        if (snapshot.connectionState == ConnectionState.done) {
-          return Scaffold(
-            appBar: AppBar(
-              title: Text(title),
-              leading: IconButton(
-                icon: const Icon(Icons.arrow_back),
-                onPressed: () {
-                  Navigator.pop(context);
-                  Navigator.pop(context);
-                },
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    direction = (prefs.getString('readingDirection') ?? 'ltr').toLowerCase();
+  
+    await getData();
+    await getChapters();
+    await getProgress(comicId);
+    await createPageList();
+  
+    final lastPage = pages.isEmpty ? 0 : pages.length - 1;
+    _currentPage = pageNum.clamp(0, lastPage).toInt();
+    _pageController = PageController(initialPage: _currentPage);
+  
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    if (mounted) setState(() => _loading = false);
+  }
+  
+  void _toggleOverlay() {
+    setState(() => _showOverlay = !_showOverlay);
+    SystemChrome.setEnabledSystemUIMode(
+      _showOverlay ? SystemUiMode.edgeToEdge : SystemUiMode.immersiveSticky,
+    );
+  }
+  
+  // the reader sits on top of the loading screen, so pop both
+  void _exit() {
+    Navigator.pop(context);
+    Navigator.pop(context);
+  }
+  
+  Widget _fade(Widget child) {
+    return IgnorePointer(
+      ignoring: !_showOverlay,
+      child: AnimatedOpacity(
+        opacity: _showOverlay ? 1 : 0,
+        duration: const Duration(milliseconds: 200),
+        child: child,
+      ),
+    );
+  }
+  
+  Widget _buildVertical() {
+    return InteractiveViewer(
+      child: SingleChildScrollView(
+        child: Column(
+          children: [
+            for (var page in pages)
+              Image.file(File(page), fit: BoxFit.fitHeight),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildPager(bool isRtl) {
+    return PageView.builder(
+      reverse: isRtl,
+      itemCount: pages.length,
+      controller: _pageController,
+      itemBuilder: (context, index) {
+        return InteractiveViewer(
+          child: Image.file(File(pages[index]), fit: BoxFit.contain),
+        );
+      },
+      onPageChanged: (index) {
+        setState(() => _currentPage = index);
+        saveProgress(index);
+      },
+    );
+  }
+  
+  Widget _buildTopBar() {
+    return Container(
+      color: Colors.black.withOpacity(0.85),
+      child: SafeArea(
+        bottom: false,
+        child: SizedBox(
+          height: kToolbarHeight,
+          child: Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: _exit,
+              ),
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              // future top-bar buttons go here
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildBottomBar(ColorScheme scheme, bool isRtl) {
+    final int lastPage = pages.length > 1 ? pages.length - 1 : 1;
+    return Container(
+      color: Colors.black.withOpacity(0.85),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Directionality flips the slider for RTL so it fills right to left
+            Directionality(
+              textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
+              child: SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  trackHeight: 6,
+                  activeTrackColor: scheme.primary,
+                  inactiveTrackColor: scheme.primary.withOpacity(0.25),
+                  thumbColor: scheme.primary,
+                  overlayColor: scheme.primary.withOpacity(0.15),
+                ),
+                child: Slider(
+                  value: _currentPage.toDouble(),
+                  min: 0,
+                  max: lastPage.toDouble(),
+                  // preview the number while dragging...
+                  onChanged: (v) => setState(() => _currentPage = v.round()),
+                  // ...and only jump (and save) when the finger lifts
+                  onChangeEnd: (v) => _pageController?.jumpToPage(v.round()),
+                ),
               ),
             ),
-            body: FutureBuilder(
-              // get progress requires the comicId
-              future: getProgress(comicId),
-              builder: (BuildContext context, AsyncSnapshot snapshot) {
-                if (snapshot.connectionState == ConnectionState.done) {
-                  return FutureBuilder(
-                    future: createPageList(),
-                    builder: (BuildContext context, AsyncSnapshot snapshot) {
-                      if (snapshot.connectionState == ConnectionState.done) {
-                        return Column(
-                          children: [
-                            Expanded(
-                              child: direction.toLowerCase() == 'vertical'
-                                  ? InteractiveViewer(
-                                      child: SingleChildScrollView(
-                                        child: Column(
-                                          children: [
-                                            for (var page in pages)
-                                              Image.file(
-                                                File(page),
-                                                fit: BoxFit.fitHeight,
-                                              ),
-                                          ],
-                                        ),
-                                      ),
-                                    )
-                                  : PageView.builder(
-                                      scrollDirection: Axis.horizontal,
-                                      reverse: direction.toLowerCase() == 'rtl',
-                                      // scrollDirection: Axis.vertical,
-                                      itemCount: pages.length,
-                                      controller: PageController(
-                                        initialPage: pageNum,
-                                      ),
-                                      itemBuilder: (context, index) {
-                                        return InteractiveViewer(
-                                          child: Image.file(
-                                            File(pages[index]),
-                                            fit: BoxFit.contain,
-                                          ),
-                                        );
-                                      },
-                                      onPageChanged: (index) {
-                                        saveProgress(index);
-                                        progress = index / pageNums;
-                                      },
-                                    ),
-                            ),
-                          ],
-                        );
-                      } else {
-                        return const Center(
-                          child: CircularProgressIndicator(),
-                        );
-                      }
-                    },
-                  );
-                } else {
-                  return const Center(
-                    child: CircularProgressIndicator(),
-                  );
-                }
-              },
+            const SizedBox(height: 4),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              decoration: BoxDecoration(
+                color: scheme.primaryContainer,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                '${_currentPage + 1} / ${pages.length}',
+                style: TextStyle(
+                  color: scheme.onPrimaryContainer,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
-          );
-        } else {
-          return const Center(
-            child: CircularProgressIndicator(),
-          );
-        }
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return Scaffold(
+        appBar: AppBar(title: Text(title)),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+  
+    final scheme = Theme.of(context).colorScheme;
+    final bool isRtl = direction == 'rtl';
+    final bool isVertical = direction == 'vertical';
+  
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _exit();
       },
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: Stack(
+          children: [
+            // the page itself; a tap anywhere toggles the overlay
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _toggleOverlay,
+                child: isVertical ? _buildVertical() : _buildPager(isRtl),
+              ),
+            ),
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: _fade(_buildTopBar()),
+            ),
+            if (!isVertical)
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: _fade(_buildBottomBar(scheme, isRtl)),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }
