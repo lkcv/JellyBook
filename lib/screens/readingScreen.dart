@@ -152,7 +152,7 @@ class _ReadingScreenState extends State<ReadingScreen> {
     // use a switch statement to determine how to read the file
     switch (fileExtension) {
       case 'pdf':
-        Navigator.pushReplacement(
+        Navigator.push(
           context,
           // for the route, have no transition
           PageRouteBuilder(
@@ -182,7 +182,7 @@ class _ReadingScreenState extends State<ReadingScreen> {
       case 'cbr':
       case 'zip':
       case 'rar':
-        Navigator.pushReplacement(
+        Navigator.push(
           context,
           // for the route, have no transition
           PageRouteBuilder(
@@ -210,7 +210,7 @@ class _ReadingScreenState extends State<ReadingScreen> {
         );
         break;
       case 'epub':
-        Navigator.pushReplacement(
+        Navigator.push(
           context,
           // for the route, have no transition
           PageRouteBuilder(
@@ -244,7 +244,7 @@ class _ReadingScreenState extends State<ReadingScreen> {
       case 'm4a':
       case 'm4b':
       case 'wav':
-        Navigator.pushReplacement(
+        Navigator.push(
           context,
           // for the route, have no transition
           PageRouteBuilder(
