@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:jellybook/models/entry.dart';
 import 'package:jellybook/models/folder.dart';
 import 'package:jellybook/models/login.dart';
+import 'package:jellybook/screens/homeScreen.dart';
 import 'dart:io';
 
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -186,11 +187,7 @@ class MyApp extends StatelessWidget {
             theme: themeData,
             // darkTheme: ThemeData.dark(),
             home: url != null && username != null && password != null
-                ? LoginScreen(
-                    url: url,
-                    username: username,
-                    password: password,
-                  )
+                ? HomeScreen()
                 : LoginScreen(),
           );
         });

@@ -6,6 +6,7 @@ import 'package:jellybook/models/login.dart';
 import 'package:isar/isar.dart';
 import 'package:isar_flutter_libs/isar_flutter_libs.dart';
 import 'package:google_nav_bar/google_nav_bar.dart';
+import 'package:provider/provider.dart';
 
 // Screens imports
 import 'package:jellybook/screens/MainScreens/mainMenu.dart';
@@ -15,6 +16,7 @@ import 'package:jellybook/screens/MainScreens/continueReadingScreen.dart';
 import 'package:jellybook/screens/loginScreen.dart';
 import 'package:jellybook/l10n/app_localizations.dart';
 import 'package:jellybook/variables.dart';
+import 'package:jellybook/providers/connectionManager.dart';
 
 // Cupertino imports
 import 'package:flutter/cupertino.dart';
@@ -25,21 +27,36 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  /*
-           Heres what this should look like:
-           - should be a grid view of cards
-           - each comic should have its own card
-           - the cards should have:
-                - a photo
-                - the title
-                - the release data if known
-                - a more info button
-                - a progress bar if book has been started
-           - At the bottom will be a bar witch will contain the following sections:
-                - a library section
-                - a search section
-                - a settings section
-        */
+  late ConnectionManager _connectionManager;
+
+  @override
+  void initState() {
+    super.initState();
+    _connectionManager = ConnectionManager();
+    _validateCredentialsAndListen();
+  }
+
+  void _validateCredentialsAndListen() {
+    _connectionManager.addListener(_onConnectionStatusChanged);
+    _connectionManager.validateStartup();
+  }
+
+  void _onConnectionStatusChanged() {
+    if (_connectionManager.status == ConnectionStatus.authFailed) {
+      // 401: redirect to login
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => LoginScreen()),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _connectionManager.removeListener(_onConnectionStatusChanged);
+    _connectionManager.dispose();
+    super.dispose();
+  }
 
   Future<void> logout() async {
     final isar = Isar.getInstance();
@@ -63,23 +80,17 @@ class _HomeScreenState extends State<HomeScreen> {
     SettingsScreen(),
   ];
 
-// should be a futureBuilder
   @override
   Widget build(BuildContext context) {
-    // have the body be the selected screen
     return Scaffold(
       resizeToAvoidBottomInset: true,
       extendBody: true,
       body: screens[_selectedIndex],
-      // use the cupertino bottom navigation bar if the user is on ios
       bottomNavigationBar: Theme.of(context).platform == TargetPlatform.iOS
           ? CupertinoTabBar(
               backgroundColor: Theme.of(context).brightness == Brightness.dark
                   ? Theme.of(context).primaryColor
                   : CupertinoTheme.of(context).barBackgroundColor,
-
-              // activeColor: Theme.of(context).colorScheme.onPrimary,
-              // inactiveColor: Theme.of(context).colorScheme.onSecondary,
               items: [
                 BottomNavigationBarItem(
                   icon: Icon(Icons.home),
@@ -118,14 +129,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 padding: const EdgeInsets.only(
                     left: 15.0, right: 15.0, top: 8, bottom: 15),
                 child: GNav(
-                  // use the theme colors
-                  // rippleColor: Colors.grey[300]!,
-                  // hoverColor: Colors.grey[100]!,
-                  // activeColor: Colors.white,
                   rippleColor: Theme.of(context).colorScheme.secondary,
                   hoverColor: Theme.of(context).colorScheme.secondary,
                   activeColor: Colors.white,
-
                   tabBorderRadius: 15,
                   tabBackgroundGradient: LinearGradient(
                     colors: [
@@ -133,7 +139,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       const Color(0xFF00A4DC).withOpacity(0.75),
                     ],
                   ),
-                  // set the boarder color
                   tabActiveBorder:
                       Theme.of(context).brightness == Brightness.dark
                           ? Border.all(color: Colors.transparent, width: 0)

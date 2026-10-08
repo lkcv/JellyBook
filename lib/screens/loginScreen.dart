@@ -10,24 +10,21 @@ import 'package:jellybook/l10n/app_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:jellybook/variables.dart';
+import 'package:isar/isar.dart';
+import 'package:jellybook/models/login.dart';
 
 class LoginScreen extends StatefulWidget {
-// optional inputs of url, username, and password (use empty string if not provided)
-  final String? url;
-  final String? username;
-  final String? password;
-  LoginScreen({this.url = "", this.username = "", this.password = ""});
+  const LoginScreen();
 
   @override
   _LoginScreenState createState() => _LoginScreenState(
-        url: url,
-        username: username,
-        password: password,
+        url: null,
+        username: null,
+        password: null,
       );
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  // optional inputs of url, username, and password (use empty string if not provided)
   final String? url;
   final String? username;
   final String? password;
@@ -50,47 +47,45 @@ class _LoginScreenState extends State<LoginScreen> {
   void initState() {
     super.initState();
     setSharedPrefs();
-    // check_url();
     _passwordVisible = false;
-    // check if url and username are provided
-    if (url != "" && url != null && username != "" && username != null) {
-      _loading = true;
-      logger.d("url: " + url!);
-      logger.d("username: " + username!);
-      prefs?.setString("username", username!);
-      logger.d("password: " + password!);
-      LoginProvider.loginStatic(
-        url!,
-        username!,
-        context,
-        password!,
-      ).then((value) {
-        if (value == "true") {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => HomeScreen(),
-            ),
-          );
-        } else {
-          setState(() {
-            _error = value;
-            _loading = false;
-          });
-        }
-      });
-    }
+    
+    // Prefill fields from saved login if available
+    _prefillFromSavedLogin();
   }
 
   Future<void> setSharedPrefs() async {
     prefs = await SharedPreferences.getInstance();
   }
 
-  // FocusNodes
-  final FocusNode _focusNode1 = FocusNode();
-  final FocusNode _focusNode2 = FocusNode();
-  final FocusNode _focusNode3 = FocusNode();
-  final FocusNode _focusNode4 = FocusNode();
+  Future<void> _prefillFromSavedLogin() async {
+    final isar = Isar.getInstance();
+    final savedLogin = await isar?.logins.where().findFirst();
+    
+    if (savedLogin != null && mounted) {
+      setState(() {
+        _url.text = savedLogin.serverUrl;
+        _username.text = savedLogin.username;
+        // Don't prefill password for security
+      });
+    }
+  }
+
+  FocusNode _focusNode1 = FocusNode();
+  FocusNode _focusNode2 = FocusNode();
+  FocusNode _focusNode3 = FocusNode();
+  FocusNode _focusNode4 = FocusNode();
+
+  @override
+  void dispose() {
+    _focusNode1.dispose();
+    _focusNode2.dispose();
+    _focusNode3.dispose();
+    _focusNode4.dispose();
+    _url.dispose();
+    _username.dispose();
+    _password.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -110,7 +105,6 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(
                 height: 50,
               ),
-              // make it work on android TV
               Padding(
                 padding: const EdgeInsets.fromLTRB(25, 8, 25, 8),
                 child: TextFormField(
@@ -134,6 +128,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   key: const Key('usernameField'),
                   controller: _username,
                   focusNode: _focusNode2,
+                  autofillHints: const [],
+                  enableSuggestions: false,
                   decoration: InputDecoration(
                     labelText:
                         AppLocalizations.of(context)?.pageLoginUsername ??
@@ -176,7 +172,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 height: 10,
               ),
               SizedBox(
-                // width dynamically sized of the button
                 width: MediaQuery.of(context).size.width - 50,
                 height: 50,
                 child: ElevatedButton(
@@ -186,9 +181,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     setState(() {
                       _loading = true;
                     });
-                    // logger.d("url: " + _url.text);
                     logger.d("username: " + _username.text);
-                    // logger.d("password: " + _password.text);
                     LoginProvider.loginStatic(
                       _url.text,
                       _username.text,
@@ -210,7 +203,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       }
                     });
                   },
-                  // make it say Connect and have a icon
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -224,12 +216,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 10),
-
               const SizedBox(
                 height: 15,
               ),
-              // if (_error != '')
               Padding(
                 padding: const EdgeInsets.fromLTRB(25, 8, 25, 8),
                 child: Text(
