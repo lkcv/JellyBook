@@ -20,6 +20,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:flutter/services.dart';
 import 'package:auto_size_text/auto_size_text.dart';
+import 'dart:collection';
+import 'package:flutter/scheduler.dart';
 
 // cbr/cbz reader
 class CbrCbzReader extends StatefulWidget {
@@ -36,7 +38,7 @@ class CbrCbzReader extends StatefulWidget {
   _CbrCbzReaderState createState() => _CbrCbzReaderState();
 }
 
-class _CbrCbzReaderState extends State<CbrCbzReader> {
+class _CbrCbzReaderState extends State<CbrCbzReader> with SingleTickerProviderStateMixin {
   late String title;
   late String comicId;
   int pageNum = 0;
@@ -50,6 +52,15 @@ class _CbrCbzReaderState extends State<CbrCbzReader> {
   bool _showOverlay = false;
   int _currentPage = 0;
   PageController? _pageController;
+  static const _normalDuration = Duration(milliseconds: 300);
+  static const _fastDuration = Duration(milliseconds: 80);
+  
+  late final Ticker _tapTicker = createTicker(_onTapTick);
+  final Queue<int> _tapQueue = Queue<int>();
+  Duration _lastTick = Duration.zero;
+  double _from = 0, _to = 0, _t = 0;
+  Curve _legCurve = Curves.easeOutCubic;
+  int _lastTarget = 0;
 
   // audio variables
   String audioPath = '';
@@ -127,18 +138,72 @@ class _CbrCbzReaderState extends State<CbrCbzReader> {
   
     // RTL flips the direction
     final goForward = direction == 'rtl' ? isLeftTap : isRightTap;
+    _queuePage(goForward ? 1 : -1);
+  }
   
-    if (goForward && _currentPage < pages.length - 1) {
-      _pageController?.nextPage(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      );
-    } else if (!goForward && _currentPage > 0) {
-      _pageController?.previousPage(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      );
+
+  void _queuePage(int delta) {
+    final c = _pageController;
+    if (c == null || !c.hasClients) return;
+  
+    // when idle, count from the page we're actually on
+    if (!_tapTicker.isActive) _lastTarget = _currentPage;
+  
+    final target = _lastTarget + delta;
+    if (target < 0 || target >= pages.length) return;
+    _lastTarget = target;
+  
+    if (_tapTicker.isActive) {
+      _tapQueue.add(target); // the tick loop speeds up by itself
+    } else {
+      _startLeg(target);
+      _lastTick = Duration.zero;
+      _tapTicker.start();
     }
+  }
+  
+  void _startLeg(int page) {
+    final c = _pageController!;
+    _from = c.position.pixels;
+    _to = page * c.position.viewportDimension * c.viewportFraction;
+    _t = 0;
+    // pages with taps still waiting behind them move at constant speed so
+    // consecutive pages blend; the last page eases out
+    _legCurve = _tapQueue.isNotEmpty ? Curves.linear : Curves.easeOutCubic;
+  }
+  
+  void _onTapTick(Duration elapsed) {
+    final c = _pageController;
+    if (c == null || !c.hasClients) {
+      _cancelTapAnimation();
+      return;
+    }
+  
+    final dt = elapsed - _lastTick;
+    _lastTick = elapsed;
+  
+    // duration is re-evaluated every frame: fast while taps are queued
+    final dur =
+        (_tapQueue.isNotEmpty ? _fastDuration : _normalDuration).inMicroseconds;
+    _t += dt.inMicroseconds / dur;
+  
+    if (_t >= 1) {
+      c.jumpTo(_to);
+      if (_tapQueue.isEmpty) {
+        _tapTicker.stop();
+        return;
+      }
+      final overflow = _t - 1; // carry leftover time into the next page
+      _startLeg(_tapQueue.removeFirst());
+      _t = overflow.clamp(0.0, 0.99).toDouble();
+    }
+  
+    c.jumpTo(_from + (_to - _from) * _legCurve.transform(_t));
+  }
+  
+  void _cancelTapAnimation() {
+    if (_tapTicker.isActive) _tapTicker.stop();
+    _tapQueue.clear();
   }
 
   @override
@@ -154,6 +219,7 @@ class _CbrCbzReaderState extends State<CbrCbzReader> {
     _pageController?.dispose();
     audioPlayer.dispose();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    _tapTicker.dispose();
     super.dispose();
   }
 
@@ -402,26 +468,32 @@ class _CbrCbzReaderState extends State<CbrCbzReader> {
   }
   
   Widget _buildPager(bool isRtl) {
-    return PageView.builder(
-      reverse: isRtl,
-      itemCount: pages.length,
-      controller: _pageController,
-      itemBuilder: (context, index) {
-        return InteractiveViewer(
-          clipBehavior: Clip.none,
-          child: Image.file(
-            File(pages[index]),
-            fit: BoxFit.contain,
-            gaplessPlayback: true,
-            filterQuality: FilterQuality.high,
-          ),
-        );
+    return NotificationListener<ScrollStartNotification>(
+      onNotification: (n) {
+        if (n.dragDetails != null) _cancelTapAnimation(); // user drag only
+        return false;
       },
-      onPageChanged: (index) {
-        setState(() => _currentPage = index);
-        saveProgress(index);
-        _precacheAround(index);
-      },
+      child: PageView.builder(
+        reverse: isRtl,
+        itemCount: pages.length,
+        controller: _pageController,
+        itemBuilder: (context, index) {
+          return InteractiveViewer(
+            clipBehavior: Clip.none,
+            child: Image.file(
+              File(pages[index]),
+              fit: BoxFit.contain,
+              gaplessPlayback: true,
+              filterQuality: FilterQuality.high,
+            ),
+          );
+        },
+        onPageChanged: (index) {
+          setState(() => _currentPage = index);
+          saveProgress(index);
+          _precacheAround(index);
+        },
+      ),
     );
   }
   
