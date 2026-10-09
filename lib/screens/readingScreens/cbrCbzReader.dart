@@ -265,7 +265,9 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
       await downloadEntry(
         entry,
         onProgress: (p) {
-          if (mounted) setState(() => _downloadProgress = p);
+          if (!mounted) return;
+          if (p < 100 && (p - _downloadProgress).abs() < 1) return;
+          setState(() => _downloadProgress = p);
         },
       );
       await createPageList(); // switch to local files before dropping the stream

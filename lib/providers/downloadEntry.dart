@@ -1,7 +1,8 @@
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
-import 'package:archive/archive.dart';
+import 'package:archive/archive_io.dart';
 import 'package:unrar_file/unrar_file.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -64,9 +65,14 @@ Future<Entry> downloadEntry(
       throw Exception('Download failed with ${download.statusCode}');
     }
 
-    // Write and extract
-    await File(dir).writeAsBytes(download.data!);
-    onProgress(95);
+    // Write archive to disk, then drop the in-memory copy before extract so
+    // peak RAM is not (download buffer + full decoded zip) at the same time.
+    final bytes = download.data;
+    if (bytes == null || bytes.isEmpty) {
+      throw Exception('Download returned empty body');
+    }
+    await File(dir).writeAsBytes(bytes, flush: true);
+    onProgress(92);
 
     await _extractFile(entry, dirLocation, fileName, dir);
     onProgress(100);
@@ -106,22 +112,23 @@ Future<void> _extractFile(
 
   try {
     if (dir.contains('.zip') || dir.contains('.cbz')) {
-      var archive = ZipDecoder().decodeBytes(File(dir).readAsBytesSync());
-
-      for (var file in archive) {
-        if (file.isFile) {
-          var data = file.content as List<int>;
-          File('$comicFolder/${file.name}')
-            ..createSync(recursive: true)
-            ..writeAsBytesSync(data);
-        }
+      // Stream entries to disk on a background isolate. Avoids decodeBytes()
+      // which keeps the entire archive in RAM and starves the reader.
+      await _extractZipOffUi(dir, comicFolder);
+      final archiveFile = File('$dirLocation/$fileName');
+      if (await archiveFile.exists()) {
+        await archiveFile.delete();
       }
-      File('$dirLocation/$fileName').deleteSync();
       entry.downloaded = true;
       entry.folderPath = comicFolder;
     } else if (dir.contains('.rar') || dir.contains('.cbr')) {
+      // unrar_file uses platform channels — must stay on the root isolate.
+      await Future<void>.delayed(Duration.zero);
       await UnrarFile.extract_rar('$dirLocation/$fileName', '$comicFolder/');
-      File('$dirLocation/$fileName').deleteSync();
+      final archiveFile = File('$dirLocation/$fileName');
+      if (await archiveFile.exists()) {
+        await archiveFile.delete();
+      }
       entry.downloaded = true;
       entry.folderPath = comicFolder;
     } else if (entry.path.contains('.pdf')) {
@@ -156,6 +163,41 @@ Future<void> _extractFile(
     logger.e('Extract failed: $e');
     rethrow;
   }
+}
+
+/// Stream-unzip a CBZ/ZIP on a background isolate.
+/// Uses file streams so pages are written one at a time instead of holding
+/// the full decompressed archive in memory (which caused UI jank ~95%).
+Future<void> _extractZipOffUi(String archivePath, String destFolder) async {
+  await Isolate.run(() {
+    final input = InputFileStream(archivePath);
+    try {
+      final archive = ZipDecoder().decodeBuffer(input);
+      for (final file in archive) {
+        if (!file.isFile) continue;
+        final name = file.name.replaceAll('\\', '/');
+        if (name.isEmpty || name.endsWith('/')) continue;
+        if (name.split('/').contains('..')) continue;
+        final outPath = '$destFolder/$name';
+        // Keep writes inside the destination folder
+        final destCanon = Directory(destFolder).absolute.path;
+        final outCanon = File(outPath).absolute.path;
+        if (!outCanon.startsWith(destCanon)) continue;
+
+        File(outPath).parent.createSync(recursive: true);
+        final output = OutputFileStream(outPath);
+        try {
+          file.writeContent(output);
+        } finally {
+          output.close();
+        }
+        // Free this entry's decompressed bytes before the next one
+        file.clear();
+      }
+    } finally {
+      input.close();
+    }
+  });
 }
 
 bool _isAudioFile(String path) {
