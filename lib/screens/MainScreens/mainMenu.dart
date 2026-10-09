@@ -300,18 +300,6 @@ class _MainMenuState extends State<MainMenu> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.refresh_rounded),
-          tooltip: AppLocalizations.of(context)?.refresh ?? 'Refresh',
-          onPressed: () {
-            _pagingController.refresh();
-            setState(
-              () {
-                force = true;
-              },
-            );
-          },
-        ),
         title: Container(
           width: double.infinity,
           height: 40,
