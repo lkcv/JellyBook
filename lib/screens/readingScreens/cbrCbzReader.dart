@@ -238,8 +238,8 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
 
   void _precacheAround(int index) {
     if (pageNums == 0) return;
-    final start = (index - 10).clamp(0, pageNums - 1);
-    final end = (index + 10).clamp(0, pageNums - 1);
+    final start = (index - 3).clamp(0, pageNums - 1);
+    final end = (index + 3).clamp(0, pageNums - 1);
     for (int i = start; i <= end; i++) {
       if (_isStreaming && _stream != null) {
         _stream!.getPage(i).then((file) {
