@@ -236,6 +236,23 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
     );
   }
 
+
+  /// Awaited precache of local extracted files (used when leaving streaming).
+  Future<void> _precacheLocalAround(int index) async {
+    if (pages.isEmpty) return;
+    final start = (index - 1).clamp(0, pages.length - 1);
+    final end = (index + 1).clamp(0, pages.length - 1);
+    final futures = <Future<void>>[];
+    for (int i = start; i <= end; i++) {
+      futures.add(
+        precacheImage(FileImage(File(pages[i])), context).catchError((e) {
+          logger.e('Local precache error: $e');
+        }),
+      );
+    }
+    await Future.wait(futures);
+  }
+
   void _precacheAround(int index) {
     if (pageNums == 0) return;
     final start = (index - 3).clamp(0, pageNums - 1);
@@ -270,13 +287,26 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
           setState(() => _downloadProgress = p);
         },
       );
-      await createPageList(); // switch to local files before dropping the stream
+      await createPageList(); // local page paths ready
       if (!mounted) return;
+
+      // Decode the pages currently on screen from disk *before* flipping
+      // off streaming. Otherwise Image.file has a cold cache and the black
+      // scaffold shows through for a frame.
+      await _precacheLocalAround(_currentPage);
+      if (!mounted) return;
+
       setState(() {
         _isStreaming = false;
         _downloadInProgress = false;
       });
-      _stream?.clear();
+
+      // Drop stream temp files only after the local images have painted
+      final stream = _stream;
+      _stream = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        stream?.clear();
+      });
     } catch (e) {
       logger.e('CbrCbzReader: download failed: $e');
       if (mounted) setState(() => _downloadInProgress = false);
