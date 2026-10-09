@@ -95,7 +95,11 @@ class _MainMenuState extends State<MainMenu> {
   Widget _buildGrid(List<Folder> folders) {
     return CustomScrollView(
       slivers: <Widget>[
-        const SliverToBoxAdapter(child: SizedBox(height: 10)),
+        SliverToBoxAdapter(
+          child: SizedBox(
+            height: MediaQuery.of(context).padding.top + kToolbarHeight + 10,
+          ),
+        ),
         SliverPadding(
           padding: const EdgeInsets.symmetric(horizontal: 8.0),
           sliver: SliverGrid(
@@ -258,13 +262,20 @@ class _MainMenuState extends State<MainMenu> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
+        backgroundColor: Colors.black.withOpacity(0.90),
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
         centerTitle: true,
+        foregroundColor: Colors.white,
         title: Text(
           AppLocalizations.of(context)?.library ?? "Library",
           style: const TextStyle(
             fontSize: 22,
             fontWeight: FontWeight.bold,
+            color: Colors.white,
           ),
         ),
         actions: <Widget>[
