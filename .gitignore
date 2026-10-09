@@ -15,6 +15,7 @@ migrate_working_dir/
 /windows/
 /web/
 /test/
+*.patch
 
 # IntelliJ related
 *.iml
