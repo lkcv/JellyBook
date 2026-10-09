@@ -97,7 +97,8 @@ class _MainMenuState extends State<MainMenu> {
       slivers: <Widget>[
         SliverToBoxAdapter(
           child: SizedBox(
-            height: MediaQuery.of(context).padding.top + kToolbarHeight + 10,
+            // match custom app bar: status/notch inset + compact bar content
+            height: MediaQuery.of(context).padding.top + 40 + 8,
           ),
         ),
         SliverPadding(
@@ -263,55 +264,69 @@ class _MainMenuState extends State<MainMenu> {
   Widget build(BuildContext context) {
     return Scaffold(
       extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        backgroundColor: Colors.black.withOpacity(0.90),
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        centerTitle: true,
-        foregroundColor: Colors.white,
-        title: Text(
-          AppLocalizations.of(context)?.library ?? "Library",
-          style: const TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        ),
-        actions: <Widget>[
-          // Connection status icon
-          Consumer<ConnectionManager>(
-            builder: (context, connectionManager, _) {
-              final status = connectionManager.status;
-
-              if (status == ConnectionStatus.offline) {
-                return IconButton(
-                  icon: const Icon(Icons.cloud_off),
-                  tooltip: 'Offline - tap to retry',
-                  onPressed: () {
-                    connectionManager.retry();
-                  },
-                );
-              } else if (status == ConnectionStatus.validating) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  child: Center(
-                    child: SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: const CircularProgressIndicator(
-                        strokeWidth: 2,
-                      ),
+      appBar: PreferredSize(
+        // Compact bar: only status/notch inset + 40px content (default AppBar is 56).
+        preferredSize: Size.fromHeight(MediaQuery.of(context).padding.top + 36),
+        child: Container(
+          color: Colors.black.withOpacity(0.90),
+          padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
+          child: SizedBox(
+            height: 36,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // On notched devices, pin title near the top (under the notch).
+                // On flat status bars / tablets, keep equal top & bottom padding.
+                Align(
+                  alignment: MediaQuery.of(context).padding.top > 30
+                      ? const Alignment(0, -0.7)
+                      : Alignment.center,
+                  child: Text(
+                    AppLocalizations.of(context)?.library ?? "Library",
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
                     ),
                   ),
-                );
-              }
+                ),
+                // Connection status icon (right)
+                Positioned(
+                  right: 4,
+                  child: Consumer<ConnectionManager>(
+                    builder: (context, connectionManager, _) {
+                      final status = connectionManager.status;
 
-              // Online: no icon
-              return SizedBox.shrink();
-            },
+                      if (status == ConnectionStatus.offline) {
+                        return IconButton(
+                          icon: const Icon(Icons.cloud_off, color: Colors.white),
+                          tooltip: 'Offline - tap to retry',
+                          onPressed: () {
+                            connectionManager.retry();
+                          },
+                        );
+                      } else if (status == ConnectionStatus.validating) {
+                        return const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 16.0),
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          ),
+                        );
+                      }
+
+                      return const SizedBox.shrink();
+                    },
+                  ),
+                ),
+              ],
+            ),
           ),
-        ],
+        ),
       ),
       body: RefreshIndicator(
         onRefresh: () async {
