@@ -158,7 +158,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   iconSize: 24,
                   gap: 7,
                   padding: EdgeInsets.symmetric(horizontal: 16, vertical: 7),
-                  duration: Duration(milliseconds: 600),
+                  duration: Duration(milliseconds: 200),
                   tabBackgroundColor: Theme.of(context).primaryColor,
                   color: Colors.white,
                   tabs: [
