@@ -86,6 +86,12 @@ Future<void> getComics(String comicsId) async {
 
   // List<Map<String, dynamic>> comics = [];
   responseData.forEach((element) {
+    // Jellyfin can flag a one-volume series directory as IsFolder while its
+    // item type is still Book (the web UI opens it as the volume's detail
+    // page, not a folder view). Treat those as books, not folders.
+    final jellyfinKind = element.type.toString().toLowerCase();
+    final isRealFolder =
+        element.isFolder == true && jellyfinKind != 'book';
     Entry entry = Entry(
       id: element.id ?? '',
       title: element.name ?? '',
@@ -97,9 +103,7 @@ Future<void> getComics(String comicsId) async {
       description: element.overview ?? '',
       url: url ?? '',
       rating: element.communityRating ?? -1,
-      type: element.isFolder != null && element.isFolder != false
-          ? EntryType.folder
-          : EntryType.book,
+      type: isRealFolder ? EntryType.folder : EntryType.book,
       tags: element.tags != null ? element.tags!.toList() : [],
       parentId: element.parentId ?? '',
       isFavorited: element.userData?.isFavorite ?? false,

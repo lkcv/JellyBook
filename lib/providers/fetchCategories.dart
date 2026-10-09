@@ -30,8 +30,12 @@ Future<(List<Entry>, List<Folder>)> getServerCategories({
   // check if already has books and folders
   final isar = Isar.getInstance();
   final libraryNames = prefs.getStringList('categories') ?? [];
-  List<Folder> withoutLibraries(List<Folder> f) =>
-      f.where((folder) => !libraryNames.contains(folder.name)).toList();
+  // Hide library roots and keep the grid alphabetical (folders come back from
+  // Isar in insertion order, which puts one-book series last).
+  List<Folder> withoutLibraries(List<Folder> f) => f
+      .where((folder) => !libraryNames.contains(folder.name))
+      .toList()
+    ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
   final List<Folder> foldersTemp = await isar!.folders.where().findAll();
   QueryBuilder<Entry, Entry, QAfterFilterCondition> typeNotBook =
       await isar.entrys.filter().not().typeEqualTo(EntryType.folder);
