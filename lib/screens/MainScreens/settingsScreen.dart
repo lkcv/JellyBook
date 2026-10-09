@@ -3,6 +3,11 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:isar/isar.dart';
+import 'package:jellybook/models/entry.dart';
+import 'package:jellybook/models/folder.dart';
+import 'package:jellybook/models/login.dart';
+import 'package:jellybook/screens/loginScreen.dart';
 import 'package:jellybook/providers/themeProvider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -52,6 +57,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> setSharedPrefs() async {
     prefs = await SharedPreferences.getInstance();
+  }
+
+  // Clears the saved login and all cached library data, then returns to the
+  // login screen. (Moved here from the main menu's app bar.)
+  Future<void> logout() async {
+    final isar = Isar.getInstance();
+    if (isar == null) return;
+    final loginIds =
+        (await isar.logins.where().findAll()).map((e) => e.isarId).toList();
+    final entryIds =
+        (await isar.entrys.where().findAll()).map((e) => e.isarId).toList();
+    final folderIds =
+        (await isar.folders.where().findAll()).map((e) => e.isarId).toList();
+    await isar.writeTxn(() async {
+      logger.i('deleted ${loginIds.length} logins');
+      await isar.logins.deleteAll(loginIds);
+      logger.i('deleted ${entryIds.length} entries');
+      await isar.entrys.deleteAll(entryIds);
+      logger.i('deleted ${folderIds.length} folders');
+      await isar.folders.deleteAll(folderIds);
+    });
+    if (!mounted) return;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => LoginScreen()),
+    );
   }
 
   String version = '';
@@ -179,6 +210,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
               builder: (BuildContext context, AsyncSnapshot<Widget> snapshot) {
                 return snapshot.data ?? Container();
               },
+            ),
+            const SizedBox(
+              height: 20,
+            ),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: logout,
+                icon: const Icon(Icons.logout_rounded),
+                label: const Text('Logout', style: TextStyle(fontSize: 20)),
+              ),
             ),
             const SizedBox(
               height: 20,

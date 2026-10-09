@@ -4,9 +4,7 @@ import 'package:jellybook/models/folder.dart';
 import 'package:jellybook/providers/fetchCategories.dart';
 import 'package:jellybook/screens/collectionScreen.dart';
 import 'package:jellybook/screens/infoScreen.dart';
-import 'package:jellybook/screens/loginScreen.dart';
 import 'package:jellybook/screens/MainScreens/searchScreen.dart';
-import 'package:jellybook/models/login.dart';
 import 'package:isar/isar.dart';
 import 'package:isar_flutter_libs/isar_flutter_libs.dart';
 import 'package:jellybook/models/entry.dart';
@@ -38,28 +36,6 @@ class _MainMenuState extends State<MainMenu> {
     },
     fetchPage: _fetchPage,
   );
-
-  Future<void> logout() async {
-    final isar = Isar.getInstance();
-    List<Login> logins = await isar!.logins.where().findAll();
-    List<int> loginIds = logins.map((e) => e.isarId).toList();
-    List<Entry> entries = await isar.entrys.where().findAll();
-    List<int> entryIds = entries.map((e) => e.isarId).toList();
-    List<Folder> folders = await isar.folders.where().findAll();
-    List<int> folderIds = folders.map((e) => e.isarId).toList();
-    await isar.writeTxn(() async {
-      logger.i('deleted ${loginIds.length} logins');
-      isar.logins.deleteAll(loginIds);
-      logger.i('deleted ${entryIds.length} entries');
-      isar.entrys.deleteAll(entryIds);
-      logger.i('deleted ${folderIds.length} folders');
-      isar.folders.deleteAll(folderIds);
-    });
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => LoginScreen()),
-    );
-  }
 
   bool force = false;
   SharedPreferences? prefs;
@@ -366,13 +342,6 @@ class _MainMenuState extends State<MainMenu> {
 
               // Online: no icon
               return SizedBox.shrink();
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout_rounded),
-            tooltip: 'Logout',
-            onPressed: () {
-              logout();
             },
           ),
         ],
