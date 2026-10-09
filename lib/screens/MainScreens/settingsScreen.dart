@@ -1,5 +1,6 @@
 // The purpose of this file is to allow the user to change the settings of the app
 
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -17,6 +18,7 @@ import 'package:jellybook/l10n/app_localizations.dart';
 import 'package:jellybook/providers/languageProvider.dart';
 import 'package:jellybook/widgets/SimpleUserCard.dart';
 import 'package:jellybook/widgets/SettingsItem.dart';
+import 'package:jellybook/widgets/jellybookImageCache.dart';
 import 'package:jellybook/variables.dart';
 import 'package:palette_generator_master/palette_generator_master.dart';
 import 'package:sentry/sentry.dart';
@@ -34,6 +36,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Color textColor = Colors.black;
   SharedPreferences? prefs;
 
+  // Cached profile card data so the list does not jump on every visit
+  ImageProvider? _profilePic;
+  Color? _profileCardColor;
+  bool _profileReady = false;
+
   @override
   void initState() {
     getPackageInfo();
@@ -41,6 +48,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // Settings.init();
     setSharedPrefs().then((value) {
       setState(() {});
+    });
+    _loadProfileCard();
+  }
+
+  Future<void> _loadProfileCard() async {
+    final pic = await getProfilePic();
+    final color = await getComplementaryColor(pic);
+    if (!mounted) return;
+    setState(() {
+      _profilePic = pic;
+      _profileCardColor = color;
+      _profileReady = true;
     });
   }
 
@@ -105,56 +124,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
         padding: const EdgeInsets.all(10),
         child: ListView(
           children: [
-            FutureBuilder(
-              future: getProfilePic(),
-              builder: (BuildContext context, AsyncSnapshot snapshot) {
-                if (snapshot.hasData) {
-                  return FutureBuilder<Color>(
-                    future: getComplementaryColor(snapshot.data),
-                    builder: (BuildContext context,
-                        AsyncSnapshot<Color> colorSnapshot) {
-                      if (colorSnapshot.hasData) {
-                        Color complementaryColor = colorSnapshot.data ??
-                            Colors
-                                .black; // if the color is null, set it to black
-
-                        return SimpleUserCard(
-                          cardColor: complementaryColor,
-                          userProfilePic: snapshot.data,
-                          userName: userName,
-                          userNameColor: textColor,
-                          onTap: () {},
-                          backgroundMotifColor: complementaryColor,
-                          subtitle: InkWell(
-                            onTap: () async {
-                              if (await canLaunchUrl(Uri.parse(serverUrl))) {
-                                await launchUrl(
-                                  Uri.parse(serverUrl),
-                                  mode: LaunchMode.externalApplication,
-                                );
-                              } else {
-                                throw 'Could not launch $serverUrl';
-                              }
-                            },
-                            child: Text(
-                              serverUrl,
-                              style: TextStyle(
-                                decoration: TextDecoration.underline,
-                                color: textColor,
-                              ),
-                            ),
-                          ),
-                        );
-                      } else {
-                        return Container();
-                      }
-                    },
-                  );
-                } else {
-                  return Container();
-                }
-              },
-            ),
+            // Fixed height matches SimpleUserCard so the list never jumps
+            if (_profileReady && _profilePic != null)
+              SimpleUserCard(
+                cardColor: _profileCardColor ?? Colors.black,
+                userProfilePic: _profilePic!,
+                userName: userName,
+                userNameColor: textColor,
+                onTap: () {},
+                backgroundMotifColor: _profileCardColor ?? Colors.black,
+                subtitle: InkWell(
+                  onTap: () async {
+                    if (await canLaunchUrl(Uri.parse(serverUrl))) {
+                      await launchUrl(
+                        Uri.parse(serverUrl),
+                        mode: LaunchMode.externalApplication,
+                      );
+                    } else {
+                      throw 'Could not launch $serverUrl';
+                    }
+                  },
+                  child: Text(
+                    serverUrl,
+                    style: TextStyle(
+                      decoration: TextDecoration.underline,
+                      color: textColor,
+                    ),
+                  ),
+                ),
+              )
+            else
+              Container(
+                height: MediaQuery.of(context).size.height / 6,
+                margin: const EdgeInsets.only(bottom: 20),
+              ),
             // should be comprised of widgets
             /* themeSettings(context),
             const SizedBox(
@@ -339,6 +342,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     userName = username;
     serverUrl = server;
 
+    // Disk-cache key (same CacheManager as covers). Avoids re-download + layout jump.
+    final cacheKey = 'user_profile_$userId';
+    try {
+      final cached =
+          await JellyBookCacheManager.instance.getFileFromCache(cacheKey);
+      if (cached != null && await cached.file.exists()) {
+        return FileImage(cached.file);
+      }
+    } catch (e) {
+      logger.e('profile cache read failed: $e');
+    }
+
     final headers = {
       'Accept': 'application/json',
       'Accept-Language': 'en-US,en;q=0.5',
@@ -371,9 +386,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
     }
     if (image.isNotEmpty) {
+      try {
+        await JellyBookCacheManager.instance.putFile(
+          cacheKey,
+          image,
+          fileExtension: 'jpg',
+        );
+      } catch (e) {
+        logger.e('profile cache write failed: $e');
+      }
       imageProvider = MemoryImage(image);
     }
-    // scale the image to 50% of the original size
     return imageProvider;
   }
 
