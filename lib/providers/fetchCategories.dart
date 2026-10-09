@@ -29,7 +29,9 @@ Future<(List<Entry>, List<Folder>)> getServerCategories({
 
   // check if already has books and folders
   final isar = Isar.getInstance();
-  final libraryNames = prefs.getStringList('categories') ?? [];
+  // Not final: on a first load the prefs are empty here, so this is updated
+  // below once the library names have been fetched from the server.
+  var libraryNames = prefs.getStringList('categories') ?? [];
   // Hide library roots and keep the grid alphabetical (folders come back from
   // Isar in insertion order, which puts one-book series last).
   List<Folder> withoutLibraries(List<Folder> f) => f
@@ -138,6 +140,7 @@ Future<(List<Entry>, List<Folder>)> getServerCategories({
     }
     logger.i("categoriesList: $categoriesList");
     prefs.setStringList('categories', categoriesList);
+    libraryNames = categoriesList;
     // List<Entry> entries = await isar!.entrys.where().findAll();
 
     await CreateFolders.getFolders(categoriesList);
