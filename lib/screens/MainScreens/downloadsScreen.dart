@@ -43,25 +43,18 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Downloads'),
+        centerTitle: true,
+        title: Text(
+          AppLocalizations.of(context)?.downloads ?? "Downloads",
+          style: const TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
       ),
       body: Column(
         children: <Widget>[
-          const SizedBox(height: 10),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Padding(
-              padding: EdgeInsets.only(left: 10),
-              child: Text(
-                AppLocalizations.of(context)?.downloads ?? "Downloads",
-                style: TextStyle(
-                  fontSize: 30,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ),
-          // add a divider
+          // Divider under the app bar title (body header removed — was a duplicate)
           const SizedBox(height: 5),
           Divider(
             height: 10,
