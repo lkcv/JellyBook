@@ -63,10 +63,10 @@ Future<void> confirmedDelete(String id, context) async {
 
     logger.d("Deleted comic: " + entry.title);
     logger.d("Deleted comic path: " + entry.folderPath);
+    // Only clear download state — keep reading progress (pageNum / progress)
     entry.downloaded = false;
     entry.folderPath = "";
-    entry.pageNum = 0;
-    entry.progress = 0;
+    entry.filePath = "";
     await isar.writeTxn(() async {
       await isar.entrys.put(entry);
     });

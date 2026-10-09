@@ -77,9 +77,8 @@ Future<Entry> downloadEntry(
     await _extractFile(entry, dirLocation, fileName, dir);
     onProgress(100);
 
-    // Update the entry
+    // Update the entry (do not reset reading progress)
     entry.downloaded = true;
-    entry.progress = 0.0;
     await isar.writeTxn(() async {
       await isar.entrys.put(entry);
     });
