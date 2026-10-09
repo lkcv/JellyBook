@@ -457,8 +457,9 @@ class _SeriesCardState extends State<SeriesCard> {
         .anyOf(widget.folder.bookIds, (q, String id) => q.idEqualTo(id))
         .findAllSync();
     if (entries.isEmpty) return 0.0;
+    // entry.progress is a percentage (0-100); return a 0-1 fraction
     final total = entries.fold<double>(0.0, (sum, e) => sum + e.progress);
-    return (total / entries.length).clamp(0.0, 1.0);
+    return (total / entries.length / 100).clamp(0.0, 1.0);
   }
 
   @override

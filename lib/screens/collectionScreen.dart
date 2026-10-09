@@ -275,8 +275,11 @@ class KuroStyleBookCardState extends State<KuroStyleBookCard> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final bool isUnread = widget.entry.pageNum == 0;
-    final double progress = widget.entry.progress.clamp(0.0, 1.0);
+    // entry.progress is stored as a percentage (0-100), not a 0-1 fraction
+    final double progressPercent = widget.entry.progress;
+    final bool isUnread = widget.entry.pageNum == 0 && progressPercent <= 0;
+    final bool isFinished = progressPercent >= 100;
+    final double progress = (progressPercent / 100).clamp(0.0, 1.0);
 
     // Check if offline
     final connectionStatus =
@@ -318,11 +321,17 @@ class KuroStyleBookCardState extends State<KuroStyleBookCard> {
                           decoration: BoxDecoration(
                             color: isUnread
                                 ? const Color(0xFFE91E63)
-                                : const Color(0xFF4CAF50),
+                                : isFinished
+                                    ? const Color(0xFF4CAF50)
+                                    : const Color(0xFFFF9800),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Text(
-                            isUnread ? 'UNREAD' : 'FINISHED',
+                            isUnread
+                                ? 'UNREAD'
+                                : isFinished
+                                    ? 'FINISHED'
+                                    : 'READING',
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 9,
