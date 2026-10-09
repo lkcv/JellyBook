@@ -52,12 +52,33 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   int _selectedIndex = 0;
-  final List<Widget> screens = [
-    MainMenu(),
-    DownloadsScreen(),
-    SearchScreen(),
-    SettingsScreen(),
-  ];
+  // Last non-search tab so Search can return to wherever the user was
+  int _previousIndex = 0;
+
+  static const int _searchIndex = 2;
+
+  void _goBackFromSearch() {
+    setState(() {
+      _selectedIndex = _previousIndex;
+    });
+  }
+
+  void _onTabChange(int index) {
+    setState(() {
+      // Remember where we were when entering Search
+      if (index == _searchIndex && _selectedIndex != _searchIndex) {
+        _previousIndex = _selectedIndex;
+      }
+      _selectedIndex = index;
+    });
+  }
+
+  List<Widget> get screens => [
+        MainMenu(),
+        DownloadsScreen(),
+        SearchScreen(onBack: _goBackFromSearch),
+        SettingsScreen(),
+      ];
 
   @override
   Widget build(BuildContext context) {
@@ -104,11 +125,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ],
               currentIndex: _selectedIndex,
-              onTap: (index) {
-                setState(() {
-                  _selectedIndex = index;
-                });
-              },
+              onTap: _onTabChange,
             )
           : Container(
               height: 70,
@@ -165,11 +182,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ],
                   selectedIndex: _selectedIndex,
-                  onTabChange: (index) {
-                    setState(() {
-                      _selectedIndex = index;
-                    });
-                  },
+                  onTabChange: _onTabChange,
                 ),
               ),
             ),

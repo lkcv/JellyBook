@@ -16,6 +16,12 @@ import 'package:jellybook/variables.dart';
 import 'package:jellybook/widgets/roundedImageWithShadow.dart';
 
 class SearchScreen extends StatefulWidget {
+  /// Called when the user leaves Search (back arrow or system back).
+  /// Used by the bottom-nav host to restore the previous tab.
+  final VoidCallback? onBack;
+
+  SearchScreen({super.key, this.onBack});
+
   @override
   _SearchScreenState createState() => _SearchScreenState();
 }
@@ -34,10 +40,32 @@ class _SearchScreenState extends State<SearchScreen> {
   List<Entry> searchResults = [];
   // List<Map<String, dynamic>> searchResults = [];
 
+  void _handleBack() {
+    if (widget.onBack != null) {
+      widget.onBack!();
+    } else {
+      Navigator.of(context).maybePop();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    // Intercept Android system/gesture back. iOS edge-swipe only works for
+    // pushed routes; Search is a tab, so the leading control covers that case.
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, dynamic result) {
+        if (!didPop) {
+          _handleBack();
+        }
+      },
+      child: Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+          onPressed: _handleBack,
+        ),
         title: Container(
           width: double.infinity,
           height: 40,
@@ -51,14 +79,6 @@ class _SearchScreenState extends State<SearchScreen> {
               controller: _searchController,
               decoration: InputDecoration(
                 prefixIcon: const Icon(Icons.search),
-                suffixIcon: IconButton(
-                  icon: const Icon(Icons.clear),
-                  onPressed: () {
-                    searchResults = [];
-                    _searchController.clear();
-                  },
-                ),
-                // only have suffix icon when the search bar is selected
                 hintText:
                     (AppLocalizations.of(context)?.search ?? 'Search') + '...',
                 border: InputBorder.none,
@@ -181,7 +201,8 @@ class _SearchScreenState extends State<SearchScreen> {
                   ),
               ],
             ),
-    );
+    ),  // Scaffold
+    );  // PopScope
   }
 
   Future<void> getSearchResults(String searchQuery) async {
