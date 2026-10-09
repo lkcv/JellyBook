@@ -31,6 +31,14 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     return await getEntries();
   }
 
+  // Text for the cover overlay: percent read if known (entry.progress is
+  // 0-100), else the page number, else null (unread, so no overlay).
+  String? _progressLabel(Entry entry) {
+    if (entry.progress > 0) return '${entry.progress.round()}%';
+    if (entry.pageNum > 0) return '${entry.pageNum}p';
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -146,9 +154,42 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                           title: Text(snapshot.data[index].title),
                           leading: SizedBox(
                             height: MediaQuery.of(context).size.height * 0.3,
-                            child: RoundedImageWithShadow(
-                              imageUrl: snapshot.data[index].imagePath,
-                              radius: 8,
+                            child: Stack(
+                              children: [
+                                RoundedImageWithShadow(
+                                  imageUrl: snapshot.data[index].imagePath,
+                                  radius: 8,
+                                ),
+                                // reading-progress overlay (moved over from the
+                                // removed Continue Reading screen)
+                                if (_progressLabel(snapshot.data[index]) != null)
+                                  Positioned.fill(
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: Theme.of(context).brightness ==
+                                                Brightness.dark
+                                            ? Colors.black.withOpacity(0.5)
+                                            : Colors.grey.withOpacity(0.5),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Center(
+                                        child: AutoSizeText(
+                                          _progressLabel(snapshot.data[index])!,
+                                          maxLines: 1,
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            color:
+                                                Theme.of(context).brightness ==
+                                                        Brightness.dark
+                                                    ? Colors.white
+                                                    : Colors.black,
+                                            fontSize: 20,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
                           ),
                           subtitle: Row(

@@ -12,7 +12,6 @@ import 'package:provider/provider.dart';
 import 'package:jellybook/screens/MainScreens/mainMenu.dart';
 import 'package:jellybook/screens/MainScreens/settingsScreen.dart';
 import 'package:jellybook/screens/MainScreens/downloadsScreen.dart';
-import 'package:jellybook/screens/MainScreens/continueReadingScreen.dart';
 import 'package:jellybook/screens/loginScreen.dart';
 import 'package:jellybook/l10n/app_localizations.dart';
 import 'package:jellybook/variables.dart';
@@ -55,7 +54,6 @@ class _HomeScreenState extends State<HomeScreen> {
   final List<Widget> screens = [
     MainMenu(),
     DownloadsScreen(),
-    ContinueReadingScreen(),
     SettingsScreen(),
   ];
 
@@ -93,10 +91,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 BottomNavigationBarItem(
                   icon: Icon(Icons.download),
                   label: AppLocalizations.of(context)?.downloads ?? 'Downloads',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.book),
-                  label: AppLocalizations.of(context)?.reading ?? 'Reading',
                 ),
                 BottomNavigationBarItem(
                   icon: Icon(Icons.settings),
@@ -153,10 +147,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       icon: Icons.download,
                       text: AppLocalizations.of(context)?.downloads ??
                           'Downloads',
-                    ),
-                    GButton(
-                      icon: Icons.book,
-                      text: AppLocalizations.of(context)?.reading ?? 'Reading',
                     ),
                     GButton(
                       icon: Icons.settings,
