@@ -12,6 +12,7 @@ import 'package:provider/provider.dart';
 import 'package:jellybook/screens/MainScreens/mainMenu.dart';
 import 'package:jellybook/screens/MainScreens/settingsScreen.dart';
 import 'package:jellybook/screens/MainScreens/downloadsScreen.dart';
+import 'package:jellybook/screens/MainScreens/searchScreen.dart';
 import 'package:jellybook/screens/loginScreen.dart';
 import 'package:jellybook/l10n/app_localizations.dart';
 import 'package:jellybook/variables.dart';
@@ -54,6 +55,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final List<Widget> screens = [
     MainMenu(),
     DownloadsScreen(),
+    SearchScreen(),
     SettingsScreen(),
   ];
 
@@ -91,6 +93,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 BottomNavigationBarItem(
                   icon: Icon(Icons.download),
                   label: AppLocalizations.of(context)?.downloads ?? 'Downloads',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.search),
+                  label: AppLocalizations.of(context)?.search ?? 'Search',
                 ),
                 BottomNavigationBarItem(
                   icon: Icon(Icons.settings),
@@ -134,7 +140,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   haptic: true,
                   iconSize: 24,
                   gap: 7,
-                  padding: EdgeInsets.symmetric(horizontal: 24, vertical: 7),
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 7),
                   duration: Duration(milliseconds: 600),
                   tabBackgroundColor: Theme.of(context).primaryColor,
                   color: Colors.white,
@@ -147,6 +153,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       icon: Icons.download,
                       text: AppLocalizations.of(context)?.downloads ??
                           'Downloads',
+                    ),
+                    GButton(
+                      icon: Icons.search,
+                      text: AppLocalizations.of(context)?.search ?? 'Search',
                     ),
                     GButton(
                       icon: Icons.settings,

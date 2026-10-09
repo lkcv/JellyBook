@@ -4,7 +4,6 @@ import 'package:jellybook/models/folder.dart';
 import 'package:jellybook/providers/fetchCategories.dart';
 import 'package:jellybook/screens/collectionScreen.dart';
 import 'package:jellybook/screens/infoScreen.dart';
-import 'package:jellybook/screens/MainScreens/searchScreen.dart';
 import 'package:isar/isar.dart';
 import 'package:isar_flutter_libs/isar_flutter_libs.dart';
 import 'package:jellybook/models/entry.dart';
@@ -96,22 +95,6 @@ class _MainMenuState extends State<MainMenu> {
   Widget _buildGrid(List<Folder> folders) {
     return CustomScrollView(
       slivers: <Widget>[
-        const SliverToBoxAdapter(child: SizedBox(height: 10)),
-        SliverToBoxAdapter(
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Padding(
-              padding: const EdgeInsets.only(left: 10),
-              child: Text(
-                AppLocalizations.of(context)?.library ?? "Library",
-                style: const TextStyle(
-                  fontSize: 30,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ),
-        ),
         const SliverToBoxAdapter(child: SizedBox(height: 10)),
         SliverPadding(
           padding: const EdgeInsets.symmetric(horizontal: 8.0),
@@ -276,40 +259,13 @@ class _MainMenuState extends State<MainMenu> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Container(
-          width: double.infinity,
-          height: 40,
-          decoration: BoxDecoration(
-            color: Theme.of(context).primaryColor,
-            borderRadius: BorderRadius.circular(17.5),
+        centerTitle: true,
+        title: Text(
+          AppLocalizations.of(context)?.library ?? "Library",
+          style: const TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
           ),
-          child: Center(
-              child: TextButton(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => SearchScreen(),
-                ),
-              );
-            },
-            child: Row(
-              children: [
-                Icon(
-                  Icons.search,
-                  color: Theme.of(context).secondaryHeaderColor,
-                ),
-                const SizedBox(width: 10),
-                Text(
-                  (AppLocalizations.of(context)?.search ?? 'Search') + '…',
-                  style: TextStyle(
-                    color: Theme.of(context).secondaryHeaderColor,
-                    fontSize: 17,
-                  ),
-                ),
-              ],
-            ),
-          )),
         ),
         actions: <Widget>[
           // Connection status icon
