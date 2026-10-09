@@ -23,6 +23,7 @@ import 'package:provider/provider.dart';
 import 'package:jellybook/providers/connectionManager.dart';
 import 'package:jellybook/providers/cbzStream.dart';
 import 'package:jellybook/providers/downloadEntry.dart';
+import 'package:jellybook/providers/readerPageCache.dart';
 
 class CbrCbzReader extends StatefulWidget {
   final String title;
@@ -65,7 +66,12 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
   // Streaming support
   bool _isStreaming = false;
   CbzStream? _stream;
-  Map<int, File> _pageCache = {};
+  final Map<int, File> _pageCache = {};
+  final Map<int, Future<File>> _pageLoads = {};
+  Future<void>? _streamInitialization;
+  // The previous reader instance may still be copying pages when reopened.
+  // Its cleanup must finish before a new CbzStream uses the same temp path.
+  static final Map<String, Future<void>> _cleanupByVolume = {};
 
   // Download in background
   bool _downloadInProgress = false;
@@ -92,7 +98,7 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
     audioPlayer.dispose();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     _tapTicker.dispose();
-    _stream?.clear(); // Clean up streamed temp files
+    _clearStreamAfterPageWork(_stream);
     super.dispose();
   }
 
@@ -151,8 +157,39 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
       await getProgress(comicId);
 
       if (_isStreaming) {
-        await _stream!.init();
-        pageNums = _stream!.pageCount;
+        // Restore a saved page before waiting for the server to enumerate
+        // the archive. This also works while the server is offline.
+        final cachedCount = await ReaderPageCache.getPageCount(comicId);
+        if (cachedCount != null && cachedCount > 0) {
+          pageNums = cachedCount;
+          final cachedIndex = ((await ReaderPageCache.getCurrentPage(comicId)) ??
+                  pageNum)
+              .clamp(0, pageNums - 1)
+              .toInt();
+          final saved = await ReaderPageCache.getPage(comicId, cachedIndex);
+          if (saved != null) {
+            _pageCache[cachedIndex] = saved;
+            _currentPage = cachedIndex;
+            logger.d('CbrCbzReader: restored cached page $cachedIndex '
+                'of volume $comicId without a network request');
+            _pageController = PageController(initialPage: _currentPage);
+            SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+            if (mounted) setState(() => _loading = false);
+            // Reopening never needs the network for the retained page.
+            // The cache is touched before adjacent-page prefetch begins.
+            ReaderPageCache.touch(
+              volumeId: comicId, pageCount: pageNums,
+              currentPage: _currentPage,
+            ).catchError((Object e) {
+              logger.w('ReaderPageCache: could not touch volume: $e');
+            });
+            _precacheAround(_currentPage);
+            // Let cached images paint without a network request on the
+            // critical path. Missing pages can initialize the stream later.
+            return;
+          }
+        }
+        await _ensureStreamInitialized();
       } else {
         await createPageList();
       }
@@ -160,6 +197,10 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
       final lastPage = pageNums == 0 ? 0 : pageNums - 1;
       _currentPage = pageNum.clamp(0, lastPage).toInt();
       _pageController = PageController(initialPage: _currentPage);
+      if (_isStreaming || pages.isNotEmpty) {
+        await ReaderPageCache.touch(
+          volumeId: comicId, pageCount: pageNums, currentPage: _currentPage);
+      }
       _precacheAround(_currentPage);
 
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
@@ -254,18 +295,164 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
   }
 
   void _precacheAround(int index) {
-    if (pageNums == 0) return;
-    final start = (index - 3).clamp(0, pageNums - 1);
-    final end = (index + 3).clamp(0, pageNums - 1);
+    if (!mounted || pageNums == 0) return;
+    final start = (index - 3).clamp(0, pageNums - 1).toInt();
+    final end = (index + 3).clamp(0, pageNums - 1).toInt();
     for (int i = start; i <= end; i++) {
-      if (_isStreaming && _stream != null) {
-        _stream!.getPage(i).then((file) {
-          if (mounted) precacheImage(FileImage(file), context);
-        }).catchError((e) => logger.e('Precache error: $e'));
-      } else if (i < pages.length) {
-        precacheImage(FileImage(File(pages[i])), context);
+      // _loadPageFile now waits for the durable copy. This is a read-through
+      // cache, not an independent background snapshot of a temporary file.
+      _loadPageFile(i).then((file) {
+        if (mounted) {
+          precacheImage(FileImage(file), context).catchError((Object error) {
+            logger.w('CbrCbzReader: image precache failed: $error');
+          });
+        }
+      }).catchError((Object error) {
+        logger.w('CbrCbzReader: page $i precache failed: $error');
+      });
+    }
+  }
+
+  Future<File> _loadPageFile(int index) {
+    final existing = _pageLoads[index];
+    if (existing != null) return existing;
+    late final Future<File> tracked;
+    tracked = _resolvePageFile(index).whenComplete(() {
+      // Returning the removed Future from whenComplete would make it await
+      // itself forever. The cleanup callback must return void.
+      _pageLoads.remove(index);
+    });
+    _pageLoads[index] = tracked;
+    return tracked;
+  }
+
+  Future<File> _persistPage(int index, File file) async {
+    try {
+      await ReaderPageCache.saveWindow(
+        volumeId: comicId,
+        pageCount: pageNums,
+        currentPage: _currentPage,
+        lastUsed: DateTime.now().millisecondsSinceEpoch,
+        sourceFiles: <int, File>{index: file},
+        // An older network request must not move the reading position back.
+        updatePosition: false,
+      );
+      final durable = await ReaderPageCache.getPage(comicId, index);
+      if (durable != null) {
+        _pageCache[index] = durable;
+        return durable;
+      }
+    } catch (error) {
+      // A storage failure should not prevent displaying a page fetched from
+      // the server or loaded from the downloaded volume.
+      logger.w('ReaderPageCache: failed to retain page $index: $error');
+    }
+    _pageCache[index] = file;
+    return file;
+  }
+
+  Future<File> _resolvePageFile(int index) async {
+    if (index < 0 || index >= pageNums) {
+      throw RangeError('Invalid page index: $index');
+    }
+    // Always prefer durable pages before checking the stream. Flutter can
+    // discard its decoded image cache without affecting these files.
+    final retained = _pageCache[index];
+    if (retained != null && await retained.exists()) {
+      // Local downloaded files also need a recovery copy.
+      if (!_isStreaming && index < pages.length &&
+          retained.path == pages[index]) {
+        return _persistPage(index, retained);
+      }
+      return retained;
+    }
+    final saved = await ReaderPageCache.getPage(comicId, index);
+    if (saved != null) {
+      _pageCache[index] = saved;
+      return saved;
+    }
+    if (!_isStreaming && index < pages.length) {
+      final local = File(pages[index]);
+      if (await local.exists()) return _persistPage(index, local);
+    }
+    if (_isStreaming) {
+      await _ensureStreamInitialized();
+      final temporary = await _stream!.getPage(index);
+      // Do not let FutureBuilder render the page until its recovery copy has
+      // been written. dispose() waits for these loads before stream.clear().
+      return _persistPage(index, temporary);
+    }
+    throw StateError('No local or saved page exists for page $index');
+  }
+
+  Future<void> _ensureStreamInitialized() async {
+    final existing = _streamInitialization;
+    if (existing != null) return existing;
+    final stream = _stream;
+    if (stream == null) throw StateError('No streaming reader is available');
+    Future<void> initializeStream() async {
+      final previousCleanup = _cleanupByVolume[comicId];
+      if (previousCleanup != null) {
+        try {
+          await previousCleanup;
+        } catch (error) {
+          logger.w('CbrCbzReader: previous cleanup failed: $error');
+        }
+      }
+      await stream.init();
+      if (stream.pageCount > 0 && pageNums != stream.pageCount) {
+        pageNums = stream.pageCount;
+        if (mounted) setState(() {});
       }
     }
+    final initialization = initializeStream();
+    _streamInitialization = initialization;
+    try {
+      await initialization;
+    } catch (_) {
+      if (identical(_streamInitialization, initialization)) {
+        _streamInitialization = null;
+      }
+      rethrow;
+    }
+  }
+
+  void _clearStreamAfterPageWork(CbzStream? stream) {
+    if (stream == null) return;
+    final pending = _pageLoads.values.toList();
+    final initialization = _streamInitialization;
+    Future<void> finishAndClear() async {
+      // The index operation may still be populating _cacheDir.
+      if (initialization != null) {
+        try {
+          await initialization;
+        } catch (_) {
+          // A failed initialization has no valid index to save.
+        }
+      }
+      // The reader is only allowed to display fetched pages after this
+      // read-through loader writes its durable copy.
+      for (final job in pending) {
+        try {
+          await job;
+        } catch (_) {
+          // Failed fetches have nothing to persist.
+        }
+      }
+      await stream.clear();
+    }
+    final cleanup = finishAndClear();
+    _cleanupByVolume[comicId] = cleanup;
+    cleanup.then((_) {
+      if (identical(_cleanupByVolume[comicId], cleanup)) {
+        _cleanupByVolume.remove(comicId);
+      }
+    }).catchError((Object error) {
+      if (identical(_cleanupByVolume[comicId], cleanup)) {
+        _cleanupByVolume.remove(comicId);
+      }
+      logger.w('CbrCbzReader: stream cleanup failed: $error');
+    });
   }
 
   Future<void> _downloadInBackground() async {
@@ -300,12 +487,14 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
         _isStreaming = false;
         _downloadInProgress = false;
       });
+      _pageCache.clear();
+      _precacheAround(_currentPage);
 
       // Drop stream temp files only after the local images have painted
       final stream = _stream;
       _stream = null;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        stream?.clear();
+        _clearStreamAfterPageWork(stream);
       });
     } catch (e) {
       logger.e('CbrCbzReader: download failed: $e');
@@ -471,46 +660,47 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
   }
 
   Widget _buildPage(int index) {
-    if (_isStreaming && _stream != null) {
-      return FutureBuilder<File>(
-        future: _stream!.getPage(index),
-        builder: (context, snapshot) {
-          if (snapshot.hasData) {
-            return InteractiveViewer(
-              clipBehavior: Clip.none,
-              child: Image.file(
-                snapshot.data!,
-                fit: BoxFit.contain,
-                gaplessPlayback: true,
-                filterQuality: FilterQuality.high,
-              ),
-            );
-          } else if (snapshot.hasError) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.error, size: 64, color: Colors.red),
-                  SizedBox(height: 16),
-                  Text('Error loading page'),
-                ],
-              ),
-            );
-          }
-          return const Center(child: CircularProgressIndicator());
-        },
-      );
-    } else {
+    // Bypass FutureBuilder when a local or retained file is already present.
+    final retained = _pageCache[index];
+    if (retained != null && retained.existsSync()) {
       return InteractiveViewer(
         clipBehavior: Clip.none,
-        child: Image.file(
-          File(pages[index]),
-          fit: BoxFit.contain,
-          gaplessPlayback: true,
-          filterQuality: FilterQuality.high,
-        ),
+        child: Image.file(retained,
+            fit: BoxFit.contain,
+            gaplessPlayback: true,
+            filterQuality: FilterQuality.high),
       );
     }
+    if (!_isStreaming && index < pages.length) {
+      final local = File(pages[index]);
+      if (local.existsSync()) {
+        return InteractiveViewer(
+          clipBehavior: Clip.none,
+          child: Image.file(local,
+              fit: BoxFit.contain,
+              gaplessPlayback: true,
+              filterQuality: FilterQuality.high),
+        );
+      }
+    }
+    return FutureBuilder<File>(
+      future: _loadPageFile(index),
+      builder: (context, snapshot) {
+        if (snapshot.hasData) {
+          return InteractiveViewer(
+            clipBehavior: Clip.none,
+            child: Image.file(snapshot.data!,
+                fit: BoxFit.contain,
+                gaplessPlayback: true,
+                filterQuality: FilterQuality.high),
+          );
+        }
+        if (snapshot.hasError) {
+          return const Center(child: Text('Error loading page'));
+        }
+        return const Center(child: CircularProgressIndicator());
+      },
+    );
   }
 
   Widget _buildPager(bool isRtl) {
@@ -526,6 +716,13 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
         itemBuilder: (context, index) => _buildPage(index),
         onPageChanged: (index) {
           setState(() => _currentPage = index);
+          // Record navigation before launching speculative page fetches.
+          // The displayed page will be copied before its loader completes.
+          ReaderPageCache.touch(
+            volumeId: comicId, pageCount: pageNums, currentPage: index,
+          ).catchError((Object error) {
+            logger.w('ReaderPageCache: could not save position: $error');
+          });
           saveProgress(index);
           _precacheAround(index);
         },

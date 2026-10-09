@@ -15,6 +15,7 @@ import 'package:jellybook/variables.dart';
 import 'package:jellybook/widgets/roundedImageWithShadow.dart';
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:jellybook/screens/readingScreen.dart';
+import 'package:jellybook/providers/readerPageCache.dart';
 import 'package:provider/provider.dart';
 import 'package:jellybook/providers/connectionManager.dart';
 
@@ -131,14 +132,23 @@ class _collectionScreenState extends State<collectionScreen> {
                               context,
                               listen: false)
                           .status;
-                      if (connectionStatus == ConnectionStatus.offline) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Server is offline'),
-                            duration: Duration(seconds: 2),
-                          ),
-                        );
-                        return;
+                      if (connectionStatus == ConnectionStatus.offline &&
+                          !entry.downloaded) {
+                        final cachedIndex =
+                            await ReaderPageCache.getCurrentPage(entry.id) ??
+                                entry.pageNum;
+                        final cachedPage =
+                            await ReaderPageCache.getPage(entry.id, cachedIndex);
+                        if (!mounted) return;
+                        if (cachedPage == null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Server is offline and this page is not cached'),
+                              duration: Duration(seconds: 2),
+                            ),
+                          );
+                          return;
+                        }
                       }
 
                       // For downloaded items, open the reader directly
