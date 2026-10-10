@@ -15,12 +15,17 @@ class _ReaderPosition {
 /// Durable snapshots of the pages most recently viewed in a comic.
 ///
 /// This cache lives outside Entry.folderPath, so deleting a downloaded volume
-/// does not delete the reader's recovery copy. It keeps up to seven pages for
-/// each of the two most recently used volumes; it is not a full download.
+/// does not delete the reader's recovery copy. Both downloaded and streamed
+/// volumes retain up to seven nearby pages. The overall cache has a 300 MiB
+/// disk budget and evicts least-recently-used volumes, not individual pages.
 class ReaderPageCache {
-  static const int _maxVolumes = 2;
+  static const int _maxCacheBytes = 300 * 1024 * 1024;
   static const int _maxPagesPerVolume = 7;
   static Future<void> _writeQueue = Future<void>.value();
+  // Initialized once per process, then updated using only the modified
+  // volume. Avoid scanning every cached page file after each page load.
+  static int? _trackedBytes;
+  static final Map<String, int> _volumeByteCounts = {};
   // Updated synchronously on navigation, not when a background fetch finishes.
   static final Map<String, _ReaderPosition> _positions = {};
   static const Set<String> _imageExtensions = {
@@ -296,30 +301,108 @@ class ReaderPageCache {
       }
     }
 
-    await _pruneOtherVolumes(root);
+    await _pruneToBudget(root, protectedVolumeId: volumeId);
   }
 
-  static Future<void> _pruneOtherVolumes(Directory root) async {
-    final volumes = <MapEntry<Directory, int>>[];
+  static Future<int> _directoryBytes(Directory directory) async {
+    var bytes = 0;
+    await for (final child in directory.list(
+      recursive: true,
+      followLinks: false,
+    )) {
+      // Manifests, images and any leftover temporary files all count.
+      if (child is File) bytes += await child.length();
+    }
+    return bytes;
+  }
+
+  /// Called on the first write after app startup, so existing snapshots from
+  /// a previous run are included in the global budget.
+  static Future<void> _indexCache(Directory root) async {
+    final sizes = <String, int>{};
+    var total = 0;
     await for (final entity in root.list(followLinks: false)) {
       if (entity is! Directory) continue;
-      final manifest = await _readManifest(entity);
-      if (manifest.isEmpty || manifest['pages'] is! Map ||
-          (manifest['pages'] as Map).isEmpty) continue;
+      final bytes = await _directoryBytes(entity);
+      sizes[entity.path] = bytes;
+      total += bytes;
+    }
+    _volumeByteCounts
+      ..clear()
+      ..addAll(sizes);
+    _trackedBytes = total;
+  }
+
+  /// Enforce a global budget across snapshots from downloaded and streamed
+  /// volumes. All writers are serialized by _writeQueue. Only check the size
+  /// of the changed volume on normal writes; scan the LRU manifests when
+  /// eviction is actually needed.
+  static Future<void> _pruneToBudget(
+    Directory root, {
+    required String protectedVolumeId,
+  }) async {
+    final protectedDirectory =
+        Directory('${root.path}/${_key(protectedVolumeId)}');
+    try {
+      if (_trackedBytes == null) {
+        await _indexCache(root);
+      } else {
+        final previous = _volumeByteCounts[protectedDirectory.path] ?? 0;
+        final updated = await _directoryBytes(protectedDirectory);
+        _volumeByteCounts[protectedDirectory.path] = updated;
+        _trackedBytes = _trackedBytes! + updated - previous;
+      }
+    } on FileSystemException catch (error) {
+      // Don't delete anything if the cache cannot be measured accurately.
+      // Rebuild the index on the next write.
+      _trackedBytes = null;
+      _volumeByteCounts.clear();
+      logger.w('ReaderPageCache: could not measure disk usage: $error');
+      return;
+    }
+
+    if (_trackedBytes! <= _maxCacheBytes) return;
+
+    final candidates = <_CachedVolume>[];
+    for (final entry in _volumeByteCounts.entries) {
+      if (entry.key == protectedDirectory.path) continue;
+      final directory = Directory(entry.key);
+      final manifest = await _readManifest(directory);
       final rawLastUsed = manifest['lastUsed'];
       final lastUsed = rawLastUsed is num ? rawLastUsed.toInt() : 0;
-      volumes.add(MapEntry(entity, lastUsed));
+      candidates.add(_CachedVolume(directory, lastUsed, entry.value));
     }
-    volumes.sort((a, b) => b.value.compareTo(a.value));
+    candidates.sort((a, b) {
+      final age = a.lastUsed.compareTo(b.lastUsed);
+      return age != 0 ? age : a.directory.path.compareTo(b.directory.path);
+    });
 
-    // Keep the two most recently touched volumes, not simply whichever async
-    // cache write happened to finish last.
-    for (final stale in volumes.skip(_maxVolumes)) {
+    for (final stale in candidates) {
+      if (_trackedBytes! <= _maxCacheBytes) break;
       try {
-        if (await stale.key.exists()) await stale.key.delete(recursive: true);
-      } catch (error) {
-        logger.w('ReaderPageCache: could not prune ${stale.key.path}: $error');
+        if (await stale.directory.exists()) {
+          await stale.directory.delete(recursive: true);
+        }
+        _volumeByteCounts.remove(stale.directory.path);
+        _trackedBytes = _trackedBytes! - stale.bytes;
+      } on FileSystemException catch (error) {
+        logger.w('ReaderPageCache: could not prune '
+            '${stale.directory.path}: $error');
       }
     }
+    // Preserve the volume being saved even when its seven pages alone are
+    // larger than the budget. All other volumes are eligible for eviction.
+    if (_trackedBytes! > _maxCacheBytes) {
+      logger.w('ReaderPageCache: cache remains above disk budget '
+          '($_trackedBytes / $_maxCacheBytes bytes)');
+    }
   }
+}
+
+class _CachedVolume {
+  final Directory directory;
+  final int lastUsed;
+  final int bytes;
+
+  const _CachedVolume(this.directory, this.lastUsed, this.bytes);
 }
