@@ -121,9 +121,10 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
     if (!_gridController.hasClients) {
       return (first: 0, end: math.min(count, 12));
     }
-    // Three columns, 12px gaps, 4px horizontal padding, aspect ratio 0.69.
-    final width = math.max(1.0, MediaQuery.sizeOf(context).width - 32);
-    final rowHeight = (width / 3) / 0.69 + 12;
+    // Three columns, 6px gaps, 4px horizontal padding per side.
+    // The outer card edges stay fixed; reduced gaps give each card more width.
+    final width = math.max(1.0, MediaQuery.sizeOf(context).width - 20);
+    final rowHeight = (width / 3) / 0.69 + 6;
     final firstRow = math.max(0, (_gridController.offset / rowHeight).floor());
     final rows = math.max(1,
         (_gridController.position.viewportDimension / rowHeight).ceil() + 1);
@@ -291,8 +292,8 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 3,
                   childAspectRatio: 0.69,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 6,
+                  mainAxisSpacing: 6,
                 ),
                 itemCount: snapshot.data.length,
                 itemBuilder: (BuildContext context, int index) {
