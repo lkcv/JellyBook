@@ -472,7 +472,7 @@ class _SeriesCardState extends State<SeriesCard> {
                           border: Border.all(color: scheme.outlineVariant),
                         ),
                         child: Text(
-                          '${folder.bookIds.length} Books',
+                          '${folder.bookIds.length} ${folder.bookIds.length == 1 ? 'Book' : 'Books'}',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 12,
