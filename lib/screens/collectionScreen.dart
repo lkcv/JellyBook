@@ -1,4 +1,9 @@
 // The purpose of this file is to create a list of entries from a selected folder
+import 'dart:async';
+import 'dart:io';
+import 'dart:math' as math;
+
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:markdown/markdown.dart' as md;
 import 'package:isar/isar.dart';
@@ -13,6 +18,7 @@ import 'package:fancy_shimmer_image/fancy_shimmer_image.dart';
 import 'package:jellybook/l10n/app_localizations.dart';
 import 'package:jellybook/variables.dart';
 import 'package:jellybook/widgets/roundedImageWithShadow.dart';
+import 'package:jellybook/widgets/jellybookImageCache.dart';
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:jellybook/screens/readingScreen.dart';
 import 'package:jellybook/providers/readerPageCache.dart';
@@ -37,7 +43,7 @@ class collectionScreen extends StatefulWidget {
       folderId: folderId, name: name, image: image, bookIds: bookIds);
 }
 
-class _collectionScreenState extends State<collectionScreen> {
+class _collectionScreenState extends State<collectionScreen> with WidgetsBindingObserver {
   final String folderId;
   final String name;
   final String image;
@@ -49,6 +55,148 @@ class _collectionScreenState extends State<collectionScreen> {
     required this.image,
     required this.bookIds,
   });
+
+  final ScrollController _gridController = ScrollController();
+  List<Entry>? _latestEntries;
+  bool _warmScheduled = false;
+  bool _warming = false;
+  bool _warmAgain = false;
+  bool _inForeground = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _inForeground = true;
+      // Android may have reclaimed decoded images while the app was away.
+      _scheduleCoverWarming();
+    } else {
+      _inForeground = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _inForeground = false;
+    WidgetsBinding.instance.removeObserver(this);
+    _gridController.dispose();
+    super.dispose();
+  }
+
+  void _scheduleCoverWarming([List<Entry>? entries]) {
+    if (entries != null) _latestEntries = entries;
+    if (!mounted || !_inForeground || _latestEntries == null) return;
+    if (_warming) {
+      _warmAgain = true;
+      return;
+    }
+    if (_warmScheduled) return;
+    _warmScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _warmScheduled = false;
+      if (!mounted || !_inForeground ||
+          !(ModalRoute.of(context)?.isCurrent ?? true)) return;
+      unawaited(_precacheCollectionCovers(_latestEntries!));
+    });
+  }
+
+  // Estimate which cards GridView.builder is currently displaying.
+  ({int first, int end}) _visibleCoverRange(int count) {
+    if (!_gridController.hasClients) {
+      return (first: 0, end: math.min(count, 12));
+    }
+    // Three columns, 12px gaps, 4px horizontal padding, aspect ratio 0.69.
+    final width = math.max(1.0, MediaQuery.sizeOf(context).width - 32);
+    final rowHeight = (width / 3) / 0.69 + 12;
+    final firstRow = math.max(0, (_gridController.offset / rowHeight).floor());
+    final rows = math.max(1,
+        (_gridController.position.viewportDimension / rowHeight).ceil() + 1);
+    return (
+      first: math.min(count, firstRow * 3),
+      end: math.min(count, (firstRow + rows) * 3),
+    );
+  }
+
+  Future<void> _warmCover(String path, {bool waitForVisible = false}) async {
+    if (!mounted || !_inForeground || path.isEmpty ||
+        path.toLowerCase() == 'asset') return;
+    try {
+      final ImageProvider provider;
+      if (path.contains('http')) {
+        provider = CachedNetworkImageProvider(
+          coverUrl(path),
+          cacheManager: JellyBookCacheManager.instance,
+        );
+      } else {
+        final file = File(path);
+        if (!await file.exists()) return;
+        provider = FileImage(file);
+      }
+      // A completed image may have been evicted since a prior prewarm.
+      // For visible covers, await their first frame even if still pending.
+      if (!waitForVisible &&
+          PaintingBinding.instance.imageCache.containsKey(provider)) return;
+      await precacheImage(provider, context, onError: (_, __) {});
+    } catch (_) {
+      // Offline or broken covers should not block the other images.
+    }
+  }
+
+  Future<void> _precacheCollectionCovers(List<Entry> entries) async {
+    if (_warming) {
+      _warmAgain = true;
+      return;
+    }
+    _warming = true;
+    try {
+      final range = _visibleCoverRange(entries.length);
+      // Join the same image loads as the visible widgets. Only begin work
+      // on offscreen covers after the initial viewport is ready.
+      await Future.wait([
+        for (var i = range.first; i < range.end; i++)
+          _warmCover(entries[i].imagePath, waitForVisible: true),
+      ]);
+
+      final seen = <String>{};
+      final remaining = <int>[];
+      for (var i = 0; i < entries.length; i++) {
+        final path = entries[i].imagePath;
+        if (path.isEmpty || path.toLowerCase() == 'asset' ||
+            !seen.add(path)) continue;
+        if (i < range.first || i >= range.end) remaining.add(i);
+      }
+
+      // Keep a small background budget; prioritize whichever covers are now
+      // closest to the viewport, even if the user has scrolled meanwhile.
+      const batchSize = 2;
+      while (remaining.isNotEmpty && mounted && _inForeground &&
+          (ModalRoute.of(context)?.isCurrent ?? true)) {
+        final visible = _visibleCoverRange(entries.length);
+        int distance(int index) => index < visible.first
+            ? visible.first - index
+            : index >= visible.end ? index - visible.end + 1 : 0;
+        remaining.sort((a, b) => distance(a).compareTo(distance(b)));
+        final batch = remaining.take(batchSize).toList();
+        remaining.removeRange(0, batch.length);
+        await Future.wait([
+          for (final index in batch) _warmCover(entries[index].imagePath),
+        ]);
+        // Yield to normal scrolling/painting between small batches.
+        await Future<void>.delayed(const Duration(milliseconds: 16));
+      }
+    } finally {
+      _warming = false;
+      if (_warmAgain && mounted && _inForeground) {
+        _warmAgain = false;
+        _scheduleCoverWarming();
+      }
+    }
+  }
 
   final isar = Isar.getInstance();
 
@@ -90,10 +238,13 @@ class _collectionScreenState extends State<collectionScreen> {
           if (snapshot.hasData &&
               snapshot.data.length > 0 &&
               snapshot.connectionState == ConnectionState.done) {
+            // Schedule only after a grid is actually included in this frame.
+            _scheduleCoverWarming(snapshot.data as List<Entry>);
             return Padding(
               padding:
                   const EdgeInsets.symmetric(horizontal: 4.0, vertical: 4.0),
               child: GridView.builder(
+                controller: _gridController,
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 3,
                   childAspectRatio: 0.69,
