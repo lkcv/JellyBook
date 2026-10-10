@@ -221,16 +221,49 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: AutoSizeText(
-          name,
-          maxLines: 2,
-          minFontSize: 10,
-          maxFontSize: 20,
-          stepGranularity: 0.5,
-          overflow: TextOverflow.ellipsis,
+      // Let covers scroll behind the translucent header, as on the home screen.
+      extendBodyBehindAppBar: true,
+      appBar: PreferredSize(
+        // Preserve the default AppBar's 56px toolbar plus status-bar inset.
+        preferredSize: Size.fromHeight(
+          MediaQuery.of(context).padding.top + kToolbarHeight,
         ),
-        elevation: 0,
+        child: Container(
+          color: Colors.black.withOpacity(0.90),
+          padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
+          child: SizedBox(
+            height: kToolbarHeight,
+            child: Row(
+              children: [
+                SizedBox(
+                  width: kToolbarHeight,
+                  child: IconButton(
+                    tooltip: 'Back',
+                    icon: const Icon(Icons.arrow_back, color: Colors.white),
+                    onPressed: () => Navigator.of(context).maybePop(),
+                  ),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 16, right: 16),
+                    child: AutoSizeText(
+                      name,
+                      maxLines: 2,
+                      minFontSize: 10,
+                      maxFontSize: 20,
+                      stepGranularity: 0.5,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
       body: FutureBuilder(
         future: entries,
@@ -245,6 +278,11 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
                   const EdgeInsets.symmetric(horizontal: 4.0, vertical: 4.0),
               child: GridView.builder(
                 controller: _gridController,
+                // Keep the initial covers below the header. Once scrolled,
+                // the grid itself continues underneath the black overlay.
+                padding: EdgeInsets.only(
+                  top: MediaQuery.of(context).padding.top + kToolbarHeight,
+                ),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 3,
                   childAspectRatio: 0.69,
