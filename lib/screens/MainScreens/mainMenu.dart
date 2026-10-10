@@ -13,8 +13,6 @@ import 'package:jellybook/l10n/app_localizations.dart';
 import 'package:jellybook/variables.dart';
 import 'package:jellybook/widgets/roundedImageWithShadow.dart';
 import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
-import 'package:sentry_flutter/sentry_flutter.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
 import 'package:jellybook/providers/connectionManager.dart';
 
@@ -37,7 +35,6 @@ class _MainMenuState extends State<MainMenu> {
   );
 
   bool force = false;
-  SharedPreferences? prefs;
 
   ConnectionManager? _connectionManager;
   bool _wasOffline = false;
@@ -148,28 +145,9 @@ class _MainMenuState extends State<MainMenu> {
 
   Future<List<Entry>> _fetchPage(int pageKey) async {
     logger.i('pageKey: $pageKey');
-    try {
-      final result = await fetchEntries(pageKey, _pageSize);
-      logger.i("result.\$1: ${result.$1}");
-      return result.$2;
-    } catch (error, stackTrace) {
-      SharedPreferences prefs = await SharedPreferences.getInstance();
-      bool useSentry = prefs.getBool('useSentry') ?? false;
-      if (useSentry) {
-        await Sentry.captureException(error, stackTrace: stackTrace);
-      }
-      rethrow;
-    }
-  }
-
-  Future<void> getSharedPrefs() async {
-    prefs = await SharedPreferences.getInstance();
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    getSharedPrefs().then((value) => setUseSentry());
+    final result = await fetchEntries(pageKey, _pageSize);
+    logger.i("result.\$1: ${result.$1}");
+    return result.$2;
   }
 
   @override
@@ -178,47 +156,6 @@ class _MainMenuState extends State<MainMenu> {
     _progressRevision.dispose();
     _pagingController.dispose();
     super.dispose();
-  }
-
-  bool useSentryNull() {
-    return prefs?.getBool("useSentry") == null;
-  }
-
-  Future<void> setUseSentry() async {
-    if (useSentryNull()) {
-      showDialog(
-        context: context,
-        builder: (BuildContext context) {
-          return AlertDialog(
-            title: Text(
-              AppLocalizations.of(context)?.useSentry ?? "Use Sentry",
-            ),
-            content: Text(AppLocalizations.of(context)?.sentryExplanation ??
-                "Enable Sentry logging to quickly diagnose and fix issues! This provides us with real-time error tracking without compromising your privacy. Please help support JellyBook's development!"),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  prefs?.setBool("useSentry", true);
-                  Navigator.of(context).pop();
-                },
-                child: Text(
-                  AppLocalizations.of(context)?.yes ?? "Yes",
-                ),
-              ),
-              TextButton(
-                onPressed: () {
-                  prefs?.setBool("useSentry", false);
-                  Navigator.of(context).pop();
-                },
-                child: Text(
-                  AppLocalizations.of(context)?.no ?? "No",
-                ),
-              ),
-            ],
-          );
-        },
-      );
-    }
   }
 
   void _showErrorModal(BuildContext context, String error) {

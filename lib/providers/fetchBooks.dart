@@ -4,7 +4,6 @@ import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tentacle/tentacle.dart';
 import 'package:built_collection/built_collection.dart';
-import 'package:sentry_flutter/sentry_flutter.dart';
 
 // database imports
 import 'package:jellybook/models/entry.dart';
@@ -48,7 +47,6 @@ Future<void> getComics(String comicsId) async {
   // turn into built list
   final api = Tentacle(basePathOverride: url).getLibraryApi();
   Response<BaseItemDtoQueryResult>? response;
-  bool useSentry = prefs.getBool('useSentry') ?? false;
   try {
     response = await api.getItems(
       userId: userId!,
@@ -61,8 +59,7 @@ Future<void> getComics(String comicsId) async {
       sortBy: BuiltList<ItemSortBy>([ItemSortBy.isFolder, ItemSortBy.sortName]),
       sortOrder: BuiltList<SortOrder>([SortOrder.ascending]),
     );
-  } catch (e, s) {
-    if (useSentry) await Sentry.captureException(e, stackTrace: s);
+  } catch (e) {
     logger.e(e);
   }
   BuiltList<BaseItemDto> responseData = response?.data?.items ?? BuiltList();
@@ -75,8 +72,7 @@ Future<void> getComics(String comicsId) async {
     final entries = await isar!.entrys.where().idEqualTo(comicsId).findAll();
     logger.d("entries: $entries");
     logger.d("entries length: ${entries.length}");
-  } catch (e, s) {
-    if (useSentry) await Sentry.captureException(e, stackTrace: s);
+  } catch (e) {
     logger.e(e.toString());
   }
 

@@ -26,7 +26,6 @@ import 'package:flutter/cupertino.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
-import 'package:sentry_flutter/sentry_flutter.dart';
 
 class EditScreen extends StatefulWidget {
   bool offline;
@@ -187,17 +186,14 @@ class _EditScreenState extends State<EditScreen> {
     };
     final api = Tentacle(basePathOverride: server).getItemUpdateApi();
     DateTime? dateTime;
-    bool useSentry = prefs.getBool('useSentry') ?? false;
     try {
       dateTime = DateTime.parse(entry.releaseDate);
-    } catch (e, s) {
-      if (useSentry) await Sentry.captureException(e, stackTrace: s);
+    } catch (e) {
       try {
         dateTime = DateTime.parse(
           entry.releaseDate.replaceAll(' ', '-'),
         );
-      } catch (e, s) {
-        if (useSentry) await Sentry.captureException(e, stackTrace: s);
+      } catch (e) {
         logger.e(e.toString());
       }
     }
@@ -221,8 +217,7 @@ class _EditScreenState extends State<EditScreen> {
         headers: headers,
       );
       logger.d(response.toString());
-    } catch (e, s) {
-      if (useSentry) await Sentry.captureException(e, stackTrace: s);
+    } catch (e) {
       logger.e(e.toString());
       // display error message
       await showDialog(
@@ -277,8 +272,7 @@ class _EditScreenState extends State<EditScreen> {
           headers: headers,
         );
         // tell if the image was uploaded or not
-      } catch (e, s) {
-        if (useSentry) await Sentry.captureException(e, stackTrace: s);
+      } catch (e) {
         logger.e(e.toString());
       }
     }
@@ -408,14 +402,12 @@ class _EditScreenState extends State<EditScreen> {
     DateTime dateTime;
     try {
       dateTime = DateTime.parse(entry.releaseDate);
-    } catch (e, s) {
-      Sentry.captureException(e, stackTrace: s);
+    } catch (e) {
       try {
         dateTime = DateTime.parse(
           entry.releaseDate.replaceAll(' ', '-'),
         );
-      } catch (e, s) {
-        Sentry.captureException(e, stackTrace: s);
+      } catch (e) {
         dateTime = DateTime.now();
       }
     }

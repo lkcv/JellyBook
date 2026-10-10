@@ -20,7 +20,6 @@ import 'package:provider/provider.dart';
 import 'package:jellybook/providers/languageProvider.dart';
 import 'package:jellybook/providers/themeProvider.dart';
 import 'package:jellybook/variables.dart';
-import 'package:sentry_flutter/sentry_flutter.dart';
 
 Future<String> get _localPath async {
   // get the directory that normally is located at /storage/emulated/0/Documents/
@@ -91,8 +90,6 @@ Future<void> main() async {
 
   SharedPreferences prefs = await SharedPreferences.getInstance();
 
-  bool useSentry = prefs.getBool("useSentry") ?? false;
-
   // dio allow self signed certificates
   HttpOverrides.global = MyHttpOverrides();
 
@@ -117,20 +114,6 @@ Future<void> main() async {
   var logins = await isar.logins.where().findAll();
   if (logins.length != 0) {
     prefs.setString("username", logins[0].username);
-    if (useSentry) {
-      await SentryFlutter.init(
-        (options) {
-          options.dsn = const String.fromEnvironment('SENTRY_DSN');
-          options.tracesSampleRate = 1.0;
-        },
-        appRunner: () => runApp(MyApp(
-          url: logins[0].serverUrl,
-          username: logins[0].username,
-          password: logins[0].password,
-          prefs: prefs,
-        )),
-      );
-    }
     runApp(MyApp(
       url: logins[0].serverUrl,
       username: logins[0].username,
@@ -138,15 +121,6 @@ Future<void> main() async {
       prefs: prefs,
     ));
   } else {
-    if (useSentry) {
-      await SentryFlutter.init(
-        (options) {
-          options.dsn = const String.fromEnvironment('SENTRY_DSN');
-          options.tracesSampleRate = 1.0;
-        },
-        appRunner: () => runApp(MyApp(prefs: prefs)),
-      );
-    }
     runApp(MyApp(prefs: prefs));
   }
 }

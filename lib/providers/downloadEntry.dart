@@ -11,7 +11,6 @@ import 'package:jellybook/models/entry.dart';
 import 'package:jellybook/providers/fileNameFromTitle.dart';
 import 'package:jellybook/providers/ComicInfoXML.dart';
 import 'package:jellybook/variables.dart';
-import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:tentacle/tentacle.dart';
 
 typedef ProgressCallback = void Function(double progress);
@@ -85,10 +84,8 @@ Future<Entry> downloadEntry(
 
     logger.d('Download complete: ${entry.title}');
     return entry;
-  } catch (e, s) {
+  } catch (e) {
     logger.e('Download failed: $e');
-    bool useSentry = storage.getBool('useSentry') ?? false;
-    if (useSentry) await Sentry.captureException(e, stackTrace: s);
     rethrow;
   }
 }
@@ -101,9 +98,6 @@ Future<void> _extractFile(
 ) async {
   final isar = Isar.getInstance();
   if (isar == null) return;
-
-  final storage = await SharedPreferences.getInstance();
-  bool useSentry = storage.getBool('useSentry') ?? false;
 
   final folderName = await fileNameFromTitle(entry.title);
   String comicFolder = '$dirLocation/$folderName';
@@ -157,8 +151,7 @@ Future<void> _extractFile(
     await isar.writeTxn(() async {
       await isar.entrys.put(entry);
     });
-  } catch (e, s) {
-    if (useSentry) await Sentry.captureException(e, stackTrace: s);
+  } catch (e) {
     logger.e('Extract failed: $e');
     rethrow;
   }

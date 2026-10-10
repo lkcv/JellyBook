@@ -5,8 +5,6 @@ import 'package:jellybook/models/entry.dart';
 import 'package:jellybook/l10n/app_localizations.dart';
 import 'dart:io';
 import 'package:jellybook/variables.dart';
-import 'package:sentry_flutter/sentry_flutter.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 Future<void> deleteComic(String id, context) async {
   await showDialog(
@@ -39,13 +37,10 @@ Future<void> deleteComic(String id, context) async {
 Future<void> confirmedDelete(String id, context) async {
   final isar = Isar.getInstance();
   final entry = await isar!.entrys.where().idEqualTo(id).findFirst();
-  SharedPreferences prefs = await SharedPreferences.getInstance();
-  bool useSentry = prefs.getBool('useSentry') ?? false;
   if (entry!.downloaded) {
     try {
       await File(entry.folderPath).delete(recursive: true);
-    } catch (e, s) {
-      if (useSentry) await Sentry.captureException(e, stackTrace: s);
+    } catch (e) {
       logger.e(e.toString());
     }
   }
@@ -56,8 +51,7 @@ Future<void> confirmedDelete(String id, context) async {
     logger.d(path.toString());
     try {
       Directory(path).deleteSync(recursive: true);
-    } catch (e, s) {
-      if (useSentry) await Sentry.captureException(e, stackTrace: s);
+    } catch (e) {
       logger.e("error deleting directory: $e");
     }
 

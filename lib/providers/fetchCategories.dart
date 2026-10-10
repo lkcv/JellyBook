@@ -9,7 +9,6 @@ import 'package:jellybook/models/folder.dart';
 import 'package:isar/isar.dart';
 import 'package:package_info_plus/package_info_plus.dart' as p_info;
 import 'package:jellybook/variables.dart';
-import 'package:sentry_flutter/sentry_flutter.dart';
 
 // have optional perameter to have the function return the list of folders
 Future<(List<Entry>, List<Folder>)> getServerCategories({
@@ -68,9 +67,7 @@ Future<(List<Entry>, List<Folder>)> getServerCategories({
       includeHidden: true,
     );
     // logger.d(response);
-  } catch (e, s) {
-    bool useSentry = prefs.getBool('useSentry') ?? false;
-    if (useSentry) await Sentry.captureException(e, stackTrace: s);
+  } catch (e) {
     logger.e(e);
     rethrow;
   }

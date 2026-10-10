@@ -93,7 +93,6 @@ dependencies:
 
   # Logging
   logger: ^2.7.0
-  sentry_flutter: ^9.28.0
 
 dev_dependencies:
   # flutter_test:
@@ -115,7 +114,6 @@ dev_dependencies:
       url: https://github.com/callumw-k/isar.git
       ref: f070a067378c215b9212a2a22ea593293671c9c9
       path: packages/isar_generator
-  sentry_dart_plugin: ^3.4.0
   analyzer: ^7.0.0
   flutter_gen_runner:
   # test: ^1.24.3
@@ -195,8 +193,3 @@ icons_launcher:
       adaptive_foreground_image: 'assets/images/IconRound.png'
   # remove_alpha_ios: true
 
-
-sentry:
-  upload_debug_symbols: true
-  project: "jellybook"
-  org: "jellybook"
