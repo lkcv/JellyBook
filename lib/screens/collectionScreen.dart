@@ -284,10 +284,10 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
                   const EdgeInsets.symmetric(horizontal: 4.0, vertical: 4.0),
               child: GridView.builder(
                 controller: _gridController,
-                // Keep the initial covers below the header. Once scrolled,
-                // the grid itself continues underneath the black overlay.
+                // Match the library's small header-to-grid gap without
+                // adding another full toolbar-height of empty space.
                 padding: EdgeInsets.only(
-                  top: MediaQuery.of(context).padding.top + kToolbarHeight,
+                  top: MediaQuery.of(context).padding.top + 6.0,
                 ),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 3,
