@@ -134,6 +134,23 @@ class ReaderPageCache {
     return current is num ? current.toInt() : null;
   }
 
+  /// Chapter labels are based on archive image filenames and folders, not
+  /// ComicInfo.xml. Keep them with the cached pages for offline reopening.
+  static Future<Map<int, String>> getChapterLabels(String volumeId) async {
+    final root = await _root();
+    final directory = Directory('${root.path}/${_key(volumeId)}');
+    if (!await directory.exists()) return <int, String>{};
+    final chapters = (await _readManifest(directory))['chapters'];
+    if (chapters is! Map) return <int, String>{};
+    return <int, String>{
+      for (final entry in chapters.entries)
+        if (entry.key is String &&
+            int.tryParse(entry.key as String) != null &&
+            entry.value is String)
+          int.parse(entry.key as String): entry.value as String,
+    };
+  }
+
   static Future<File?> getPage(String volumeId, int pageIndex) async {
     if (pageIndex < 0) return null;
     final root = await _root();
@@ -175,6 +192,7 @@ class ReaderPageCache {
     required int currentPage,
     required int lastUsed,
     required Map<int, File> sourceFiles,
+    Map<int, String> chapterLabels = const <int, String>{},
     bool updatePosition = true,
   }) {
     if (pageCount <= 0) return Future<void>.value();
@@ -196,6 +214,7 @@ class ReaderPageCache {
             currentPage: position.page,
             lastUsed: position.timestamp,
             sourceFiles: sourceFiles,
+            chapterLabels: chapterLabels,
           );
         });
     _writeQueue = queued;
@@ -208,6 +227,7 @@ class ReaderPageCache {
     required int currentPage,
     required int lastUsed,
     required Map<int, File> sourceFiles,
+    required Map<int, String> chapterLabels,
   }) async {
     if (pageCount <= 0) return;
 
@@ -321,11 +341,21 @@ class ReaderPageCache {
         previousLastUsed is num ? previousLastUsed.toInt() : 0;
     final effectiveLastUsed =
         previousLastUsedMs > lastUsed ? previousLastUsedMs : lastUsed;
+    // Later page loads must not erase chapter metadata discovered during
+    // archive indexing. A non-empty update replaces the previous mapping.
+    final chapters = chapterLabels.isNotEmpty
+        ? <String, String>{
+            for (final entry in chapterLabels.entries)
+              if (entry.key >= 0 && entry.key < pageCount)
+                '${entry.key}': entry.value,
+          }
+        : oldManifest['chapters'] ?? <String, String>{};
     final updatedManifest = <String, dynamic>{
       'pageCount': pageCount,
       'currentPage': persistedCurrent,
       'lastUsed': effectiveLastUsed,
       'pages': pages,
+      'chapters': chapters,
     };
     final temporaryManifest = File('${directory.path}/manifest.json.tmp');
     await temporaryManifest.writeAsString(jsonEncode(updatedManifest), flush: true);

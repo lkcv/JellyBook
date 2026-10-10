@@ -32,6 +32,10 @@ class CbzStream {
 
   int get pageCount => _pages.length;
 
+  /// Original path within the archive, used to infer chapter boundaries.
+  String? pageName(int index) =>
+      _ready && index >= 0 && index < _pages.length ? _pages[index].name : null;
+
   Future<void> init() async {
     if (_ready) return;
     final temp = await getTemporaryDirectory();

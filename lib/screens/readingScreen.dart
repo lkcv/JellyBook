@@ -288,12 +288,10 @@ class _ReadingScreenState extends State<ReadingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(title),
-      ),
+      backgroundColor: Colors.black,
       body: Center(
         child: Text(AppLocalizations.of(context)!.loadingComic,
-            style: TextStyle(fontSize: 20)),
+            style: const TextStyle(fontSize: 20, color: Colors.white)),
       ),
     );
   }

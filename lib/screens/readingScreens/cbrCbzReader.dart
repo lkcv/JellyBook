@@ -68,6 +68,7 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
   CbzStream? _stream;
   final Map<int, File> _pageCache = {};
   final Map<int, Future<File>> _pageLoads = {};
+  final Map<int, String> _chapterLabels = {};
   Future<void>? _streamInitialization;
   // The previous reader instance may still be copying pages when reopened.
   // Its cleanup must finish before a new CbzStream uses the same temp path.
@@ -170,6 +171,9 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
           if (saved != null) {
             _pageCache[cachedIndex] = saved;
             _currentPage = cachedIndex;
+            _chapterLabels
+              ..clear()
+              ..addAll(await ReaderPageCache.getChapterLabels(comicId));
             logger.d('CbrCbzReader: restored cached page $cachedIndex '
                 'of volume $comicId without a network request');
             _pageController = PageController(initialPage: _currentPage);
@@ -184,22 +188,42 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
               logger.w('ReaderPageCache: could not touch volume: $e');
             });
             _precacheAround(_currentPage);
-            // Let cached images paint without a network request on the
-            // critical path. Missing pages can initialize the stream later.
+            // Caches created before chapter detection have no labels. Index
+            // the archive after the first frame, without blocking page paint.
+            if (_chapterLabels.isEmpty &&
+                context.read<ConnectionManager>().status !=
+                    ConnectionStatus.offline) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) return;
+                _ensureStreamInitialized().catchError((Object error) {
+                  logger.w('CbrCbzReader: chapter index unavailable: $error');
+                });
+              });
+            }
+            // The retained image itself never waits for the server.
             return;
           }
         }
         await _ensureStreamInitialized();
       } else {
         await createPageList();
+        _chapterLabels
+          ..clear()
+          ..addAll(_chaptersFromNames(pages));
       }
 
       final lastPage = pageNums == 0 ? 0 : pageNums - 1;
       _currentPage = pageNum.clamp(0, lastPage).toInt();
       _pageController = PageController(initialPage: _currentPage);
       if (_isStreaming || pages.isNotEmpty) {
-        await ReaderPageCache.touch(
-          volumeId: comicId, pageCount: pageNums, currentPage: _currentPage);
+        await ReaderPageCache.saveWindow(
+          volumeId: comicId,
+          pageCount: pageNums,
+          currentPage: _currentPage,
+          lastUsed: DateTime.now().millisecondsSinceEpoch,
+          sourceFiles: const <int, File>{},
+          chapterLabels: _chapterLabels,
+        );
       }
       _precacheAround(_currentPage);
 
@@ -385,6 +409,27 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
     throw StateError('No local or saved page exists for page $index');
   }
 
+  /// Infer chapters using explicit chapter markers in an image's filename or
+  /// archive folder, e.g. "Chapter 12/003.jpg", "ch_12_page_003.png",
+  /// or "c001 - p000.png".
+  /// Ordinary page numbers alone are not chapter numbers.
+  Map<int, String> _chaptersFromNames(Iterable<String> names) {
+    final marker = RegExp(
+      r'(?:^|[/\\\s._\-\[(])(?:chapter|chap|ch|c)[\s._:#\-]*0*(\d+(?:\.\d+)?)',
+      caseSensitive: false,
+    );
+    final result = <int, String>{};
+    String? chapter;
+    var index = 0;
+    for (final name in names) {
+      final match = marker.firstMatch(name);
+      if (match != null) chapter = 'Chapter ${match.group(1)}';
+      if (chapter != null) result[index] = chapter;
+      index++;
+    }
+    return result;
+  }
+
   Future<void> _ensureStreamInitialized() async {
     final existing = _streamInitialization;
     if (existing != null) return existing;
@@ -400,6 +445,24 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
         }
       }
       await stream.init();
+      final chapters = _chaptersFromNames(
+        List<String>.generate(stream.pageCount, (i) => stream.pageName(i) ?? ''),
+      );
+      _chapterLabels
+        ..clear()
+        ..addAll(chapters);
+      if (mounted && !_loading) setState(() {});
+      if (stream.pageCount > 0 && chapters.isNotEmpty) {
+        await ReaderPageCache.saveWindow(
+          volumeId: comicId,
+          pageCount: stream.pageCount,
+          currentPage: pageNum,
+          lastUsed: DateTime.now().millisecondsSinceEpoch,
+          sourceFiles: const <int, File>{},
+          chapterLabels: chapters,
+          updatePosition: false,
+        );
+      }
       if (stream.pageCount > 0 && pageNums != stream.pageCount) {
         pageNums = stream.pageCount;
         if (mounted) setState(() {});
@@ -764,33 +827,59 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
   }
 
   Widget _buildTopBar() {
+    final chapter = _chapterLabels[_currentPage];
     return Container(
       color: Colors.black.withOpacity(0.85),
       child: SafeArea(
         bottom: false,
         child: SizedBox(
-          height: kToolbarHeight,
-          child: Row(
+          height: 76,
+          child: Stack(
+            alignment: Alignment.center,
             children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.white),
-                onPressed: _exit,
+              Positioned(
+                left: 0,
+                child: IconButton(
+                  icon: const Icon(Icons.arrow_back, color: Colors.white),
+                  onPressed: _exit,
+                ),
               ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 16),
-                  child: AutoSizeText(
-                    title,
-                    maxLines: 2,
-                    minFontSize: 10,
-                    maxFontSize: 18,
-                    stepGranularity: 0.5,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 56),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                      height: chapter == null ? 62 : 45,
+                      child: Center(
+                        child: AutoSizeText(
+                          title,
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          minFontSize: 10,
+                          maxFontSize: 18,
+                          stepGranularity: 0.5,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
+                    if (chapter != null)
+                      Text(
+                        chapter,
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ],
@@ -869,9 +958,11 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return Scaffold(
-        appBar: AppBar(title: Text(title)),
-        body: const Center(child: CircularProgressIndicator()),
+      // The reader overlay is the only title bar. Avoid showing a temporary
+      // Material AppBar with a different font size during initialization.
+      return const Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(child: CircularProgressIndicator()),
       );
     }
 
