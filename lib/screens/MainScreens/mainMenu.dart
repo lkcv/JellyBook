@@ -109,8 +109,8 @@ class _MainMenuState extends State<MainMenu> {
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
               childAspectRatio: 0.63,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
+              crossAxisSpacing: 6,
+              mainAxisSpacing: 6,
             ),
             delegate: SliverChildBuilderDelegate(
               (context, index) {
