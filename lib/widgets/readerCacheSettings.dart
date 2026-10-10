@@ -14,6 +14,7 @@ class ReaderCacheSettings extends StatefulWidget {
 
 class _ReaderCacheSettingsState extends State<ReaderCacheSettings> {
   int _usageBytes = 0;
+  int _coverUsageBytes = 0;
   int _limitMb = ReaderPageCache.defaultLimitMb;
   bool _loading = true;
   bool _busy = false;
@@ -29,10 +30,12 @@ class _ReaderCacheSettingsState extends State<ReaderCacheSettings> {
     try {
       final limit = await ReaderPageCache.getLimitMb();
       final usage = await ReaderPageCache.getUsageBytes();
+      final coverUsage = await JellyBookCacheManager.getUsageBytes();
       if (!mounted) return;
       setState(() {
         _limitMb = limit;
         _usageBytes = usage;
+        _coverUsageBytes = coverUsage;
         _loading = false;
         _error = null;
       });
@@ -116,6 +119,7 @@ class _ReaderCacheSettingsState extends State<ReaderCacheSettings> {
     setState(() => _busy = true);
     try {
       await JellyBookCacheManager.instance.emptyCache();
+      await _refresh();
       _notify('Cover cache cleared');
     } catch (error) {
       _notify('Could not clear cover cache: $error');
@@ -209,8 +213,17 @@ class _ReaderCacheSettingsState extends State<ReaderCacheSettings> {
               ),
             ),
             const Divider(),
-            Text('Cover image cache',
-                style: Theme.of(context).textTheme.titleSmall),
+            Row(
+              children: [
+                Expanded(
+                  child: Text('Cover image cache',
+                      style: Theme.of(context).textTheme.titleSmall),
+                ),
+                if (!_loading)
+                  Text('${_displayMb(_coverUsageBytes)} MB used',
+                      style: Theme.of(context).textTheme.bodyMedium),
+              ],
+            ),
             Text(
               'Covers and profile images are stored separately',
               style: Theme.of(context).textTheme.bodySmall,

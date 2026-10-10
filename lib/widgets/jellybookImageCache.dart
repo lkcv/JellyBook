@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/widgets.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
@@ -11,6 +13,29 @@ class JellyBookCacheManager {
       maxNrOfCacheObjects: 5000,
     ),
   );
+
+  /// Total bytes currently occupied by the shared cover disk cache.
+  /// Decoded Flutter images in RAM are not included.
+  static Future<int> getUsageBytes() async {
+    final directory = await IOFileSystem.createDirectory('jellybook_image_cache');
+    var bytes = 0;
+    try {
+      await for (final entity
+          in directory.list(recursive: true, followLinks: false)) {
+        try {
+          final stat = await entity.stat();
+          if (stat.type == FileSystemEntityType.file) {
+            bytes += stat.size;
+          }
+        } on FileSystemException {
+          // A file may disappear while the cache manager is clearing it.
+        }
+      }
+    } on FileSystemException {
+      // Cache may be cleared while the directory is being enumerated.
+    }
+    return bytes;
+  }
 }
 
 /// Ask Jellyfin for a smaller cover. Smaller files download and decode faster,
