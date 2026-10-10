@@ -44,6 +44,8 @@ class _MainMenuState extends State<MainMenu> {
 
   bool _errorModalShowing = false;
   List<Folder>? _lastFolders;
+  // Tell visible cards to recalculate progress after leaving a collection.
+  final ValueNotifier<int> _progressRevision = ValueNotifier<int>(0);
 
   @override
   void didChangeDependencies() {
@@ -113,21 +115,26 @@ class _MainMenuState extends State<MainMenu> {
             delegate: SliverChildBuilderDelegate(
               (context, index) {
                 final folder = folders[index];
-                return SeriesCard(
-                  folder: folder,
-                  onTap: () async {
-                    await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => collectionScreen(
-                          folderId: folder.id,
-                          name: folder.name,
-                          image: folder.image,
-                          bookIds: folder.bookIds,
+                return ValueListenableBuilder<int>(
+                  valueListenable: _progressRevision,
+                  builder: (context, _, __) => SeriesCard(
+                    folder: folder,
+                    onTap: () async {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => collectionScreen(
+                            folderId: folder.id,
+                            name: folder.name,
+                            image: folder.image,
+                            bookIds: folder.bookIds,
+                          ),
                         ),
-                      ),
-                    );
-                  },
+                      );
+                      // Read saved progress from Isar, not from the server.
+                      if (mounted) _progressRevision.value++;
+                    },
+                  ),
                 );
               },
               childCount: folders.length,
@@ -168,6 +175,7 @@ class _MainMenuState extends State<MainMenu> {
   @override
   void dispose() {
     _connectionManager?.removeListener(_onConnectionChanged);
+    _progressRevision.dispose();
     _pagingController.dispose();
     super.dispose();
   }
