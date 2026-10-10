@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:jellybook/variables.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class _ReaderPosition {
   final int count;
@@ -16,10 +17,14 @@ class _ReaderPosition {
 ///
 /// This cache lives outside Entry.folderPath, so deleting a downloaded volume
 /// does not delete the reader's recovery copy. Both downloaded and streamed
-/// volumes retain up to seven nearby pages. The overall cache has a 300 MiB
-/// disk budget and evicts least-recently-used volumes, not individual pages.
+/// volumes retain up to seven nearby pages. The overall cache has a
+/// configurable disk budget (300 MiB by default) and evicts
+/// least-recently-used volumes, not individual pages.
 class ReaderPageCache {
-  static const int _maxCacheBytes = 300 * 1024 * 1024;
+  static const int defaultLimitMb = 300;
+  static const int maxCustomLimitMb = 1024 * 1024; // Avoid integer overflow.
+  static const String _limitKey = 'reader_cache_limit_mb';
+  static const int _bytesPerMb = 1024 * 1024;
   static const int _maxPagesPerVolume = 7;
   static Future<void> _writeQueue = Future<void>.value();
   // Initialized once per process, then updated using only the modified
@@ -43,6 +48,58 @@ class ReaderPageCache {
     final root = Directory('${support.path}/jellybook_reader_cache');
     await root.create(recursive: true);
     return root;
+  }
+
+  /// The configured disk budget in MiB. Existing installs use 300 MiB.
+  static Future<int> getLimitMb() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getInt(_limitKey);
+    if (saved == null || saved < 1 || saved > maxCustomLimitMb) {
+      return defaultLimitMb;
+    }
+    return saved;
+  }
+
+  /// Read the cache size after currently queued writes have settled.
+  static Future<int> getUsageBytes() async {
+    await _writeQueue.catchError((Object _) {});
+    final root = await _root();
+    if (_trackedBytes == null) await _indexCache(root);
+    return _trackedBytes ?? 0;
+  }
+
+  /// Save a new budget and evict old volumes immediately if it is exceeded.
+  /// Serialize this with page writes so a change cannot race cache pruning.
+  static Future<void> setLimitMb(int limitMb) {
+    if (limitMb < 1 || limitMb > maxCustomLimitMb) {
+      throw ArgumentError.value(limitMb, 'limitMb', 'Invalid cache limit');
+    }
+    final operation = _writeQueue.catchError((Object _) {}).then((_) async {
+      final prefs = await SharedPreferences.getInstance();
+      if (!await prefs.setInt(_limitKey, limitMb)) {
+        throw StateError('Could not save reader cache limit');
+      }
+      await _pruneToBudget(await _root());
+    });
+    _writeQueue = operation;
+    return operation;
+  }
+
+  /// Clear persistent snapshots only, never downloads or cover images.
+  /// The write queue prevents in-flight page copies from resurrecting files
+  /// during deletion. A later page load may repopulate the empty cache.
+  static Future<void> clearCache() {
+    final operation = _writeQueue.catchError((Object _) {}).then((_) async {
+      final root = await _root();
+      if (await root.exists()) await root.delete(recursive: true);
+      await root.create(recursive: true);
+      _volumeByteCounts.clear();
+      _trackedBytes = 0;
+      // _positions intentionally remains: a page request enqueued after this
+      // operation may already have recorded its latest reading position.
+    });
+    _writeQueue = operation;
+    return operation;
   }
 
   static String _key(String volumeId) => Uri.encodeComponent(volumeId);
@@ -339,14 +396,15 @@ class ReaderPageCache {
   /// eviction is actually needed.
   static Future<void> _pruneToBudget(
     Directory root, {
-    required String protectedVolumeId,
+    String? protectedVolumeId,
   }) async {
-    final protectedDirectory =
-        Directory('${root.path}/${_key(protectedVolumeId)}');
+    final protectedDirectory = protectedVolumeId == null
+        ? null
+        : Directory('${root.path}/${_key(protectedVolumeId)}');
     try {
       if (_trackedBytes == null) {
         await _indexCache(root);
-      } else {
+      } else if (protectedDirectory != null) {
         final previous = _volumeByteCounts[protectedDirectory.path] ?? 0;
         final updated = await _directoryBytes(protectedDirectory);
         _volumeByteCounts[protectedDirectory.path] = updated;
@@ -361,11 +419,12 @@ class ReaderPageCache {
       return;
     }
 
-    if (_trackedBytes! <= _maxCacheBytes) return;
+    final maxCacheBytes = (await getLimitMb()) * _bytesPerMb;
+    if (_trackedBytes! <= maxCacheBytes) return;
 
     final candidates = <_CachedVolume>[];
     for (final entry in _volumeByteCounts.entries) {
-      if (entry.key == protectedDirectory.path) continue;
+      if (entry.key == protectedDirectory?.path) continue;
       final directory = Directory(entry.key);
       final manifest = await _readManifest(directory);
       final rawLastUsed = manifest['lastUsed'];
@@ -378,7 +437,7 @@ class ReaderPageCache {
     });
 
     for (final stale in candidates) {
-      if (_trackedBytes! <= _maxCacheBytes) break;
+      if (_trackedBytes! <= maxCacheBytes) break;
       try {
         if (await stale.directory.exists()) {
           await stale.directory.delete(recursive: true);
@@ -392,9 +451,9 @@ class ReaderPageCache {
     }
     // Preserve the volume being saved even when its seven pages alone are
     // larger than the budget. All other volumes are eligible for eviction.
-    if (_trackedBytes! > _maxCacheBytes) {
+    if (_trackedBytes! > maxCacheBytes) {
       logger.w('ReaderPageCache: cache remains above disk budget '
-          '($_trackedBytes / $_maxCacheBytes bytes)');
+          '($_trackedBytes / $maxCacheBytes bytes)');
     }
   }
 }

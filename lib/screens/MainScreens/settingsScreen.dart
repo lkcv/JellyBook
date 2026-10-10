@@ -19,6 +19,7 @@ import 'package:jellybook/providers/languageProvider.dart';
 import 'package:jellybook/widgets/SimpleUserCard.dart';
 import 'package:jellybook/widgets/SettingsItem.dart';
 import 'package:jellybook/widgets/jellybookImageCache.dart';
+import 'package:jellybook/widgets/readerCacheSettings.dart';
 import 'package:jellybook/variables.dart';
 import 'package:palette_generator_master/palette_generator_master.dart';
 import 'package:sentry/sentry.dart';
@@ -205,6 +206,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               },
             ),
             // readingDirectionSettings(context),
+            const SizedBox(
+              height: 20,
+            ),
+            const ReaderCacheSettings(),
             const SizedBox(
               height: 20,
             ),
