@@ -22,6 +22,8 @@ import 'package:jellybook/widgets/jellybookImageCache.dart';
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:jellybook/screens/readingScreen.dart';
 import 'package:jellybook/providers/readerPageCache.dart';
+import 'package:jellybook/screens/readingScreens/cbrCbzReader.dart';
+import 'package:jellybook/widgets/coverOpeningRoute.dart';
 import 'package:provider/provider.dart';
 import 'package:jellybook/providers/connectionManager.dart';
 
@@ -57,6 +59,9 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
   });
 
   final ScrollController _gridController = ScrollController();
+  // Reuse one database query across animation and layout rebuilds. Creating a
+  // fresh Future in build() briefly replaces the grid with a spinner.
+  late Future<List<Entry>> _entriesFuture;
   List<Entry>? _latestEntries;
   bool _warmScheduled = false;
   bool _warming = false;
@@ -66,7 +71,13 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
   @override
   void initState() {
     super.initState();
+    _entriesFuture = getEntries();
     WidgetsBinding.instance.addObserver(this);
+  }
+
+  void _refreshEntries() {
+    if (!mounted) return;
+    setState(() => _entriesFuture = getEntries());
   }
 
   @override
@@ -214,10 +225,6 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
     return entryList;
   }
 
-  Future<List<Entry>> get entries async {
-    return await getEntries();
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -265,12 +272,10 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
           ),
         ),
       ),
-      body: FutureBuilder(
-        future: entries,
+      body: FutureBuilder<List<Entry>>(
+        future: _entriesFuture,
         builder: (BuildContext context, AsyncSnapshot snapshot) {
-          if (snapshot.hasData &&
-              snapshot.data.length > 0 &&
-              snapshot.connectionState == ConnectionState.done) {
+          if (snapshot.hasData && snapshot.data!.isNotEmpty) {
             // Schedule only after a grid is actually included in this frame.
             _scheduleCoverWarming(snapshot.data as List<Entry>);
             return Padding(
@@ -294,14 +299,14 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
                   Entry entry = snapshot.data[index];
                   return KuroStyleBookCard(
                     entry: entry,
-                    onEntryTapped: () async {
+                    onEntryTapped: (coverRect) async {
                       if (entry.type == EntryType.folder) {
                         var folder = isar!.folders
                             .where()
                             .filter()
                             .idEqualTo(entry.id)
                             .findFirstSync();
-                        Navigator.push(
+                        await Navigator.push(
                           context,
                           MaterialPageRoute(
                             builder: (context) => collectionScreen(
@@ -312,6 +317,7 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
                             ),
                           ),
                         );
+                        _refreshEntries();
                         return;
                       }
 
@@ -340,7 +346,35 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
                         }
                       }
 
-                      // For downloaded items, open the reader directly
+                      // Open comic archives directly so the animated cover
+                      // is not interrupted by ReadingScreen's extra route.
+                      final extension = entry.path.split('.').last.toLowerCase();
+                      final isArchive = const ['cbz', 'cbr', 'zip', 'rar']
+                          .contains(extension);
+                      final streamable = extension == 'cbz' || extension == 'cbr';
+                      if (isArchive && (entry.downloaded || streamable)) {
+                        final firstPageReady = ValueNotifier<bool>(false);
+                        final skipReturnFade = ValueNotifier<bool>(false);
+                        await Navigator.push(
+                          context,
+                          CoverOpeningRoute(
+                            sourceRect: coverRect,
+                            coverPath: entry.imagePath,
+                            pageReady: firstPageReady,
+                            skipReturnFade: skipReturnFade,
+                            builder: (context) => CbrCbzReader(
+                              title: entry.title,
+                              comicId: entry.id,
+                              openedDirectly: true,
+                              openingReady: firstPageReady,
+                              skipReturnFade: skipReturnFade,
+                            ),
+                          ),
+                        );
+                        _refreshEntries();
+                        return;
+                      }
+                      // Other downloaded formats keep their existing reader.
                       if (entry.downloaded) {
                         await Navigator.push(
                           context,
@@ -351,27 +385,9 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
                             ),
                           ),
                         );
-                        setState(() {});
+                        _refreshEntries();
                         return;
                       }
-
-                      // For CBZ/CBR, stream it
-                      bool isCbz = entry.path.toLowerCase().endsWith('.cbz') ||
-                          entry.path.toLowerCase().endsWith('.cbr');
-                      if (isCbz) {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => ReadingScreen(
-                              title: entry.title,
-                              comicId: entry.id,
-                            ),
-                          ),
-                        );
-                        setState(() {});
-                        return;
-                      }
-
                       // For other formats, show the info screen
                       var result = await Navigator.push(
                         context,
@@ -385,7 +401,7 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
                         await isar?.writeTxn(() async {
                           await isar?.entrys.put(entry);
                         });
-                        setState(() {});
+                        _refreshEntries();
                       }
                     },
                     onEntryLongPressed: () async {
@@ -396,16 +412,14 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
                         ),
                       );
                       if (result != null) {
-                        setState(() {});
+                        _refreshEntries();
                       }
                     },
                   );
                 },
               ),
             );
-          } else if (snapshot.hasData &&
-              snapshot.data.length == 0 &&
-              snapshot.connectionState == ConnectionState.done) {
+          } else if (snapshot.hasData && snapshot.data!.isEmpty) {
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -453,7 +467,7 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
 // Kuro Reader-inspired book card widget
 class KuroStyleBookCard extends StatefulWidget {
   final Entry entry;
-  final VoidCallback onEntryTapped;
+  final ValueChanged<Rect> onEntryTapped;
   final VoidCallback? onEntryLongPressed; // new
 
   const KuroStyleBookCard({
@@ -467,6 +481,17 @@ class KuroStyleBookCard extends StatefulWidget {
 }
 
 class KuroStyleBookCardState extends State<KuroStyleBookCard> {
+  final GlobalKey _coverKey = GlobalKey();
+
+  void _openFromCover() {
+    final box = _coverKey.currentContext?.findRenderObject();
+    if (box is RenderBox && box.hasSize) {
+      widget.onEntryTapped(box.localToGlobal(Offset.zero) & box.size);
+    } else {
+      widget.onEntryTapped(Rect.zero);
+    }
+  }
+
   // One radius for both the card and the cover image
   static const double _imageRadius = 10; // was 14
   static const double _cardRadius = _imageRadius + 4 + 1.5;
@@ -489,7 +514,7 @@ class KuroStyleBookCardState extends State<KuroStyleBookCard> {
     return Opacity(
       opacity: isOffline && isUndownloaded ? 0.5 : 1.0,
       child: GestureDetector(
-        onTap: widget.onEntryTapped,
+        onTap: _openFromCover,
         onLongPress: widget.onEntryLongPressed,
         child: Container(
           padding: const EdgeInsets.all(4),
@@ -502,6 +527,7 @@ class KuroStyleBookCardState extends State<KuroStyleBookCard> {
             children: [
               Expanded(
                 child: ClipRRect(
+                  key: _coverKey,
                   borderRadius: BorderRadius.circular(_imageRadius),
                   child: Stack(
                     fit: StackFit.expand,

@@ -416,7 +416,7 @@ class _SeriesCardState extends State<SeriesCard> {
     final progress = _calcProgress(); // added
 
     return GestureDetector(
-      onTap: widget.onTap, // was: onTap
+      onTap: widget.onTap,
       child: Container(
         padding: const EdgeInsets.all(4),
         decoration: BoxDecoration(

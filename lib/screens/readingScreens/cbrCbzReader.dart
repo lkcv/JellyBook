@@ -28,11 +28,20 @@ import 'package:jellybook/providers/readerPageCache.dart';
 class CbrCbzReader extends StatefulWidget {
   final String title;
   final String comicId;
+  /// True when opened straight from a collection, with no ReadingScreen below.
+  final bool openedDirectly;
+  /// Signal the cover transition once the first page is decoded and painted.
+  final ValueNotifier<bool>? openingReady;
+  /// Shared with the opening route to skip the reverse fade on page zero.
+  final ValueNotifier<bool>? skipReturnFade;
 
   const CbrCbzReader({
     Key? key,
     required this.title,
     required this.comicId,
+    this.openedDirectly = false,
+    this.openingReady,
+    this.skipReturnFade,
   }) : super(key: key);
 
   @override
@@ -178,7 +187,8 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
                 'of volume $comicId without a network request');
             _pageController = PageController(initialPage: _currentPage);
             SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-            if (mounted) setState(() => _loading = false);
+            await _finishOpening();
+            if (!mounted) return;
             // Reopening never needs the network for the retained page.
             // The cache is touched before adjacent-page prefetch begins.
             ReaderPageCache.touch(
@@ -225,10 +235,9 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
           chapterLabels: _chapterLabels,
         );
       }
-      _precacheAround(_currentPage);
-
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-      if (mounted) setState(() => _loading = false);
+      await _finishOpening();
+      if (mounted) _precacheAround(_currentPage);
     } catch (e, s) {
       logger.e('CbrCbzReader: load failed: $e\n$s');
       if (mounted) {
@@ -242,8 +251,33 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
           ),
         );
         nav.pop();
-        nav.pop(); // the reader sits on top of ReadingScreen
+        if (!widget.openedDirectly) {
+          nav.pop(); // The legacy route still has ReadingScreen underneath.
+        }
       }
+    }
+  }
+
+  /// Keep the opening cover visible until the first page has been decoded.
+  /// Without an opening route, preserve the existing loading behavior.
+  Future<void> _finishOpening() async {
+    if (widget.openingReady != null && pageNums > 0) {
+      try {
+        final file = await _loadPageFile(_currentPage);
+        if (!mounted) return;
+        await precacheImage(FileImage(file), context);
+      } catch (error) {
+        logger.w('CbrCbzReader: could not precache opening page: $error');
+      }
+    }
+    if (!mounted) return;
+    setState(() => _loading = false);
+    // The transition should not fade away until the page widget has had a
+    // frame to build with its now-decoded FileImage.
+    if (widget.openingReady != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.openingReady!.value = true;
+      });
     }
   }
 
@@ -811,8 +845,12 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
   }
 
   void _exit() {
+    // Both the toolbar Back arrow and Android Back go through this method.
+    widget.skipReturnFade?.value = _currentPage == 0;
     Navigator.pop(context);
-    Navigator.pop(context);
+    if (!widget.openedDirectly) {
+      Navigator.pop(context);
+    }
   }
 
   Widget _fade(Widget child) {
