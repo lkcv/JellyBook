@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:jellybook/providers/updatePagenum.dart';
@@ -257,10 +258,44 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
     }
   }
 
-  /// Keep the opening cover visible until the first page has been decoded.
+  /// Avoid competing with the 300ms cover expansion when decoding the
+  /// initial reader page. Non-animated reader entry is unchanged.
+  Future<bool> _waitUntilCoverExpanded() async {
+    if (widget.openingReady == null) return true;
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return false;
+
+    final animation = ModalRoute.of(context)?.animation;
+    if (animation == null || animation.status == AnimationStatus.completed) {
+      return true;
+    }
+    if (animation.status == AnimationStatus.reverse ||
+        animation.status == AnimationStatus.dismissed) return false;
+
+    final done = Completer<void>();
+    void onStatus(AnimationStatus status) {
+      if (status == AnimationStatus.completed ||
+          status == AnimationStatus.reverse ||
+          status == AnimationStatus.dismissed) {
+        if (!done.isCompleted) done.complete();
+      }
+    }
+
+    animation.addStatusListener(onStatus);
+    try {
+      onStatus(animation.status); // Handle completion during registration.
+      await done.future;
+    } finally {
+      animation.removeStatusListener(onStatus);
+    }
+    return mounted && animation.status == AnimationStatus.completed;
+  }
+
+  /// Keep the cover visible until the page is decoded and painted.
   /// Without an opening route, preserve the existing loading behavior.
   Future<void> _finishOpening() async {
     if (widget.openingReady != null && pageNums > 0) {
+      if (!await _waitUntilCoverExpanded()) return;
       try {
         final file = await _loadPageFile(_currentPage);
         if (!mounted) return;
