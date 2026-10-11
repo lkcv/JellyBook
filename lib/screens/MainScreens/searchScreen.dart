@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import 'package:isar_flutter_libs/isar_flutter_libs.dart';
 import 'package:jellybook/models/entry.dart';
-import 'package:jellybook/providers/fixRichText.dart';
 import 'package:jellybook/screens/infoScreen.dart';
 import 'package:jellybook/screens/readingScreen.dart';
 import 'package:jellybook/screens/readingScreens/cbrCbzReader.dart';
@@ -14,12 +13,10 @@ import 'package:jellybook/providers/readerPageCache.dart';
 import 'package:jellybook/providers/connectionManager.dart';
 import 'package:jellybook/widgets/coverOpeningRoute.dart';
 import 'package:provider/provider.dart';
-import 'package:fancy_shimmer_image/fancy_shimmer_image.dart';
-import 'package:auto_size_text/auto_size_text.dart';
 import 'package:string_similarity/string_similarity.dart';
 import 'package:jellybook/l10n/app_localizations.dart';
 import 'package:jellybook/variables.dart';
-import 'package:jellybook/widgets/roundedImageWithShadow.dart';
+import 'package:jellybook/screens/collectionScreen.dart' show KuroStyleBookCard;
 
 class SearchScreen extends StatefulWidget {
   /// Called when the user leaves Search (back arrow or system back).
@@ -35,6 +32,7 @@ class SearchScreen extends StatefulWidget {
 // _SearchScreenState
 class _SearchScreenState extends State<SearchScreen> {
   final _searchController = TextEditingController();
+  final _resultsScrollController = ScrollController();
   final isar = Isar.getInstance();
   List<Entry> _catalog = [];
   bool _catalogReady = false;
@@ -63,6 +61,7 @@ class _SearchScreenState extends State<SearchScreen> {
   @override
   void dispose() {
     _searchController.dispose();
+    _resultsScrollController.dispose();
     super.dispose();
   }
 
@@ -140,6 +139,13 @@ class _SearchScreenState extends State<SearchScreen> {
   List<Entry> searchResults = [];
   // List<Map<String, dynamic>> searchResults = [];
 
+  void _onQueryChanged(String query) {
+    if (_resultsScrollController.hasClients) {
+      _resultsScrollController.jumpTo(0);
+    }
+    getSearchResults(query);
+  }
+
   void _handleBack() {
     if (widget.onBack != null) {
       widget.onBack!();
@@ -183,7 +189,7 @@ class _SearchScreenState extends State<SearchScreen> {
                     (AppLocalizations.of(context)?.search ?? 'Search') + '...',
                 border: InputBorder.none,
               ),
-              onChanged: getSearchResults,
+              onChanged: _onQueryChanged,
             ),
           ),
         ),
@@ -208,94 +214,41 @@ class _SearchScreenState extends State<SearchScreen> {
                               'No results found',
                           style: const TextStyle(fontSize: 20)),
                     )
-          : ListView.builder(
+          : GridView.builder(
+              controller: _resultsScrollController,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 12,
+                childAspectRatio: 0.62,
+              ),
               itemCount: searchResults.length,
               itemBuilder: (context, i) {
                 final entry = searchResults[i];
-                final coverKey = GlobalKey();
-                return Card(
-                    child: InkWell(
-                      child: Row(
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: SizedBox(
-                              width: MediaQuery.of(context).size.width * 0.2,
-                              child: Container(
-                                key: coverKey,
-                                width: MediaQuery.of(context).size.width * 0.2,
-                                height: MediaQuery.of(context).size.width * 0.3,
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(8),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(0.4),
-                                      spreadRadius: 5,
-                                      blurRadius: 7,
-                                      // offset: const Offset(0, 3),
-                                    ),
-                                  ],
-                                ),
-                                child: RoundedImageWithShadow(
-                                  imageUrl: entry.imagePath,
-                                ),
-                              ),
-                            ),
-                          ),
-                          // have the name be at the top, not centered
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Padding(
-                                  padding: const EdgeInsets.only(
-                                      top: 8.0, bottom: 4.0),
-                                  child: AutoSizeText(
-                                    entry.title,
-                                    style: const TextStyle(
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                    maxLines: 1,
-                                  ),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 8.0),
-                                  child: AutoSizeText.rich(
-                                    maxLines: 6,
-                                    // richtext to allow for bolding
-                                    TextSpan(
-                                      text: "\t\t\t" +
-                                          fixRichText(
-                                              entry.description),
-                                      style: const TextStyle(
-                                        fontSize: 14,
-                                        color: Colors.grey,
-                                        fontStyle: FontStyle.italic,
-                                        height: 1.5,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: KuroStyleBookCard(
+                        entry: entry,
+                        onEntryTapped: (coverRect) =>
+                            _openResult(entry, coverRect),
+                        onEntryLongPressed: () => _openInfo(entry),
                       ),
-                      onTap: () async {
-                        final object = coverKey.currentContext?.findRenderObject();
-                        final coverRect = object is RenderBox && object.hasSize
-                            ? object.localToGlobal(Offset.zero) & object.size
-                            : Rect.zero;
-                        await _openResult(entry, coverRect);
-                      },
-                      // Keep the info screen available without making it an
-                      // intermediate route between Search and the reader.
-                      onLongPress: () async {
-                        await _openInfo(entry);
-                      },
                     ),
-                  );
+                    const SizedBox(height: 4),
+                    Text(
+                      entry.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            fontWeight: FontWeight.w500,
+                          ),
+                    ),
+                  ],
+                );
               },
             ),
     ),  // Scaffold
