@@ -1,4 +1,9 @@
 // The purpose of this file is to create the main menu screen (this is part of the list of screens in the bottom navigation bar)
+import 'dart:async';
+import 'dart:io';
+import 'dart:math' as math;
+
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:jellybook/models/folder.dart';
 import 'package:jellybook/providers/fetchCategories.dart';
@@ -8,10 +13,9 @@ import 'package:isar/isar.dart';
 import 'package:isar_flutter_libs/isar_flutter_libs.dart';
 import 'package:jellybook/models/entry.dart';
 import 'package:auto_size_text/auto_size_text.dart';
-import 'package:fancy_shimmer_image/fancy_shimmer_image.dart';
 import 'package:jellybook/l10n/app_localizations.dart';
 import 'package:jellybook/variables.dart';
-import 'package:jellybook/widgets/roundedImageWithShadow.dart';
+import 'package:jellybook/widgets/jellybookImageCache.dart';
 import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
 import 'package:provider/provider.dart';
 import 'package:jellybook/providers/connectionManager.dart';
@@ -21,7 +25,7 @@ class MainMenu extends StatefulWidget {
   _MainMenuState createState() => _MainMenuState();
 }
 
-class _MainMenuState extends State<MainMenu> {
+class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
   static const _pageSize = 20;
   late final PagingController<int, Entry> _pagingController =
       PagingController<int, Entry>(
@@ -41,8 +45,118 @@ class _MainMenuState extends State<MainMenu> {
 
   bool _errorModalShowing = false;
   List<Folder>? _lastFolders;
+  final ScrollController _libraryScrollController = ScrollController();
+  bool _inForeground = true;
+  bool _warmScheduled = false;
+  bool _warming = false;
+  bool _warmAgain = false;
+  String? _coverSignature;
+
   // Tell visible cards to recalculate progress after leaving a collection.
   final ValueNotifier<int> _progressRevision = ValueNotifier<int>(0);
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _inForeground = state == AppLifecycleState.resumed;
+    if (_inForeground) {
+      // Decoded images can be reclaimed while Android has us backgrounded.
+      // This also runs when Library is not the selected bottom tab.
+      _scheduleCoverWarming();
+    }
+  }
+
+  bool get _canWarm => mounted && _inForeground &&
+      (ModalRoute.of(context)?.isCurrent ?? true);
+
+  void _scheduleCoverWarming() {
+    if (!mounted || !_inForeground || _lastFolders == null) return;
+    if (_warming) {
+      _warmAgain = true;
+      return;
+    }
+    if (_warmScheduled) return;
+    _warmScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _warmScheduled = false;
+      if (_canWarm && _lastFolders != null) {
+        unawaited(_warmVisibleCovers());
+      }
+    });
+    // Ensure a callback is delivered even when resuming to an idle tab.
+    WidgetsBinding.instance.scheduleFrame();
+  }
+
+  // Two-column grid: 8px outer padding, 6px gutters, 0.63 aspect ratio.
+  // Prepare the onscreen rows and one adjacent row, not the entire library.
+  ({int first, int end}) _visibleCoverRange(int count) {
+    if (count == 0) return (first: 0, end: 0);
+    if (!_libraryScrollController.hasClients) {
+      return (first: 0, end: math.min(count, 10));
+    }
+    final viewport = _libraryScrollController.position.viewportDimension;
+    final offset = _libraryScrollController.offset;
+    final width = math.max(1.0, MediaQuery.sizeOf(context).width - 16);
+    final tileWidth = (width - 6) / 2;
+    final rowHeight = tileWidth / 0.63 + 6;
+    final gridTop = MediaQuery.paddingOf(context).top + 48;
+    final firstRow = math.max(0, ((offset - gridTop) / rowHeight).floor() - 1);
+    final lastRow = math.max(firstRow + 1,
+        ((offset + viewport - gridTop) / rowHeight).ceil() + 1);
+    return (
+      first: math.min(count, firstRow * 2),
+      end: math.min(count, lastRow * 2),
+    );
+  }
+
+  Future<void> _warmVisibleCovers() async {
+    if (_warming || !_canWarm) return;
+    _warmAgain = false;
+    _warming = true;
+    try {
+      final folders = _lastFolders;
+      if (folders == null) return;
+      final range = _visibleCoverRange(folders.length);
+      // At most two concurrent decodes, joining the exact same providers
+      // used by SeriesCard. Avoid competing with navigation/reader work.
+      for (var i = range.first; i < range.end && _canWarm; i += 2) {
+        await Future.wait([
+          for (var j = i; j < math.min(range.end, i + 2); j++)
+            _warmCover(folders[j].image),
+        ]);
+      }
+    } finally {
+      _warming = false;
+      if (_warmAgain && _canWarm) {
+        _warmAgain = false;
+        _scheduleCoverWarming();
+      }
+    }
+  }
+
+  Future<void> _warmCover(String path) async {
+    if (!_canWarm) return;
+    final provider = _libraryCoverProvider(path);
+    if (provider == null) return;
+    try {
+      await precacheImage(provider, context, onError: (_, __) {});
+    } catch (_) {
+      // Offline, unreadable, or missing covers should not block others.
+    }
+  }
+
+  void _onFoldersLoaded(List<Folder> folders) {
+    // Don't prewarm again on progress-notifier rebuilds or tab switches.
+    final signature = folders.map((f) => '${f.id}\u0000${f.image}').join('\u0001');
+    if (signature == _coverSignature) return;
+    _coverSignature = signature;
+    _scheduleCoverWarming();
+  }
 
   @override
   void didChangeDependencies() {
@@ -93,6 +207,7 @@ class _MainMenuState extends State<MainMenu> {
 
   Widget _buildGrid(List<Folder> folders) {
     return CustomScrollView(
+      controller: _libraryScrollController,
       slivers: <Widget>[
         SliverToBoxAdapter(
           child: SizedBox(
@@ -152,6 +267,9 @@ class _MainMenuState extends State<MainMenu> {
 
   @override
   void dispose() {
+    _inForeground = false;
+    WidgetsBinding.instance.removeObserver(this);
+    _libraryScrollController.dispose();
     _connectionManager?.removeListener(_onConnectionChanged);
     _progressRevision.dispose();
     _pagingController.dispose();
@@ -294,6 +412,7 @@ class _MainMenuState extends State<MainMenu> {
             if (snapshot.hasData && snapshot.data != null) {
               final List<Folder> folders = snapshot.data.$2 ?? <Folder>[];
               _lastFolders = folders;
+              _onFoldersLoaded(folders);
               return _buildGrid(folders);
             }
 
@@ -304,9 +423,12 @@ class _MainMenuState extends State<MainMenu> {
               // fall back to the last grid, or whatever is cached in Isar
               final cached = _lastFolders ??
                   Isar.getInstance()?.folders.where().findAllSync();
-              return (cached != null && cached.isNotEmpty)
-                  ? _buildGrid(cached)
-                  : const Center(child: Icon(Icons.cloud_off, size: 48));
+              if (cached != null && cached.isNotEmpty) {
+                _lastFolders = cached;
+                _onFoldersLoaded(cached);
+                return _buildGrid(cached);
+              }
+              return const Center(child: Icon(Icons.cloud_off, size: 48));
             }
 
             return const Center(child: Text("No data found"));
@@ -392,11 +514,7 @@ class _SeriesCardState extends State<SeriesCard> {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    RoundedImageWithShadow(
-                      imageUrl: folder.image,
-                      radius: _imageRadius,
-                      shadowColor: Colors.transparent,
-                    ),
+                    _LibraryCover(path: folder.image),
                     Positioned(
                       bottom: 8,
                       right: 8,
@@ -463,6 +581,40 @@ class _SeriesCardState extends State<SeriesCard> {
           ],
         ),
       ),
+    );
+  }
+}
+
+// A single provider factory for both the displayed cover and its precache.
+// The shared manager also serves Collection/reader cover warmups.
+ImageProvider? _libraryCoverProvider(String path) {
+  if (path.isEmpty || path.toLowerCase() == 'asset') return null;
+  if (path.contains('http')) {
+    return CachedNetworkImageProvider(
+      coverUrl(path),
+      cacheManager: JellyBookCacheManager.instance,
+    );
+  }
+  return FileImage(File(path));
+}
+
+class _LibraryCover extends StatelessWidget {
+  const _LibraryCover({required this.path});
+
+  final String path;
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = _libraryCoverProvider(path);
+    if (provider == null) {
+      return Image.asset('assets/images/NoCoverArt.png', fit: BoxFit.cover);
+    }
+    return Image(
+      image: provider,
+      fit: BoxFit.cover,
+      gaplessPlayback: true,
+      errorBuilder: (_, __, ___) =>
+          Image.asset('assets/images/NoCoverArt.png', fit: BoxFit.cover),
     );
   }
 }
