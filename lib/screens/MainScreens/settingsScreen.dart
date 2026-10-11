@@ -16,12 +16,10 @@ import 'package:package_info_plus/package_info_plus.dart' as p_info;
 import 'package:provider/provider.dart';
 import 'package:jellybook/l10n/app_localizations.dart';
 import 'package:jellybook/providers/languageProvider.dart';
-import 'package:jellybook/widgets/SimpleUserCard.dart';
 import 'package:jellybook/widgets/SettingsItem.dart';
 import 'package:jellybook/widgets/jellybookImageCache.dart';
 import 'package:jellybook/widgets/readerCacheSettings.dart';
 import 'package:jellybook/variables.dart';
-import 'package:palette_generator_master/palette_generator_master.dart';
 
 import 'package:tentacle/tentacle.dart';
 
@@ -33,12 +31,10 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   String userName = '';
   String serverUrl = '';
-  Color textColor = Colors.black;
   SharedPreferences? prefs;
 
   // Cached profile card data so the list does not jump on every visit
   ImageProvider? _profilePic;
-  Color? _profileCardColor;
   bool _profileReady = false;
 
   @override
@@ -46,19 +42,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
     getPackageInfo();
     super.initState();
     // Settings.init();
-    setSharedPrefs().then((value) {
-      setState(() {});
+    setSharedPrefs().then((_) {
+      if (mounted) setState(() {});
     });
     _loadProfileCard();
   }
 
   Future<void> _loadProfileCard() async {
-    final pic = await getProfilePic();
-    final color = await getComplementaryColor(pic);
+    ImageProvider? picture;
+    try {
+      picture = await getProfilePic();
+    } catch (error) {
+      logger.e('Could not load settings profile: $error');
+    }
     if (!mounted) return;
     setState(() {
-      _profilePic = pic;
-      _profileCardColor = color;
+      _profilePic = picture;
       _profileReady = true;
     });
   }
@@ -115,58 +114,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     // ThemeManager themeManager = Provider.of<ThemeManager>(context);
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          (AppLocalizations.of(context)?.settings ?? 'Settings'),
+      // Match the Library screen's compact, centered black header.
+      appBar: PreferredSize(
+        preferredSize: Size.fromHeight(MediaQuery.of(context).padding.top + 36),
+        child: Container(
+          color: Colors.black.withOpacity(0.90),
+          padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
+          child: SizedBox(
+            height: 36,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Align(
+                  // Same notch-aware title alignment as the Library header.
+                  alignment: MediaQuery.of(context).padding.top > 30
+                      ? const Alignment(0, -0.7)
+                      : Alignment.center,
+                  child: Text(
+                    AppLocalizations.of(context)?.settings ?? 'Settings',
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
       body: Container(
         padding: const EdgeInsets.all(10),
         child: ListView(
           children: [
-            // Fixed height matches SimpleUserCard so the list never jumps
-            if (_profileReady && _profilePic != null)
-              SimpleUserCard(
-                cardColor: _profileCardColor ?? Colors.black,
-                userProfilePic: _profilePic!,
-                userName: userName,
-                userNameColor: textColor,
-                onTap: () {},
-                backgroundMotifColor: _profileCardColor ?? Colors.black,
-                subtitle: InkWell(
-                  onTap: () async {
-                    if (await canLaunchUrl(Uri.parse(serverUrl))) {
-                      await launchUrl(
-                        Uri.parse(serverUrl),
-                        mode: LaunchMode.externalApplication,
-                      );
-                    } else {
-                      throw 'Could not launch $serverUrl';
-                    }
-                  },
-                  child: Text(
-                    serverUrl,
-                    style: TextStyle(
-                      decoration: TextDecoration.underline,
-                      color: textColor,
-                    ),
-                  ),
-                ),
-              )
-            else
-              Container(
-                height: MediaQuery.of(context).size.height / 6,
-                margin: const EdgeInsets.only(bottom: 20),
-              ),
-            // should be comprised of widgets
-            /* themeSettings(context),
-            const SizedBox(
-              height: 20,
-            ),
-            */
-            const SizedBox(
-              height: 10,
-            ),
+            _buildProfileCard(context),
+            const SizedBox(height: 8),
             FutureBuilder(
               future: languageSettings(context),
               builder: (BuildContext context, AsyncSnapshot<Widget> snapshot) {
@@ -178,92 +161,96 @@ class _SettingsScreenState extends State<SettingsScreen> {
               },
             ),
             const SizedBox(
-              height: 20,
+              height: 8,
             ),
-            // pageTransitionSettings(),
-            FutureBuilder(
-              future: themeSettings(context),
-              builder: (BuildContext context, AsyncSnapshot snapshot) {
-                if (snapshot.hasData) {
-                  return snapshot.data;
-                } else {
-                  return Container();
-                }
-              },
-            ),
-            const SizedBox(
-              height: 20,
-            ),
-            FutureBuilder(
-              future: readingDirectionSettings(context),
-              builder: (BuildContext context, AsyncSnapshot snapshot) {
-                if (snapshot.hasData) {
-                  return snapshot.data;
-                } else {
-                  return Container();
-                }
-              },
-            ),
-            // readingDirectionSettings(context),
-            const SizedBox(
-              height: 20,
-            ),
+            // The two preferences share the same neutral card styling as
+            // Storage & cache. Each row opens a bottom-sheet selector.
+            _buildPreferencesCard(context),
+            const SizedBox(height: 8),
             const ReaderCacheSettings(),
-            const SizedBox(
-              height: 20,
-            ),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: logout,
-                icon: const Icon(Icons.logout_rounded),
-                label: const Text('Logout', style: TextStyle(fontSize: 20)),
+            const SizedBox(height: 8),
+            Card(
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.description_outlined),
+                    title: Text(AppLocalizations.of(context)?.licenses ?? 'Licenses'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () {
+                      showLicensePage(
+                        context: context,
+                        applicationName: 'Jellybook',
+                        applicationVersion: version,
+                        applicationIcon: Image.asset('assets/images/Logo.png'),
+                        applicationLegalese:
+                            'MIT License. Made with love by Kara Wilson',
+                      );
+                    },
+                  ),
+                  const Divider(height: 1, indent: 56),
+                  ListTile(
+                    leading: const Icon(Icons.logout_rounded),
+                    title: const Text('Log out'),
+                    onTap: logout,
+                  ),
+                ],
               ),
             ),
-            const SizedBox(
-              height: 20,
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProfileCard(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 25,
+              backgroundColor: scheme.surfaceContainerHighest,
+              foregroundImage: _profileReady ? _profilePic : null,
+              child: Icon(Icons.person_outline, color: scheme.onSurfaceVariant),
             ),
-            // experimentalFeaturesSettings(),
-            // button to show log file
-            // logToFile(),
-            // const SizedBox(
-            //   height: 20,
-            // ),
-            // SizedBox(
-            //   // depends on screen size
-            //   height: MediaQuery.of(context).size.height * 0.38,
-            // ),
-            SizedBox(
-              width: MediaQuery.of(context).size.width * 0.25,
-              child: ElevatedButton(
-                onPressed: () {
-                  showLicensePage(
-                    context: context,
-                    applicationName: 'Jellybook',
-                    applicationVersion: version,
-                    applicationIcon: Image.asset(
-                      'assets/images/Logo.png',
-                      width: MediaQuery.of(context).size.width * 0.4,
-                      height: MediaQuery.of(context).size.width * 0.4,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    userName.isNotEmpty ? userName : 'Account',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: scheme.onSurface,
                     ),
-                    applicationLegalese:
-                        'MIT License. Made with love by Kara Wilson',
-                  );
-                },
-                child: Text(
-                  AppLocalizations.of(context)?.licenses ?? 'Licenses',
-                  style: TextStyle(fontSize: 20),
-                ),
+                  ),
+                  if (serverUrl.isNotEmpty)
+                    InkWell(
+                      onTap: () async {
+                        final uri = Uri.tryParse(serverUrl);
+                        if (uri != null && await canLaunchUrl(uri)) {
+                          await launchUrl(uri,
+                              mode: LaunchMode.externalApplication);
+                        }
+                      },
+                      child: Text(
+                        serverUrl,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                ],
               ),
-            ),
-            const SizedBox(
-              height: 20,
-            ),
-            FutureBuilder(
-              future: aboutSettings(),
-              builder: (BuildContext context, AsyncSnapshot<Widget> snapshot) {
-                return snapshot.data ?? Container();
-              },
             ),
           ],
         ),
@@ -271,58 +258,136 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // theme settings (future builder to get the current theme and then change it)
-  Future<Widget> themeSettings(BuildContext context) async {
-    return SettingsItem(
-      title: AppLocalizations.of(context)?.theme ?? 'theme',
-      selected: await prefs!.getString('theme') ?? 'system',
-      backgroundColor: Theme.of(context).splashColor,
-      icon: Icons.color_lens,
-      values: <String, String>{
-        'system': AppLocalizations.of(context)?.systemTheme ?? 'System',
-        'light': AppLocalizations.of(context)?.lightTheme ?? 'Light',
-        'dark': AppLocalizations.of(context)?.darkTheme ?? 'Dark',
-        'amoled': AppLocalizations.of(context)?.amoledTheme ?? 'Amoled',
-      },
-      onChange: (value) async {
-        debugPrint('Value: $value');
-        SharedPreferences prefs = await SharedPreferences.getInstance();
-        ThemeChangeNotifier themeChangeNotifier =
-            Provider.of<ThemeChangeNotifier>(context, listen: false);
-        prefs.setString('theme', value.toString().toLowerCase());
-        themeChangeNotifier.setTheme = value.toString().toLowerCase();
-        setState(() {});
-      },
+  Widget _buildPreferencesCard(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final themeOptions = <String, String>{
+      'system': l10n?.systemTheme ?? 'System',
+      'light': l10n?.lightTheme ?? 'Light',
+      'dark': l10n?.darkTheme ?? 'Dark',
+      'amoled': l10n?.amoledTheme ?? 'AMOLED',
+    };
+    final directionOptions = <String, String>{
+      'LTR': l10n?.ltr ?? 'Left to Right',
+      'RTL': l10n?.rtl ?? 'Right to Left',
+      'Vertical': l10n?.vertical ?? 'Vertical',
+    };
+    final selectedTheme = prefs?.getString('theme') ?? 'system';
+    final selectedDirection = prefs?.getString('readingDirection') ?? 'LTR';
+
+    return Card(
+      child: Column(
+        children: [
+          _choiceTile(
+            icon: Icons.color_lens_outlined,
+            title: l10n?.theme ?? 'Theme',
+            value: themeOptions[selectedTheme] ?? themeOptions['system']!,
+            onTap: () async {
+              final selected = await _showChoices(
+                title: l10n?.theme ?? 'Theme',
+                options: themeOptions,
+                selected: selectedTheme,
+              );
+              if (!mounted || selected == null || selected == selectedTheme) {
+                return;
+              }
+              final sharedPrefs = await SharedPreferences.getInstance();
+              await sharedPrefs.setString('theme', selected);
+              if (!mounted) return;
+              prefs = sharedPrefs;
+              context.read<ThemeChangeNotifier>().setTheme = selected;
+              setState(() {});
+            },
+          ),
+          const Divider(height: 1, indent: 56),
+          _choiceTile(
+            icon: Icons.format_textdirection_l_to_r_rounded,
+            title: l10n?.readingDirection ?? 'Reading Direction',
+            value: directionOptions[selectedDirection] ?? directionOptions['LTR']!,
+            onTap: () async {
+              final selected = await _showChoices(
+                title: l10n?.readingDirection ?? 'Reading Direction',
+                options: directionOptions,
+                selected: selectedDirection,
+              );
+              if (!mounted || selected == null || selected == selectedDirection) {
+                return;
+              }
+              final sharedPrefs = await SharedPreferences.getInstance();
+              await sharedPrefs.setString('readingDirection', selected);
+              if (!mounted) return;
+              prefs = sharedPrefs;
+              setState(() {});
+            },
+          ),
+        ],
+      ),
     );
   }
 
-  Future<Color> getComplementaryColor(ImageProvider ip) async {
-    PaletteGeneratorMaster pg = await PaletteGeneratorMaster.fromImageProvider(ip);
-    Color color = pg.lightMutedColor?.color ?? Colors.white;
-    double hue = HSVColor.fromColor(color).hue;
-    double saturation = HSVColor.fromColor(color).saturation;
-    double value = HSVColor.fromColor(color).value;
-
-    double complementaryHue = (hue + 180) % 360;
-
-    // convert back to RGB
-    Color complementaryColor =
-        HSVColor.fromAHSV(1.0, complementaryHue, saturation, value).toColor();
-    int red = complementaryColor.red;
-    int green = complementaryColor.green;
-    int blue = complementaryColor.blue;
-    textColor = Color.fromARGB(255, 255 - red, 255 - green, 255 - blue);
-    return complementaryColor;
-
-    //
-    // logger.i('red: $red, green: $green, blue: $blue');
-    // red = 255 - red;
-    // green = 255 - green;
-    // blue = 255 - blue;
-    // return Color.fromARGB(255, red, green, blue);
+  Widget _choiceTile({
+    required IconData icon,
+    required String title,
+    required String value,
+    required VoidCallback onTap,
+  }) {
+    return ListTile(
+      leading: Icon(icon),
+      title: Text(title),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 130),
+            child: Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          const Icon(Icons.chevron_right),
+        ],
+      ),
+      onTap: onTap,
+    );
   }
 
-  Future<ImageProvider> getProfilePic() async {
+  Future<String?> _showChoices({
+    required String title,
+    required Map<String, String> options,
+    required String selected,
+  }) {
+    return showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+              child: Text(title,
+                  style: Theme.of(sheetContext).textTheme.titleMedium),
+            ),
+            ...options.entries.map((option) => ListTile(
+                  title: Text(option.value),
+                  trailing: option.key == selected
+                      ? const Icon(Icons.check_rounded)
+                      : null,
+                  onTap: () => Navigator.pop(sheetContext, option.key),
+                )),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<ImageProvider?> getProfilePic() async {
     p_info.PackageInfo packageInfo = await p_info.PackageInfo.fromPlatform();
     final prefs = await SharedPreferences.getInstance();
     final server = prefs.getString('server') ?? '';
@@ -363,7 +428,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     };
     final api = Tentacle(basePathOverride: server).getImageApi();
     Uint8List image = Uint8List(0);
-    ImageProvider imageProvider = Image.asset('assets/images/Logo.png').image;
+    ImageProvider? imageProvider;
     try {
       var response = await api.getUserImage(
         userId: userId,
@@ -702,81 +767,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         onChange: (value) async {
           SharedPreferences prefs = await SharedPreferences.getInstance();
           prefs.setString('pageTransition', value.toString());
-        },
-      );
-
-  // Reading Direction settings
-  Future<Widget> readingDirectionSettings(BuildContext context) async =>
-      SettingsItem(
-        // settingKey: 'readingDirection',
-        title: AppLocalizations.of(context)?.readingDirection ??
-            'Reading Direction',
-        selected: prefs?.getString('readingDirection') ?? 'LTR',
-        backgroundColor: Theme.of(context).splashColor,
-        icon: Icons.format_textdirection_l_to_r_rounded,
-        values: <String, String>{
-          'LTR': AppLocalizations.of(context)?.ltr ?? 'Left to Right',
-          'RTL': AppLocalizations.of(context)?.rtl ?? 'Right to Left',
-          'Vertical': AppLocalizations.of(context)?.vertical ?? "Vertical",
-        },
-        onChange: (value) async {
-          debugPrint(value);
-          prefs?.setString('readingDirection', value.toString());
-          setState(() {});
-        },
-      );
-
-  // about settings (should contain the version number and the link to the github repo, and author)
-  Future<Widget> aboutSettings() async => FutureBuilder(
-        future: getPackageInfo(),
-        builder: (context, snapshot) {
-          return Column(
-            children: [
-              // version number (should be a future builder)
-              Text(
-                (AppLocalizations.of(context)?.version ?? 'Version: ') +
-                    (version.isNotEmpty
-                        ? version
-                        : AppLocalizations.of(context)?.unknown ?? 'Unknown'),
-                style: const TextStyle(fontSize: 20),
-              ),
-              const SizedBox(
-                height: 10,
-              ),
-              Text(
-                "${AppLocalizations.of(context)?.madeBy ?? 'Made by'} Kara Wilson",
-                style: const TextStyle(fontSize: 20),
-              ),
-              const SizedBox(
-                height: 10,
-              ),
-              // insert https://github.com/Kara-Zor-El/JellyBook
-              InkWell(
-                child: const Text(
-                  "https://github.com/Kara-Zor-El/JellyBook",
-                  style: TextStyle(
-                    fontSize: 20,
-                    color: Colors.blue,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                onTap: () async {
-                  try {
-                    if (await canLaunchUrl(
-                      Uri.parse("https://github.com/Kara-Zor-El/JellyBook"),
-                    )) {
-                      await launchUrl(
-                        Uri.parse("https://github.com/Kara-Zor-El/JellyBook"),
-                        mode: LaunchMode.externalApplication,
-                      );
-                    }
-                  } catch (e) {
-                    logger.e(e.toString());
-                  }
-                },
-              ),
-            ],
-          );
         },
       );
 

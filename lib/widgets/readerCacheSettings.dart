@@ -181,7 +181,7 @@ class _ReaderCacheSettingsState extends State<ReaderCacheSettings> {
                     runSpacing: 6,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      Text('${_displayMb(_usageBytes)} MB of'),
+                      Text('${_displayMb(_usageBytes)} MB used of'),
                       OutlinedButton.icon(
                         onPressed: _busy ? null : _editLimit,
                         icon: const Icon(Icons.edit_outlined, size: 16),
@@ -219,22 +219,24 @@ class _ReaderCacheSettingsState extends State<ReaderCacheSettings> {
                   child: Text('Cover image cache',
                       style: Theme.of(context).textTheme.titleSmall),
                 ),
-                if (!_loading)
-                  Text('${_displayMb(_coverUsageBytes)} MB used',
-                      style: Theme.of(context).textTheme.bodyMedium),
               ],
             ),
             Text(
               'Covers and profile images are stored separately',
               style: Theme.of(context).textTheme.bodySmall,
             ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: _busy ? null : _clearCovers,
-                icon: const Icon(Icons.delete_outline),
-                label: const Text('Clear covers'),
-              ),
+            Row(
+              children: [
+                if (!_loading)
+                  Text('${_displayMb(_coverUsageBytes)} MB used',
+                      style: Theme.of(context).textTheme.bodyMedium),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: _busy ? null : _clearCovers,
+                  icon: const Icon(Icons.delete_outline),
+                  label: const Text('Clear covers'),
+                ),
+              ],
             ),
           ],
         ),
