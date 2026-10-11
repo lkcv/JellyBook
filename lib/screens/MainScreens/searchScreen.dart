@@ -1,6 +1,7 @@
 // The purpose of this screen is to allow the user to search for a specific book/comic
 import 'dart:ffi';
 import 'dart:math';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
@@ -166,30 +167,68 @@ class _SearchScreenState extends State<SearchScreen> {
         }
       },
       child: Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          tooltip: MaterialLocalizations.of(context).backButtonTooltip,
-          onPressed: _handleBack,
-        ),
-        title: Container(
-          width: double.infinity,
-          height: 40,
-          decoration: BoxDecoration(
-            color: Theme.of(context).primaryColor,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Center(
-            child: TextField(
-              autofocus: true,
-              controller: _searchController,
-              decoration: InputDecoration(
-                prefixIcon: const Icon(Icons.search),
-                hintText:
-                    (AppLocalizations.of(context)?.search ?? 'Search') + '...',
-                border: InputBorder.none,
-              ),
-              onChanged: _onQueryChanged,
+      // Let results scroll behind the 90%-opaque header; the grid below
+      // reserves the header height so its first row is fully visible.
+      extendBodyBehindAppBar: true,
+      appBar: PreferredSize(
+        // Settings-style translucent header with breathing room around the pill.
+        preferredSize: ui.Size.fromHeight(MediaQuery.of(context).padding.top + 48),
+        child: Container(
+          color: Colors.black.withOpacity(0.90),
+          padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
+          child: SizedBox(
+            height: 48,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // Equal left/right margins center the pill on the *screen*,
+                // rather than in the space remaining after the back button.
+                Positioned.fill(
+                  left: 48,
+                  right: 48,
+                  child: Center(
+                    child: Container(
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).primaryColor.withOpacity(0.90),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: TextField(
+                        autofocus: true,
+                        controller: _searchController,
+                        textAlignVertical: TextAlignVertical.center,
+                        decoration: InputDecoration(
+                          isDense: true,
+                          contentPadding: EdgeInsets.zero,
+                          prefixIcon: const Icon(Icons.search),
+                          prefixIconConstraints: const BoxConstraints(
+                            minWidth: 40,
+                            minHeight: 36,
+                          ),
+                          hintText: (AppLocalizations.of(context)?.search ??
+                                  'Search') +
+                              '...',
+                          border: InputBorder.none,
+                        ),
+                        onChanged: _onQueryChanged,
+                      ),
+                    ),
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: IconButton(
+                    icon: const Icon(Icons.arrow_back, color: Colors.white),
+                    tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+                    onPressed: _handleBack,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 48,
+                      minHeight: 36,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -216,7 +255,12 @@ class _SearchScreenState extends State<SearchScreen> {
                     )
           : GridView.builder(
               controller: _resultsScrollController,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              padding: EdgeInsets.fromLTRB(
+                10,
+                MediaQuery.of(context).padding.top + 48 + 8,
+                10,
+                8,
+              ),
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 2,
                 crossAxisSpacing: 8,
