@@ -31,8 +31,10 @@ class SearchScreen extends StatefulWidget {
 }
 
 // _SearchScreenState
-class _SearchScreenState extends State<SearchScreen> {
+class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver {
   final _searchController = TextEditingController();
+  final _searchFocusNode = FocusNode();
+  bool _keyboardWasVisible = false;
   final _resultsScrollController = ScrollController();
   final isar = Isar.getInstance();
   List<Entry> _catalog = [];
@@ -42,7 +44,24 @@ class _SearchScreenState extends State<SearchScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _refreshCatalog();
+  }
+
+  @override
+  void didChangeMetrics() {
+    if (!mounted) return;
+
+    // Android Back can hide the IME without unfocusing the TextField.
+    // Only unfocus once the keyboard is fully hidden, so we do not
+    // interfere with its dismissal animation.
+    final keyboardVisible = View.of(context).viewInsets.bottom > 0;
+    if (keyboardVisible) {
+      _keyboardWasVisible = true;
+    } else if (_keyboardWasVisible) {
+      _keyboardWasVisible = false;
+      _searchFocusNode.unfocus();
+    }
   }
 
   Future<void> _refreshCatalog() async {
@@ -61,6 +80,8 @@ class _SearchScreenState extends State<SearchScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _searchFocusNode.dispose();
     _searchController.dispose();
     _resultsScrollController.dispose();
     super.dispose();
@@ -195,6 +216,7 @@ class _SearchScreenState extends State<SearchScreen> {
                       ),
                       child: TextField(
                         autofocus: true,
+                        focusNode: _searchFocusNode,
                         controller: _searchController,
                         textAlignVertical: TextAlignVertical.center,
                         decoration: InputDecoration(
