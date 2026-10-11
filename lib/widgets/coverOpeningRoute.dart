@@ -152,16 +152,17 @@ class _CoverOpeningTransition extends StatelessWidget {
           return Stack(
             fit: StackFit.expand,
             children: [
+              // The route is non-opaque so the Collection can be revealed as
+              // the cover shrinks. Keep it completely hidden while the reader
+              // fades to black; otherwise the grid flashes through mid-fade.
+              ColoredBox(
+                color: Colors.black.withOpacity(1.0 - shrink),
+              ),
               Opacity(opacity: 1.0 - coverFade, child: destination!),
               IgnorePointer(
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    ColoredBox(
-                      color: Colors.black.withOpacity(
-                        0.90 * coverFade * (1.0 - shrink),
-                      ),
-                    ),
                     Positioned.fromRect(
                       rect: returningRect,
                       child: Opacity(
