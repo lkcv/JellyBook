@@ -38,7 +38,11 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
     fetchPage: _fetchPage,
   );
 
-  bool force = false;
+  late Future<(List<Entry>, List<Folder>)> _categoriesFuture;
+  bool _initialCoversReady = false;
+  // Keep decoded startup covers alive until the first grid frame is painted.
+  final List<({ImageStream stream, ImageStreamListener listener,
+    Completer<void> ready})> _startupCoverPins = [];
 
   ConnectionManager? _connectionManager;
   bool _wasOffline = false;
@@ -58,7 +62,28 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    // Never reissue a category request merely because a parent rebuilds.
+    _categoriesFuture = getServerCategories(force: false);
     WidgetsBinding.instance.addObserver(this);
+  }
+
+  Future<void> _reloadCategories() async {
+    final future = getServerCategories(force: true);
+    setState(() => _categoriesFuture = future);
+    try {
+      await future;
+    } catch (_) {
+      // The FutureBuilder displays the error or the last successful grid.
+    }
+  }
+
+  void _releaseStartupCoverPins() {
+    for (final pin in _startupCoverPins) {
+      pin.stream.removeListener(pin.listener);
+      // Let any in-progress warm finish if this widget is disposed.
+      if (!pin.ready.isCompleted) pin.ready.complete();
+    }
+    _startupCoverPins.clear();
   }
 
   @override
@@ -97,7 +122,14 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
   ({int first, int end}) _visibleCoverRange(int count) {
     if (count == 0) return (first: 0, end: 0);
     if (!_libraryScrollController.hasClients) {
-      return (first: 0, end: math.min(count, 10));
+      // During cold startup the grid is deliberately not mounted yet.
+      // Estimate the visible rows to decode them before the first grid frame.
+      final width = math.max(1.0, MediaQuery.sizeOf(context).width - 16);
+      final rowHeight = ((width - 6) / 2) / 0.63 + 6;
+      final gridTop = MediaQuery.paddingOf(context).top + 48;
+      final rows = math.max(1,
+          ((MediaQuery.sizeOf(context).height - gridTop) / rowHeight).ceil() + 1);
+      return (first: 0, end: math.min(count, math.max(10, rows * 2)));
     }
     final viewport = _libraryScrollController.position.viewportDimension;
     final offset = _libraryScrollController.offset;
@@ -121,6 +153,7 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
     try {
       final folders = _lastFolders;
       if (folders == null) return;
+      final signatureAtStart = _coverSignature;
       final range = _visibleCoverRange(folders.length);
       // At most two concurrent decodes, joining the exact same providers
       // used by SeriesCard. Avoid competing with navigation/reader work.
@@ -129,6 +162,15 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
           for (var j = i; j < math.min(range.end, i + 2); j++)
             _warmCover(folders[j].image),
         ]);
+      }
+      if (_canWarm && !_initialCoversReady &&
+          signatureAtStart == _coverSignature) {
+        setState(() => _initialCoversReady = true);
+        // Image widgets subscribe to the pinned streams in this frame.
+        // Release the extra listeners only after those widgets have mounted.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _releaseStartupCoverPins();
+        });
       }
     } finally {
       _warming = false;
@@ -141,10 +183,34 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
 
   Future<void> _warmCover(String path) async {
     if (!_canWarm) return;
-    final provider = _libraryCoverProvider(path);
+    final provider = _libraryCoverProvider(path, context);
     if (provider == null) return;
     try {
-      await precacheImage(provider, context, onError: (_, __) {});
+      if (!_initialCoversReady) {
+        // Unlike precacheImage, this listener remains attached across frames.
+        // Previously warmed images cannot be evicted before the grid appears.
+        final ready = Completer<void>();
+        final stream = provider.resolve(createLocalImageConfiguration(context));
+        final listener = ImageStreamListener(
+          (image, synchronousCall) {
+            image.dispose();
+            if (!ready.isCompleted) ready.complete();
+          },
+          onError: (error, stackTrace) {
+            // Missing covers are shown by Image.errorBuilder later.
+            if (!ready.isCompleted) ready.complete();
+          },
+        );
+        _startupCoverPins.add((
+          stream: stream,
+          listener: listener,
+          ready: ready,
+        ));
+        stream.addListener(listener);
+        await ready.future;
+      } else {
+        await precacheImage(provider, context, onError: (_, __) {});
+      }
     } catch (_) {
       // Offline, unreadable, or missing covers should not block others.
     }
@@ -198,9 +264,7 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
       if (mounted) {
         logger.d('MainMenu: connection restored, refreshing library');
         _pagingController.refresh();
-        setState(() {
-          force = true;
-        });
+        unawaited(_reloadCategories());
       }
     }
   }
@@ -269,6 +333,7 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
   void dispose() {
     _inForeground = false;
     WidgetsBinding.instance.removeObserver(this);
+    _releaseStartupCoverPins();
     _libraryScrollController.dispose();
     _connectionManager?.removeListener(_onConnectionChanged);
     _progressRevision.dispose();
@@ -311,9 +376,7 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
               onPressed: () {
                 Navigator.of(dialogContext).pop();
                 _pagingController.refresh();
-                setState(() {
-                  force = true;
-                });
+                unawaited(_reloadCategories());
               },
               child: const Text("Retry"),
             ),
@@ -394,17 +457,15 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
       body: RefreshIndicator(
         onRefresh: () async {
           _pagingController.refresh();
-          setState(() {
-            force = true;
-          });
+          await _reloadCategories();
         },
         child: FutureBuilder<(List<Entry>, List<Folder>)>(
-          future: getServerCategories(force: force),
+          future: _categoriesFuture,
           builder: (context, AsyncSnapshot snapshot) {
             // while loading/refreshing, keep showing the last grid if we have one
             if (snapshot.connectionState != ConnectionState.done) {
               final cached = _lastFolders;
-              return cached != null
+              return cached != null && _initialCoversReady
                   ? _buildGrid(cached)
                   : const Center(child: CircularProgressIndicator());
             }
@@ -413,7 +474,9 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
               final List<Folder> folders = snapshot.data.$2 ?? <Folder>[];
               _lastFolders = folders;
               _onFoldersLoaded(folders);
-              return _buildGrid(folders);
+              return _initialCoversReady
+                  ? _buildGrid(folders)
+                  : const Center(child: CircularProgressIndicator());
             }
 
             if (snapshot.hasError) {
@@ -426,7 +489,9 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
               if (cached != null && cached.isNotEmpty) {
                 _lastFolders = cached;
                 _onFoldersLoaded(cached);
-                return _buildGrid(cached);
+                return _initialCoversReady
+                    ? _buildGrid(cached)
+                    : const Center(child: CircularProgressIndicator());
               }
               return const Center(child: Icon(Icons.cloud_off, size: 48));
             }
@@ -587,15 +652,23 @@ class _SeriesCardState extends State<SeriesCard> {
 
 // A single provider factory for both the displayed cover and its precache.
 // The shared manager also serves Collection/reader cover warmups.
-ImageProvider? _libraryCoverProvider(String path) {
+ImageProvider? _libraryCoverProvider(String path, BuildContext context) {
   if (path.isEmpty || path.toLowerCase() == 'asset') return null;
+  final ImageProvider source;
   if (path.contains('http')) {
-    return CachedNetworkImageProvider(
+    source = CachedNetworkImageProvider(
       coverUrl(path),
       cacheManager: JellyBookCacheManager.instance,
     );
+  } else {
+    source = FileImage(File(path));
   }
-  return FileImage(File(path));
+  // The rendered grid and the warm queue MUST use the same decoded-image key.
+  // Decode near displayed size rather than keeping huge source bitmaps in RAM.
+  final tileWidth = (MediaQuery.sizeOf(context).width - 22) / 2;
+  final pixelWidth = math.max(1,
+      (tileWidth * MediaQuery.devicePixelRatioOf(context)).ceil());
+  return ResizeImage.resizeIfNeeded(pixelWidth, null, source);
 }
 
 class _LibraryCover extends StatelessWidget {
@@ -605,7 +678,7 @@ class _LibraryCover extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final provider = _libraryCoverProvider(path);
+    final provider = _libraryCoverProvider(path, context);
     if (provider == null) {
       return Image.asset('assets/images/NoCoverArt.png', fit: BoxFit.cover);
     }

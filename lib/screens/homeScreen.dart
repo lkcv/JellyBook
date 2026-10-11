@@ -73,12 +73,20 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  List<Widget> get screens => [
-        MainMenu(),
-        DownloadsScreen(),
-        SearchScreen(onBack: _goBackFromSearch),
-        SettingsScreen(),
-      ];
+  // Keep the Library mounted to retain its image listeners and scroll state.
+  // Other tabs are still disposed when they are no longer selected.
+  Widget _otherTab() {
+    switch (_selectedIndex) {
+      case 1:
+        return DownloadsScreen();
+      case 2:
+        return SearchScreen(onBack: _goBackFromSearch);
+      case 3:
+        return SettingsScreen();
+      default:
+        return const SizedBox.shrink();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -100,7 +108,13 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       resizeToAvoidBottomInset: true,
       extendBody: true,
-      body: screens[_selectedIndex],
+      body: IndexedStack(
+        index: _selectedIndex == 0 ? 0 : 1,
+        children: [
+          MainMenu(),
+          _otherTab(),
+        ],
+      ),
       bottomNavigationBar: Theme.of(context).platform == TargetPlatform.iOS
           ? CupertinoTabBar(
               backgroundColor: Theme.of(context).brightness == Brightness.dark
