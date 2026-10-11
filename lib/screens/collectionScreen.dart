@@ -14,10 +14,8 @@ import 'package:flutter_star/flutter_star.dart';
 import 'package:jellybook/models/folder.dart';
 import 'package:jellybook/screens/infoScreen.dart';
 import 'package:jellybook/providers/fixRichText.dart';
-import 'package:fancy_shimmer_image/fancy_shimmer_image.dart';
 import 'package:jellybook/l10n/app_localizations.dart';
 import 'package:jellybook/variables.dart';
-import 'package:jellybook/widgets/roundedImageWithShadow.dart';
 import 'package:jellybook/widgets/jellybookImageCache.dart';
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:jellybook/screens/readingScreen.dart';
@@ -67,6 +65,8 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
   bool _warming = false;
   bool _warmAgain = false;
   bool _inForeground = true;
+  bool _coverWarmingPaused = false;
+  int _coverWarmGeneration = 0;
 
   @override
   void initState() {
@@ -99,9 +99,15 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
     super.dispose();
   }
 
+  // A new Future result or an explicit lifecycle/navigation event may start
+  // warming. Ordinary builds of the same list must not restart the queue.
   void _scheduleCoverWarming([List<Entry>? entries]) {
-    if (entries != null) _latestEntries = entries;
-    if (!mounted || !_inForeground || _latestEntries == null) return;
+    if (entries != null) {
+      if (identical(entries, _latestEntries)) return;
+      _latestEntries = entries;
+    }
+    if (!mounted || !_inForeground || _coverWarmingPaused ||
+        _latestEntries == null) return;
     if (_warming) {
       _warmAgain = true;
       return;
@@ -110,10 +116,45 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
     _warmScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _warmScheduled = false;
-      if (!mounted || !_inForeground ||
-          !(ModalRoute.of(context)?.isCurrent ?? true)) return;
+      if (!_canWarmCovers(_coverWarmGeneration)) return;
       unawaited(_precacheCollectionCovers(_latestEntries!));
     });
+  }
+
+  bool _canWarmCovers(int generation) =>
+      mounted && _inForeground && !_coverWarmingPaused &&
+      generation == _coverWarmGeneration &&
+      (ModalRoute.of(context)?.isCurrent ?? true);
+
+  void _pauseCoverWarming() {
+    _coverWarmingPaused = true;
+    // Let already-started image loads finish and enter the cache, but prevent
+    // their old queue from continuing if the user returns quickly.
+    _coverWarmGeneration++;
+    _warmAgain = false;
+  }
+
+  void _resumeCoverWarming() {
+    if (!mounted) return;
+    _coverWarmingPaused = false;
+    // Revisit remaining covers; already decoded ones are skipped below.
+    _scheduleCoverWarming();
+  }
+
+  Future<T?> _pushWithPausedCovers<T extends Object?>(
+      TransitionRoute<T> route) async {
+    _pauseCoverWarming();
+    try {
+      return await Navigator.of(context).push<T>(route);
+    } finally {
+      // Navigator.push completes when pop begins; wait for the return
+      // transition to finish before starting new image decodes.
+      try {
+        await route.completed;
+      } finally {
+        _resumeCoverWarming();
+      }
+    }
   }
 
   // Estimate which cards GridView.builder is currently displaying.
@@ -134,8 +175,9 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
     );
   }
 
-  Future<void> _warmCover(String path, {bool waitForVisible = false}) async {
-    if (!mounted || !_inForeground || path.isEmpty ||
+  Future<void> _warmCover(String path, int generation,
+      {bool waitForVisible = false}) async {
+    if (!_canWarmCovers(generation) || path.isEmpty ||
         path.toLowerCase() == 'asset') return;
     try {
       final ImageProvider provider;
@@ -149,6 +191,9 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
         if (!await file.exists()) return;
         provider = FileImage(file);
       }
+      // Don't begin a decode after a local-file existence check finishes
+      // if navigation happened while that filesystem operation was pending.
+      if (!_canWarmCovers(generation)) return;
       // A completed image may have been evicted since a prior prewarm.
       // For visible covers, await their first frame even if still pending.
       if (!waitForVisible &&
@@ -164,6 +209,8 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
       _warmAgain = true;
       return;
     }
+    final generation = _coverWarmGeneration;
+    if (!_canWarmCovers(generation)) return;
     _warming = true;
     try {
       final range = _visibleCoverRange(entries.length);
@@ -171,8 +218,10 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
       // on offscreen covers after the initial viewport is ready.
       await Future.wait([
         for (var i = range.first; i < range.end; i++)
-          _warmCover(entries[i].imagePath, waitForVisible: true),
+          _warmCover(entries[i].imagePath, generation,
+              waitForVisible: true),
       ]);
+      if (!_canWarmCovers(generation)) return;
 
       final seen = <String>{};
       final remaining = <int>[];
@@ -186,8 +235,7 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
       // Keep a small background budget; prioritize whichever covers are now
       // closest to the viewport, even if the user has scrolled meanwhile.
       const batchSize = 2;
-      while (remaining.isNotEmpty && mounted && _inForeground &&
-          (ModalRoute.of(context)?.isCurrent ?? true)) {
+      while (remaining.isNotEmpty && _canWarmCovers(generation)) {
         final visible = _visibleCoverRange(entries.length);
         int distance(int index) => index < visible.first
             ? visible.first - index
@@ -196,14 +244,15 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
         final batch = remaining.take(batchSize).toList();
         remaining.removeRange(0, batch.length);
         await Future.wait([
-          for (final index in batch) _warmCover(entries[index].imagePath),
+          for (final index in batch)
+            _warmCover(entries[index].imagePath, generation),
         ]);
         // Yield to normal scrolling/painting between small batches.
         await Future<void>.delayed(const Duration(milliseconds: 16));
       }
     } finally {
       _warming = false;
-      if (_warmAgain && mounted && _inForeground) {
+      if (_warmAgain && mounted && _inForeground && !_coverWarmingPaused) {
         _warmAgain = false;
         _scheduleCoverWarming();
       }
@@ -307,8 +356,7 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
                             .filter()
                             .idEqualTo(entry.id)
                             .findFirstSync();
-                        await Navigator.push(
-                          context,
+                        await _pushWithPausedCovers(
                           MaterialPageRoute(
                             builder: (context) => collectionScreen(
                               folderId: folder!.id,
@@ -356,8 +404,7 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
                       if (isArchive && (entry.downloaded || streamable)) {
                         final firstPageReady = ValueNotifier<bool>(false);
                         final skipReturnFade = ValueNotifier<bool>(false);
-                        await Navigator.push(
-                          context,
+                        await _pushWithPausedCovers(
                           CoverOpeningRoute(
                             sourceRect: coverRect,
                             coverPath: entry.imagePath,
@@ -377,8 +424,7 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
                       }
                       // Other downloaded formats keep their existing reader.
                       if (entry.downloaded) {
-                        await Navigator.push(
-                          context,
+                        await _pushWithPausedCovers(
                           MaterialPageRoute(
                             builder: (context) => ReadingScreen(
                               title: entry.title,
@@ -390,8 +436,7 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
                         return;
                       }
                       // For other formats, show the info screen
-                      var result = await Navigator.push(
-                        context,
+                      var result = await _pushWithPausedCovers(
                         MaterialPageRoute(
                           builder: (context) => InfoScreen(entry: entry),
                         ),
@@ -406,8 +451,7 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
                       }
                     },
                     onEntryLongPressed: () async {
-                      var result = await Navigator.push(
-                        context,
+                      var result = await _pushWithPausedCovers(
                         MaterialPageRoute(
                           builder: (context) => InfoScreen(entry: entry),
                         ),
@@ -533,11 +577,7 @@ class KuroStyleBookCardState extends State<KuroStyleBookCard> {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      RoundedImageWithShadow(
-                        imageUrl: widget.entry.imagePath,
-                        radius: _imageRadius,
-                        shadowColor: Colors.transparent,
-                      ),
+                      _CollectionCoverImage(path: widget.entry.imagePath),
                       Positioned(
                         top: 2,
                         left: 2,
@@ -608,6 +648,40 @@ class KuroStyleBookCardState extends State<KuroStyleBookCard> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Display Collection covers using the shared cache provider without the
+/// extra layout and placeholder widgets of RoundedImageWithShadow.
+/// The enclosing card already provides the cover's shape and clipping.
+class _CollectionCoverImage extends StatelessWidget {
+  const _CollectionCoverImage({required this.path});
+
+  final String path;
+
+  @override
+  Widget build(BuildContext context) {
+    if (path.isEmpty || path.toLowerCase() == 'asset') {
+      return Image.asset('assets/images/NoCoverArt.png', fit: BoxFit.cover);
+    }
+
+    final ImageProvider provider;
+    if (path.contains('http')) {
+      provider = CachedNetworkImageProvider(
+        coverUrl(path),
+        cacheManager: JellyBookCacheManager.instance,
+      );
+    } else {
+      provider = FileImage(File(path));
+    }
+
+    return Image(
+      image: provider,
+      fit: BoxFit.cover,
+      gaplessPlayback: true,
+      errorBuilder: (context, error, stackTrace) =>
+          Image.asset('assets/images/NoCoverArt.png', fit: BoxFit.cover),
     );
   }
 }
