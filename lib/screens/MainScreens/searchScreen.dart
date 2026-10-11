@@ -8,6 +8,12 @@ import 'package:isar_flutter_libs/isar_flutter_libs.dart';
 import 'package:jellybook/models/entry.dart';
 import 'package:jellybook/providers/fixRichText.dart';
 import 'package:jellybook/screens/infoScreen.dart';
+import 'package:jellybook/screens/readingScreen.dart';
+import 'package:jellybook/screens/readingScreens/cbrCbzReader.dart';
+import 'package:jellybook/providers/readerPageCache.dart';
+import 'package:jellybook/providers/connectionManager.dart';
+import 'package:jellybook/widgets/coverOpeningRoute.dart';
+import 'package:provider/provider.dart';
 import 'package:fancy_shimmer_image/fancy_shimmer_image.dart';
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:string_similarity/string_similarity.dart';
@@ -30,11 +36,105 @@ class SearchScreen extends StatefulWidget {
 class _SearchScreenState extends State<SearchScreen> {
   final _searchController = TextEditingController();
   final isar = Isar.getInstance();
+  List<Entry> _catalog = [];
+  bool _catalogReady = false;
+  int _catalogVersion = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshCatalog();
+  }
+
+  Future<void> _refreshCatalog() async {
+    final version = ++_catalogVersion;
+    final books = await isar!.entrys
+        .filter()
+        .typeEqualTo(EntryType.book)
+        .or()
+        .typeEqualTo(EntryType.comic)
+        .findAll();
+    if (!mounted || version != _catalogVersion) return;
+    _catalog = books;
+    _catalogReady = true;
+    getSearchResults(_searchController.text);
+  }
 
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  // Search is a bottom-navigation tab. A reader pushed from here should pop
+  // back to the same query and scroll position, not open the Collection.
+  Future<void> _openResult(Entry entry, Rect sourceRect) async {
+    if (!mounted) return;
+
+    final connectionStatus = context.read<ConnectionManager>().status;
+    if (connectionStatus == ConnectionStatus.offline && !entry.downloaded) {
+      final cachedIndex =
+          await ReaderPageCache.getCurrentPage(entry.id) ?? entry.pageNum;
+      final cachedPage = await ReaderPageCache.getPage(entry.id, cachedIndex);
+      if (!mounted) return;
+      if (cachedPage == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Server is offline and this page is not cached'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+        return;
+      }
+    }
+
+    final extension = entry.path.split('.').last.toLowerCase();
+    final isArchive = const ['cbz', 'cbr', 'zip', 'rar'].contains(extension);
+    final streamable = extension == 'cbz' || extension == 'cbr';
+    if (isArchive && (entry.downloaded || streamable)) {
+      final firstPageReady = ValueNotifier<bool>(false);
+      final skipReturnFade = ValueNotifier<bool>(false);
+      final route = CoverOpeningRoute<void>(
+        sourceRect: sourceRect,
+        coverPath: entry.imagePath,
+        pageReady: firstPageReady,
+        skipReturnFade: skipReturnFade,
+        builder: (context) => CbrCbzReader(
+          title: entry.title,
+          comicId: entry.id,
+          openedDirectly: true,
+          openingReady: firstPageReady,
+          skipReturnFade: skipReturnFade,
+        ),
+      );
+      await Navigator.of(context).push<void>(route);
+      // push() completes when pop starts, not after the cover shrinks.
+      // Avoid rebuilding the underlying search list during that animation.
+      await route.completed;
+    } else if (entry.downloaded) {
+      final route = MaterialPageRoute<void>(
+        builder: (context) => ReadingScreen(
+          title: entry.title,
+          comicId: entry.id,
+        ),
+      );
+      await Navigator.of(context).push<void>(route);
+      await route.completed;
+    } else {
+      await _openInfo(entry);
+      return;
+    }
+
+    if (mounted) await _refreshCatalog();
+  }
+
+  Future<void> _openInfo(Entry entry) async {
+    final route = MaterialPageRoute<dynamic>(
+      builder: (context) => InfoScreen(entry: entry),
+    );
+    await Navigator.of(context).push<dynamic>(route);
+    await route.completed;
+    if (mounted) await _refreshCatalog();
   }
 
   List<Entry> searchResults = [];
@@ -83,20 +183,15 @@ class _SearchScreenState extends State<SearchScreen> {
                     (AppLocalizations.of(context)?.search ?? 'Search') + '...',
                 border: InputBorder.none,
               ),
-              onChanged: (value) async {
-                await getSearchResults(value);
-              },
-              onSubmitted: (value) async {
-                await getSearchResults(value);
-              },
+              onChanged: getSearchResults,
             ),
           ),
         ),
       ),
 
       // body based on if searchResults is 0 or not
-      body: searchResults.length == 0
-          ? _searchController.text.toString().length == 0
+      body: searchResults.isEmpty
+          ? _searchController.text.trim().isEmpty
               ? Center(
                   child: Text(
                       AppLocalizations.of(context)?.searchBook ??
@@ -105,18 +200,20 @@ class _SearchScreenState extends State<SearchScreen> {
                         fontSize: 20,
                       )),
                 )
-              : Center(
-                  child: Text(
-                      AppLocalizations.of(context)?.noResults ??
-                          'No results found',
-                      style: const TextStyle(
-                        fontSize: 20,
-                      )),
-                )
-          : ListView(
-              children: [
-                for (var i = 0; i < searchResults.length; i++)
-                  Card(
+              : !_catalogReady
+                  ? const Center(child: CircularProgressIndicator())
+                  : Center(
+                      child: Text(
+                          AppLocalizations.of(context)?.noResults ??
+                              'No results found',
+                          style: const TextStyle(fontSize: 20)),
+                    )
+          : ListView.builder(
+              itemCount: searchResults.length,
+              itemBuilder: (context, i) {
+                final entry = searchResults[i];
+                final coverKey = GlobalKey();
+                return Card(
                     child: InkWell(
                       child: Row(
                         children: [
@@ -125,6 +222,7 @@ class _SearchScreenState extends State<SearchScreen> {
                             child: SizedBox(
                               width: MediaQuery.of(context).size.width * 0.2,
                               child: Container(
+                                key: coverKey,
                                 width: MediaQuery.of(context).size.width * 0.2,
                                 height: MediaQuery.of(context).size.width * 0.3,
                                 decoration: BoxDecoration(
@@ -139,7 +237,7 @@ class _SearchScreenState extends State<SearchScreen> {
                                   ],
                                 ),
                                 child: RoundedImageWithShadow(
-                                  imageUrl: searchResults[i].imagePath,
+                                  imageUrl: entry.imagePath,
                                 ),
                               ),
                             ),
@@ -153,7 +251,7 @@ class _SearchScreenState extends State<SearchScreen> {
                                   padding: const EdgeInsets.only(
                                       top: 8.0, bottom: 4.0),
                                   child: AutoSizeText(
-                                    searchResults[i].title,
+                                    entry.title,
                                     style: const TextStyle(
                                       fontSize: 20,
                                       fontWeight: FontWeight.bold,
@@ -169,7 +267,7 @@ class _SearchScreenState extends State<SearchScreen> {
                                     TextSpan(
                                       text: "\t\t\t" +
                                           fixRichText(
-                                              searchResults[i].description),
+                                              entry.description),
                                       style: const TextStyle(
                                         fontSize: 14,
                                         color: Colors.grey,
@@ -185,68 +283,62 @@ class _SearchScreenState extends State<SearchScreen> {
                         ],
                       ),
                       onTap: () async {
-                        await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => InfoScreen(
-                                entry: searchResults[i],
-                              ),
-                            )).whenComplete(() async {
-                          // update the search results
-                          await getSearchResults(
-                              _searchController.text.toString());
-                        });
+                        final object = coverKey.currentContext?.findRenderObject();
+                        final coverRect = object is RenderBox && object.hasSize
+                            ? object.localToGlobal(Offset.zero) & object.size
+                            : Rect.zero;
+                        await _openResult(entry, coverRect);
+                      },
+                      // Keep the info screen available without making it an
+                      // intermediate route between Search and the reader.
+                      onLongPress: () async {
+                        await _openInfo(entry);
                       },
                     ),
-                  ),
-              ],
+                  );
+              },
             ),
     ),  // Scaffold
     );  // PopScope
   }
 
-  Future<void> getSearchResults(String searchQuery) async {
-    // get the search results from the database
-    var isar = Isar.getInstance();
-    // var books = await isar!.entrys
-    //     .filter()
-    //     .titleContains(searchQuery, caseSensitive: false)
-    //     .typeContains("book", caseSensitive: false)
-    //     .or()
-    //     .titleContains(searchQuery, caseSensitive: false)
-    //     .typeContains("comic", caseSensitive: false)
-    //     .findAll();
-    // instead of using the exact search query, we will fuzzy search
-    var books = await isar!.entrys
-        .filter()
-        .typeEqualTo(EntryType.book)
-        .or()
-        .typeEqualTo(EntryType.comic)
-        .findAll();
+  void getSearchResults(String searchQuery) {
+    final query = searchQuery.trim().toLowerCase();
+    if (query.isEmpty || !_catalogReady) {
+      setState(() => searchResults = []);
+      return;
+    }
 
-    books = diceCoefficientRankings(searchQuery, books);
+    // Title matches come first, so typing a series name remains predictable.
+    // Preserve the existing fuzzy search for queries with no direct matches.
+    final direct = _catalog
+        .where((entry) => entry.title.toLowerCase().contains(query))
+        .toList();
+    final matches = direct.isNotEmpty
+        ? direct
+        : diceCoefficientRankings(query, _catalog);
+    matches.sort((a, b) => _naturalTitleCompare(a.title, b.title));
+    setState(() => searchResults = matches);
+  }
 
-    // convert the results to a list of maps
-    // List<Map<String, dynamic>> results = [];
-    // books.forEach((element) {
-    //   results.add({
-    //     "name": element.title,
-    //     "imagePath": element.imagePath,
-    //     "description": element.description,
-    //     "tags": element.tags,
-    //     "url": element.url,
-    //     "year": element.releaseDate,
-    //     "rating": element.rating,
-    //     "stars": element.rating,
-    //     "path": element.path,
-    //     "id": element.id,
-    //     "isLiked": element.isFavorited,
-    //     "isDownloaded": element.downloaded,
-    //   });
-    // });
-    setState(() {
-      searchResults = books;
-    });
+  // Compare runs of digits numerically: Volume 2 before Volume 10.
+  static final RegExp _titleParts = RegExp(r'\d+|\D+');
+
+  int _naturalTitleCompare(String a, String b) {
+    final aParts = _titleParts.allMatches(a.toLowerCase()).map((m) => m.group(0)!).toList();
+    final bParts = _titleParts.allMatches(b.toLowerCase()).map((m) => m.group(0)!).toList();
+    final count = min(aParts.length, bParts.length);
+    for (var i = 0; i < count; i++) {
+      final left = aParts[i];
+      final right = bParts[i];
+      final leftNumber = int.tryParse(left);
+      final rightNumber = int.tryParse(right);
+      final comparison = leftNumber != null && rightNumber != null
+          ? leftNumber.compareTo(rightNumber)
+          : left.compareTo(right);
+      if (comparison != 0) return comparison;
+    }
+    return aParts.length.compareTo(bParts.length);
   }
 
   List<Entry> diceCoefficientRankings(String searchQuery, List<Entry> books) {
