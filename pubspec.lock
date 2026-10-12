@@ -1518,15 +1518,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.3.1"
-  unrar_file:
-    dependency: "direct main"
-    description:
-      path: "."
-      ref: e378bba7a8403258ea9572ddd77fdd7727fd217c
-      resolved-ref: e378bba7a8403258ea9572ddd77fdd7727fd217c
-      url: "https://github.com/Infinil/unrar_file.git"
-    source: git
-    version: "1.0.0"
   url_launcher:
     dependency: "direct main"
     description:

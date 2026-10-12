@@ -107,7 +107,7 @@ Future<void> getComics(String comicsId) async {
       downloaded: false,
     );
     List<String> bookFileTypes = ['epub', 'mobi', 'azw3', 'kpf'];
-    List<String> comicFileTypes = ['cbz', 'cbr', 'zip', 'rar'];
+    List<String> comicFileTypes = ['cbz', 'zip'];
     List<String> audioFileTypes = [
       'flac',
       'mpga',

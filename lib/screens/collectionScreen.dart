@@ -21,7 +21,7 @@ import 'package:jellybook/widgets/jellybookImageCache.dart';
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:jellybook/screens/readingScreen.dart';
 import 'package:jellybook/providers/readerPageCache.dart';
-import 'package:jellybook/screens/readingScreens/cbrCbzReader.dart';
+import 'package:jellybook/screens/readingScreens/cbzReader.dart';
 import 'package:jellybook/widgets/coverOpeningRoute.dart';
 import 'package:provider/provider.dart';
 import 'package:jellybook/providers/connectionManager.dart';
@@ -373,7 +373,7 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
                       }
 
                       // Check connection status
-                      if (!mounted) return;
+                      if (!mounted || !isSupportedEntry(entry)) return;
                       final connectionStatus = Provider.of<ConnectionManager>(
                               context,
                               listen: false)
@@ -399,10 +399,9 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
 
                       // Open comic archives directly so the animated cover
                       // is not interrupted by ReadingScreen's extra route.
-                      final extension = entry.path.split('.').last.toLowerCase();
-                      final isArchive = const ['cbz', 'cbr', 'zip', 'rar']
-                          .contains(extension);
-                      final streamable = extension == 'cbz' || extension == 'cbr';
+                      final extension = entryFileExtension(entry.path);
+                      final isArchive = const ['cbz', 'zip'].contains(extension);
+                      final streamable = extension == 'cbz';
                       if (isArchive && (entry.downloaded || streamable)) {
                         final firstPageReady = ValueNotifier<bool>(false);
                         final skipReturnFade = ValueNotifier<bool>(false);
@@ -412,7 +411,7 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
                             coverPath: entry.imagePath,
                             pageReady: firstPageReady,
                             skipReturnFade: skipReturnFade,
-                            builder: (context) => CbrCbzReader(
+                            builder: (context) => CbzReader(
                               title: entry.title,
                               comicId: entry.id,
                               openedDirectly: true,

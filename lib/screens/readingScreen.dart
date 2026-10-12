@@ -10,7 +10,7 @@ import 'package:jellybook/models/entry.dart';
 import 'package:jellybook/providers/supportedFormats.dart';
 
 // reading screens
-import 'package:jellybook/screens/readingScreens/cbrCbzReader.dart';
+import 'package:jellybook/screens/readingScreens/cbzReader.dart';
 import 'package:jellybook/screens/readingScreens/epubReader.dart';
 import 'package:jellybook/screens/readingScreens/audiobookReader.dart';
 
@@ -92,9 +92,8 @@ class _ReadingScreenState extends State<ReadingScreen> {
 
     var downloaded = entry.downloaded;
 
-    // For CBZ/CBR, allow streaming even if not downloaded
-    bool isCbz = entry.path.toLowerCase().endsWith('.cbz') ||
-        entry.path.toLowerCase().endsWith('.cbr');
+    // Only CBZ archives support streaming before download.
+    final isCbz = entryFileExtension(entry.path) == 'cbz';
 
     if (!downloaded && !isCbz) {
       showDialog(
@@ -121,7 +120,7 @@ class _ReadingScreenState extends State<ReadingScreen> {
     String fileExtension = '';
     try {
       // Use entry.path instead of entry.filePath (which is empty for undownloaded items)
-      fileExtension = entry.path.split('.').last;
+      fileExtension = entryFileExtension(entry.path);
       logger.i("fileExtension: $fileExtension");
     } catch (e) {
       logger.e("error getting file extension: $e");
@@ -138,16 +137,14 @@ class _ReadingScreenState extends State<ReadingScreen> {
     // use a switch statement to determine how to read the file
     switch (fileExtension) {
       case 'cbz':
-      case 'cbr':
       case 'zip':
-      case 'rar':
         Navigator.push(
           context,
           // for the route, have no transition
           PageRouteBuilder(
             transitionDuration: const Duration(milliseconds: 0),
             pageBuilder: (context, animation, secondaryAnimation) =>
-                CbrCbzReader(
+                CbzReader(
               comicId: comicId,
               title: title,
             ),

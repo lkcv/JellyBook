@@ -26,7 +26,7 @@ import 'package:jellybook/providers/downloadEntry.dart';
 import 'package:jellybook/providers/readerPageCache.dart';
 import 'package:jellybook/widgets/readerPinchZoom.dart';
 
-class CbrCbzReader extends StatefulWidget {
+class CbzReader extends StatefulWidget {
   final String title;
   final String comicId;
   /// True when opened straight from a collection, with no ReadingScreen below.
@@ -36,7 +36,7 @@ class CbrCbzReader extends StatefulWidget {
   /// Shared with the opening route to skip the reverse fade on page zero.
   final ValueNotifier<bool>? skipReturnFade;
 
-  const CbrCbzReader({
+  const CbzReader({
     Key? key,
     required this.title,
     required this.comicId,
@@ -46,10 +46,10 @@ class CbrCbzReader extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  _CbrCbzReaderState createState() => _CbrCbzReaderState();
+  _CbzReaderState createState() => _CbzReaderState();
 }
 
-class _CbrCbzReaderState extends State<CbrCbzReader>
+class _CbzReaderState extends State<CbzReader>
     with SingleTickerProviderStateMixin {
   late String title;
   late String comicId;
@@ -202,7 +202,7 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
             _chapterLabels
               ..clear()
               ..addAll(await ReaderPageCache.getChapterLabels(comicId));
-            logger.d('CbrCbzReader: restored cached page $cachedIndex '
+            logger.d('CbzReader: restored cached page $cachedIndex '
                 'of volume $comicId without a network request');
             _pageController = PageController(initialPage: _currentPage);
             SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
@@ -225,7 +225,7 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (!mounted) return;
                 _ensureStreamInitialized().catchError((Object error) {
-                  logger.w('CbrCbzReader: chapter index unavailable: $error');
+                  logger.w('CbzReader: chapter index unavailable: $error');
                 });
               });
             }
@@ -258,7 +258,7 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
       await _finishOpening();
       if (mounted) _precacheAround(_currentPage);
     } catch (e, s) {
-      logger.e('CbrCbzReader: load failed: $e\n$s');
+      logger.e('CbzReader: load failed: $e\n$s');
       if (mounted) {
         final messenger = ScaffoldMessenger.of(context);
         final nav = Navigator.of(context);
@@ -320,7 +320,7 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
         if (!mounted) return;
         await precacheImage(FileImage(file), context);
       } catch (error) {
-        logger.w('CbrCbzReader: could not precache opening page: $error');
+        logger.w('CbzReader: could not precache opening page: $error');
       }
     }
     if (!mounted) return;
@@ -415,11 +415,11 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
       _loadPageFile(i).then((file) {
         if (mounted) {
           precacheImage(FileImage(file), context).catchError((Object error) {
-            logger.w('CbrCbzReader: image precache failed: $error');
+            logger.w('CbzReader: image precache failed: $error');
           });
         }
       }).catchError((Object error) {
-        logger.w('CbrCbzReader: page $i precache failed: $error');
+        logger.w('CbzReader: page $i precache failed: $error');
       });
     }
   }
@@ -528,7 +528,7 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
         try {
           await previousCleanup;
         } catch (error) {
-          logger.w('CbrCbzReader: previous cleanup failed: $error');
+          logger.w('CbzReader: previous cleanup failed: $error');
         }
       }
       await stream.init();
@@ -601,7 +601,7 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
       if (identical(_cleanupByVolume[comicId], cleanup)) {
         _cleanupByVolume.remove(comicId);
       }
-      logger.w('CbrCbzReader: stream cleanup failed: $error');
+      logger.w('CbzReader: stream cleanup failed: $error');
     });
   }
 
@@ -647,7 +647,7 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
         _clearStreamAfterPageWork(stream);
       });
     } catch (e) {
-      logger.e('CbrCbzReader: download failed: $e');
+      logger.e('CbzReader: download failed: $e');
       if (mounted) setState(() => _downloadInProgress = false);
     }
   }
@@ -971,7 +971,7 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
       );
       succeeded = true;
     } catch (error) {
-      logger.w('CbrCbzReader: zoomed vertical page turn failed: $error');
+      logger.w('CbzReader: zoomed vertical page turn failed: $error');
     }
     if (!mounted) return;
     _zoomState(_activeZoomPage)?.reset();

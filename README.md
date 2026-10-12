@@ -67,7 +67,6 @@
 ## :file_folder: File formats:
 | Format | Known Issues / Planned Features | Specification(s) |
 | :----- | :---------- | :------------ |
-| `.cbr` & `.rar` | <ul><li>**CBR is a proprietary file format so is not necessarily encouraged.**</li><li>CBR files don't support streaming yet.</li><li>The library is using deprecated functions.</li><li>The view for them currently does not show a progress indicator.</li></ul> | <ul><li>[CBR/RAR](https://www.rarlab.com/technote.htm)</li></ul> |
 | `.cbz` & `.zip` | <ul><li>The view for them currently does not show a progress indicator. | <ul><li>[CBZ/ZIP](http://www.idea2ic.com/File_Formats/ZIP%20File%20Format%20Specification.pdf)</li></ul> |
 | `.epub` | <ul><li>Image support is not the greatest.</li><li>No horizontal support yet.</li><li>Just not in a state where I'd consider the support proper.</li></ul> | <ul><li>[EPUB 3.2](https://www.w3.org/publishing/epub3/epub-spec.html) |
 ### :musical_note: Audiobook formats:
@@ -87,9 +86,9 @@
 
 | <h2> Currently Unsupported Filetypes </h2> |
 | :-- |
-| <ul><li>`.pdf`</li><li>`.cbt`/`.tar`<li>`.cba`/`.ACE`</li><li>`.cb7`/`.7z`</li><li>`tar.gz`</li><li>`.WebP`</li><li>`.gif`</li><li>`.lrf`/`.lrx`</li><li>`.djvu`</li><li>`.pdb`</li><li>`.fb2`</li><li>`.ibooks`</li><li>`.azw`/`.azw3`/`.kf8`/`.kfx`</li><li>`.pcf`/`.mobi`</li><li>`.opf`</li><li>`.txt`</li><li>`.oxps`/`.xps`</li></ul> |
+| <ul><li>`.pdf`</li><li>`.cbr`/`.rar`</li><li>`.cbt`/`.tar`<li>`.cba`/`.ACE`</li><li>`.cb7`/`.7z`</li><li>`tar.gz`</li><li>`.WebP`</li><li>`.gif`</li><li>`.lrf`/`.lrx`</li><li>`.djvu`</li><li>`.pdb`</li><li>`.fb2`</li><li>`.ibooks`</li><li>`.azw`/`.azw3`/`.kf8`/`.kfx`</li><li>`.pcf`/`.mobi`</li><li>`.opf`</li><li>`.txt`</li><li>`.oxps`/`.xps`</li></ul> |
 
-PDF files are intentionally unsupported and hidden from JellyBook’s Library, Collections, Search, and Downloads screens. Existing PDF files are not deleted.
+PDF and CBR/RAR archives are intentionally unsupported and hidden from JellyBook’s Library, Collections, Search, and Downloads screens. Existing downloaded files are not deleted.
 
 | <h2> Currently Unsupported Audiobooks Filetypes </h2> |
 | <ul><li>`.aax`</li><li>`.aac`</li><li>`.ogg`</li></ul>

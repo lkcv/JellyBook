@@ -10,7 +10,7 @@ import 'package:jellybook/models/entry.dart';
 import 'package:jellybook/providers/supportedFormats.dart';
 import 'package:jellybook/screens/infoScreen.dart';
 import 'package:jellybook/screens/readingScreen.dart';
-import 'package:jellybook/screens/readingScreens/cbrCbzReader.dart';
+import 'package:jellybook/screens/readingScreens/cbzReader.dart';
 import 'package:jellybook/providers/readerPageCache.dart';
 import 'package:jellybook/providers/connectionManager.dart';
 import 'package:jellybook/widgets/coverOpeningRoute.dart';
@@ -122,7 +122,7 @@ class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver
   // Search is a bottom-navigation tab. A reader pushed from here should pop
   // back to the same query and scroll position, not open the Collection.
   Future<void> _openResult(Entry entry, Rect sourceRect) async {
-    if (!mounted) return;
+    if (!mounted || !isSupportedEntry(entry)) return;
 
     final connectionStatus = context.read<ConnectionManager>().status;
     if (connectionStatus == ConnectionStatus.offline && !entry.downloaded) {
@@ -141,9 +141,9 @@ class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver
       }
     }
 
-    final extension = entry.path.split('.').last.toLowerCase();
-    final isArchive = const ['cbz', 'cbr', 'zip', 'rar'].contains(extension);
-    final streamable = extension == 'cbz' || extension == 'cbr';
+    final extension = entryFileExtension(entry.path);
+    final isArchive = const ['cbz', 'zip'].contains(extension);
+    final streamable = extension == 'cbz';
     if (isArchive && (entry.downloaded || streamable)) {
       final firstPageReady = ValueNotifier<bool>(false);
       final skipReturnFade = ValueNotifier<bool>(false);
@@ -152,7 +152,7 @@ class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver
         coverPath: entry.imagePath,
         pageReady: firstPageReady,
         skipReturnFade: skipReturnFade,
-        builder: (context) => CbrCbzReader(
+        builder: (context) => CbzReader(
           title: entry.title,
           comicId: entry.id,
           openedDirectly: true,

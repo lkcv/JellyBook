@@ -3,7 +3,6 @@ import 'dart:isolate';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:archive/archive_io.dart';
-import 'package:unrar_file/unrar_file.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:isar/isar.dart';
@@ -114,16 +113,6 @@ Future<void> _extractFile(
       // Stream entries to disk on a background isolate. Avoids decodeBytes()
       // which keeps the entire archive in RAM and starves the reader.
       await _extractZipOffUi(dir, comicFolder);
-      final archiveFile = File('$dirLocation/$fileName');
-      if (await archiveFile.exists()) {
-        await archiveFile.delete();
-      }
-      entry.downloaded = true;
-      entry.folderPath = comicFolder;
-    } else if (dir.contains('.rar') || dir.contains('.cbr')) {
-      // unrar_file uses platform channels — must stay on the root isolate.
-      await Future<void>.delayed(Duration.zero);
-      await UnrarFile.extract_rar('$dirLocation/$fileName', '$comicFolder/');
       final archiveFile = File('$dirLocation/$fileName');
       if (await archiveFile.exists()) {
         await archiveFile.delete();
