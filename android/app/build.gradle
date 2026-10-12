@@ -57,6 +57,11 @@ android {
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
         manifestPlaceholders['foregroundServiceType'] = 'mediaPlayback';
+
+        // Flutter sets default ABI filters; build-type filters need a clean slate.
+        ndk {
+            abiFilters.clear()
+        }
     }
     signingConfigs {
          release {
@@ -73,10 +78,22 @@ android {
             // signingConfig signingConfigs.debug
             // minifyEnabled false
             // shrinkResources false
+
+            // Restrict the normal release APK to ARM64; preserve --split-per-abi.
+            if (project.findProperty('split-per-abi')?.toString() != 'true') {
+                ndk {
+                    abiFilters.clear()
+                    abiFilters 'arm64-v8a'
+                }
+            }
         }
         debug {
             applicationIdSuffix '.debug'
             resValue "string", "app_name", "JellyBook Debug"
+
+            ndk {
+                abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86_64'
+            }
         }
     }
     namespace 'com.KaraWilson.JellyBook'
