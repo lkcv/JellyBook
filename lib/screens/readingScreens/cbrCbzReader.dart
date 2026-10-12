@@ -24,6 +24,7 @@ import 'package:jellybook/providers/connectionManager.dart';
 import 'package:jellybook/providers/cbzStream.dart';
 import 'package:jellybook/providers/downloadEntry.dart';
 import 'package:jellybook/providers/readerPageCache.dart';
+import 'package:jellybook/widgets/readerPinchZoom.dart';
 
 class CbrCbzReader extends StatefulWidget {
   final String title;
@@ -62,6 +63,23 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
   bool _showOverlay = false;
   int _currentPage = 0;
   PageController? _pageController;
+  final ScrollController _verticalScrollController = ScrollController();
+  bool _zoomScrollLocked = false;
+  // Track touches above PageView: once a drag starts, the next pointer may
+  // hit a neighboring page, not the first page's ReaderPinchZoom.
+  final Map<int, Offset> _readerTouches = <int, Offset>{};
+  final Map<int, GlobalKey<ReaderPinchZoomState>> _zoomPageKeys = {};
+  final Map<int, GlobalKey> _verticalPageKeys = {};
+  int? _firstTouchPage;
+  int? _activeZoomPage;
+  bool _gestureHadMultitouch = false;
+  // A zoomed page owns the first drag. Only a fresh swipe that STARTS at an
+  // image boundary is allowed to turn exactly one page.
+  Offset? _singleFingerStart;
+  bool _edgePositiveAtStart = false;
+  bool _edgeNegativeAtStart = false;
+  bool _edgeTurnConsumed = false;
+  bool _edgePageTurnPending = false;
   static const _normalDuration = Duration(milliseconds: 300);
   static const _fastDuration = Duration(milliseconds: 80);
 
@@ -105,6 +123,7 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
   @override
   void dispose() {
     _pageController?.dispose();
+    _verticalScrollController.dispose();
     audioPlayer.dispose();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     _tapTicker.dispose();
@@ -711,6 +730,11 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
   }
 
   void _handleTap(TapUpDetails details) {
+    // A side tap is an explicit page-turn command, even at 5x zoom.
+    // Ignore taps only during/after multitouch or a boundary page-turn drag.
+    if (_gestureHadMultitouch || _edgeTurnConsumed || _edgePageTurnPending) {
+      return;
+    }
     final screenWidth = MediaQuery.of(context).size.width;
     final tapX = details.globalPosition.dx;
     final zone = screenWidth * 0.2;
@@ -787,41 +811,237 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
     _tapQueue.clear();
   }
 
+  // Suspend page scrolling on the second pointer, including mid-swipe.
+  // Single-finger page dragging remains in the normal PageView path.
+  void _setZoomScrollLocked(bool locked, int index) {
+    if (!mounted || _zoomScrollLocked == locked) return;
+    if (locked) {
+      _cancelTapAnimation();
+      if (_verticalScrollController.hasClients) {
+        final position = _verticalScrollController.position;
+        if (position is ScrollPositionWithSingleContext) {
+          position.goIdle();
+        }
+      }
+      final controller = _pageController;
+      if (controller != null && controller.hasClients) {
+        final page = controller.page ?? _currentPage.toDouble();
+        if ((page - index).abs() > 0.01) {
+          // A second finger can arrive halfway through a swipe. Finish on
+          // the touched page before manipulating its image.
+          controller.jumpToPage(index);
+        } else {
+          final position = controller.position;
+          if (position is ScrollPositionWithSingleContext) {
+            position.goIdle(); // Stop an existing page drag.
+          }
+        }
+      }
+    }
+    setState(() => _zoomScrollLocked = locked);
+  }
+
+  // Find the page under the FIRST pointer, before a page swipe can move it.
+  // This also supports vertical scrolling, where _currentPage is not updated.
+  int? _pageAt(Offset point) {
+    for (final entry in _zoomPageKeys.entries) {
+      if (entry.value.currentState?.containsGlobalPoint(point) ?? false) {
+        return entry.key;
+      }
+    }
+    return null;
+  }
+
+  ReaderPinchZoomState? _zoomState(int? index) =>
+      index == null ? null : _zoomPageKeys[index]?.currentState;
+
+  void _readerPointerDown(PointerDownEvent event) {
+    if (_readerTouches.isEmpty) {
+      _gestureHadMultitouch = false;
+      _edgeTurnConsumed = false;
+      _firstTouchPage = _activeZoomPage ?? _pageAt(event.position);
+      // Take a snapshot of the boundaries BEFORE any movement. Reaching an
+      // edge during this gesture must not trigger an unexpected page turn.
+      _singleFingerStart = event.position;
+      final zoom = _zoomState(_activeZoomPage);
+      final vertical = direction == 'vertical';
+      _edgePositiveAtStart = !_edgePageTurnPending &&
+          (zoom?.atPanBoundary(vertical: vertical, positive: true) ?? false);
+      _edgeNegativeAtStart = !_edgePageTurnPending &&
+          (zoom?.atPanBoundary(vertical: vertical, positive: false) ?? false);
+    }
+    _readerTouches[event.pointer] = event.position;
+    if (_readerTouches.length == 2) {
+      _gestureHadMultitouch = true;
+      _edgePositiveAtStart = false;
+      _edgeNegativeAtStart = false;
+      var index = _firstTouchPage ?? _currentPage;
+      // The first page may have left the viewport during a fast drag.
+      if (_zoomState(index) == null) {
+        index = _pageAt(event.position) ?? _currentPage;
+      }
+      final target = _zoomState(index);
+      if (target == null) return; // The page image is still loading.
+      _activeZoomPage = index;
+      // Cancels an already-running PageView drag *synchronously*, before any
+      // pinch movement. Locks the pager until ALL fingers have been lifted.
+      _setZoomScrollLocked(true, index);
+      final points = _readerTouches.values.take(2).toList();
+      target.beginPinch(points[0], points[1]);
+    }
+  }
+
+  void _readerPointerMove(PointerMoveEvent event) {
+    final previous = _readerTouches[event.pointer];
+    if (previous == null) return;
+    _readerTouches[event.pointer] = event.position;
+
+    final state = _zoomState(_activeZoomPage);
+    if (state == null) return;
+    if (_readerTouches.length >= 2) {
+      final points = _readerTouches.values.take(2).toList();
+      state.updatePinch(points[0], points[1]);
+    } else if (_zoomScrollLocked && _readerTouches.length == 1 &&
+        !_edgeTurnConsumed && !_edgePageTurnPending) {
+      if (!_gestureHadMultitouch && _tryBoundaryPageTurn(state, event.position)) {
+        return; // Don't also pan the image on the page-turning movement.
+      }
+      // Pan immediately. Inward drags at an edge remain normal image pans.
+      state.pan(event.position - previous);
+    }
+  }
+
+  // Horizontal in paged mode; vertical in continuous-reading mode. This is
+  // pointer-level handling, so it doesn't add a gesture-recognizer delay.
+  bool _tryBoundaryPageTurn(ReaderPinchZoomState state, Offset position) {
+    final start = _singleFingerStart;
+    if (start == null || !state.isZoomed) return false;
+    final travel = position - start;
+    final vertical = direction == 'vertical';
+    final main = vertical ? travel.dy : travel.dx;
+    final cross = vertical ? travel.dx : travel.dy;
+
+    // Moving inward disqualifies that edge for the rest of this touch.
+    if (main < -12) _edgePositiveAtStart = false;
+    if (main > 12) _edgeNegativeAtStart = false;
+    // A substantially diagonal gesture is a pan, not a page turn.
+    if (cross.abs() > 32 && cross.abs() > main.abs() * 0.7) {
+      _edgePositiveAtStart = false;
+      _edgeNegativeAtStart = false;
+    }
+    const swipeDistance = 56.0; // logical pixels
+    if (main.abs() < swipeDistance ||
+        main.abs() < cross.abs() * 1.3) return false;
+
+    final outward = main > 0 ? _edgePositiveAtStart : _edgeNegativeAtStart;
+    if (!outward) return false;
+    final delta = vertical
+        ? (main > 0 ? -1 : 1)
+        : ((main > 0) == (direction == 'rtl') ? 1 : -1);
+    final source = _activeZoomPage ?? _currentPage;
+    final target = source + delta;
+    if (target < 0 || target >= pageNums) return false;
+    if (vertical && _verticalPageKeys[target]?.currentContext == null) {
+      return false; // Don't consume a swipe when the target has no layout.
+    }
+
+    _edgeTurnConsumed = true; // At most one page for this entire touch.
+    _edgePageTurnPending = true;
+    if (vertical) {
+      unawaited(_turnVerticalZoomPage(target));
+    } else {
+      _queuePage(delta); // Keep the existing tap-turn ticker/animation.
+    }
+    return true;
+  }
+
+  Future<void> _turnVerticalZoomPage(int target) async {
+    final targetContext = _verticalPageKeys[target]?.currentContext;
+    if (targetContext == null) {
+      _edgePageTurnPending = false;
+      return;
+    }
+    var succeeded = false;
+    try {
+      await Scrollable.ensureVisible(
+        targetContext,
+        duration: _normalDuration,
+        curve: Curves.easeOutCubic,
+        alignment: 0,
+      );
+      succeeded = true;
+    } catch (error) {
+      logger.w('CbrCbzReader: zoomed vertical page turn failed: $error');
+    }
+    if (!mounted) return;
+    _zoomState(_activeZoomPage)?.reset();
+    _activeZoomPage = null;
+    _edgePageTurnPending = false;
+    _setZoomScrollLocked(_readerTouches.isNotEmpty, target);
+    if (!succeeded) return;
+    setState(() => _currentPage = target);
+    saveProgress(target);
+    _precacheAround(target);
+  }
+
+  void _readerPointerEnd(int pointer) {
+    if (_readerTouches.remove(pointer) == null) return;
+    if (_readerTouches.length >= 2) {
+      // A third finger can replace a lifted pointer without scale jumping.
+      final points = _readerTouches.values.take(2).toList();
+      _zoomState(_activeZoomPage)?.beginPinch(points[0], points[1]);
+      return;
+    }
+    if (_readerTouches.isNotEmpty) return;
+
+    // Do NOT unlock when the second finger is lifted: the original finger
+    // may still be moving, which must not turn the page at 1x.
+    _firstTouchPage = null;
+    _singleFingerStart = null;
+    _edgePositiveAtStart = false;
+    _edgeNegativeAtStart = false;
+    if (_edgePageTurnPending) return; // Wait for page transition to finish.
+    final state = _zoomState(_activeZoomPage);
+    if (state?.isZoomed != true) {
+      state?.reset(); // Snap sub-pixel residual scaling back to exactly 1x.
+      _activeZoomPage = null;
+      _setZoomScrollLocked(false, _currentPage);
+    }
+    // Keep _gestureHadMultitouch set until the NEXT pointer down, so a tap
+    // callback from the just-finished gesture cannot queue a page turn.
+  }
+
+  Widget _zoomablePage(int index, File file) {
+    return ReaderPinchZoom(
+      key: _zoomPageKeys.putIfAbsent(
+        index, () => GlobalKey<ReaderPinchZoomState>(),
+      ),
+      child: Image.file(
+        file,
+        fit: BoxFit.contain,
+        gaplessPlayback: true,
+        filterQuality: FilterQuality.high,
+      ),
+    );
+  }
+
   Widget _buildPage(int index) {
     // Bypass FutureBuilder when a local or retained file is already present.
     final retained = _pageCache[index];
     if (retained != null && retained.existsSync()) {
-      return InteractiveViewer(
-        clipBehavior: Clip.none,
-        child: Image.file(retained,
-            fit: BoxFit.contain,
-            gaplessPlayback: true,
-            filterQuality: FilterQuality.high),
-      );
+      return _zoomablePage(index, retained);
     }
     if (!_isStreaming && index < pages.length) {
       final local = File(pages[index]);
       if (local.existsSync()) {
-        return InteractiveViewer(
-          clipBehavior: Clip.none,
-          child: Image.file(local,
-              fit: BoxFit.contain,
-              gaplessPlayback: true,
-              filterQuality: FilterQuality.high),
-        );
+        return _zoomablePage(index, local);
       }
     }
     return FutureBuilder<File>(
       future: _loadPageFile(index),
       builder: (context, snapshot) {
         if (snapshot.hasData) {
-          return InteractiveViewer(
-            clipBehavior: Clip.none,
-            child: Image.file(snapshot.data!,
-                fit: BoxFit.contain,
-                gaplessPlayback: true,
-                filterQuality: FilterQuality.high),
-          );
+          return _zoomablePage(index, snapshot.data!);
         }
         if (snapshot.hasError) {
           return const Center(child: Text('Error loading page'));
@@ -841,8 +1061,22 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
         reverse: isRtl,
         itemCount: pageNums,
         controller: _pageController,
+        physics: _zoomScrollLocked
+            ? const NeverScrollableScrollPhysics()
+            : null,
         itemBuilder: (context, index) => _buildPage(index),
         onPageChanged: (index) {
+          // Slider/tap navigation away from a magnified page must not leave
+          // the newly displayed page permanently locked against swiping.
+          if ((_readerTouches.isEmpty || _edgePageTurnPending) &&
+              _activeZoomPage != null &&
+              _activeZoomPage != index) {
+            _zoomState(_activeZoomPage)?.reset();
+            _activeZoomPage = null;
+            _edgePageTurnPending = false;
+            // Hold the lock if the boundary-swipe finger is still down.
+            _zoomScrollLocked = _readerTouches.isNotEmpty;
+          }
           setState(() => _currentPage = index);
           // Record navigation before launching speculative page fetches.
           // The displayed page will be copied before its loader completes.
@@ -860,15 +1094,24 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
 
   Widget _buildVertical() {
     return SingleChildScrollView(
+      controller: _verticalScrollController,
+      physics: _zoomScrollLocked ? const NeverScrollableScrollPhysics() : null,
       child: Column(
         children: [
-          for (int i = 0; i < pageNums; i++) _buildPage(i),
+          for (int i = 0; i < pageNums; i++)
+            KeyedSubtree(
+              key: _verticalPageKeys.putIfAbsent(i, () => GlobalKey()),
+              child: _buildPage(i),
+            ),
         ],
       ),
     );
   }
 
   void _toggleOverlay() {
+    if (_gestureHadMultitouch || _edgeTurnConsumed || _edgePageTurnPending) {
+      return;
+    }
     setState(() => _showOverlay = !_showOverlay);
     SystemChrome.setEnabledSystemUIMode(
       _showOverlay ? SystemUiMode.edgeToEdge : SystemUiMode.immersiveSticky,
@@ -1049,10 +1292,17 @@ class _CbrCbzReaderState extends State<CbrCbzReader>
         body: Stack(
           children: [
             Positioned.fill(
-              child: GestureDetector(
+              child: Listener(
                 behavior: HitTestBehavior.opaque,
-                onTapUp: isVertical ? (_) => _toggleOverlay() : _handleTap,
-                child: isVertical ? _buildVertical() : _buildPager(isRtl),
+                onPointerDown: _readerPointerDown,
+                onPointerMove: _readerPointerMove,
+                onPointerUp: (event) => _readerPointerEnd(event.pointer),
+                onPointerCancel: (event) => _readerPointerEnd(event.pointer),
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapUp: isVertical ? (_) => _toggleOverlay() : _handleTap,
+                  child: isVertical ? _buildVertical() : _buildPager(isRtl),
+                ),
               ),
             ),
             Positioned(
