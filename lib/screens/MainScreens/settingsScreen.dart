@@ -187,7 +187,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       );
                     },
                   ),
-                  const Divider(height: 1, indent: 56),
+                  const Divider(indent: 16, endIndent: 16),
                   ListTile(
                     leading: const Icon(Icons.logout_rounded),
                     title: const Text('Log out'),
@@ -298,7 +298,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               setState(() {});
             },
           ),
-          const Divider(height: 1, indent: 56),
+          const Divider(indent: 16, endIndent: 16),
           _choiceTile(
             icon: Icons.format_textdirection_l_to_r_rounded,
             title: l10n?.readingDirection ?? 'Reading Direction',
