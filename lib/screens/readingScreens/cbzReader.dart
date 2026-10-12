@@ -62,6 +62,8 @@ class _CbzReaderState extends State<CbzReader>
   bool _loading = true;
   bool _showOverlay = false;
   int _currentPage = 0;
+  int? _pendingLocalPage;
+  bool _savingLocalProgress = false;
   PageController? _pageController;
   final ScrollController _verticalScrollController = ScrollController();
   bool _zoomScrollLocked = false;
@@ -714,19 +716,39 @@ class _CbzReaderState extends State<CbzReader>
     }
   }
 
-  Future<void> saveProgress(int page) async {
-    final isar = Isar.getInstance();
-    final entry = await isar!.entrys.where().idEqualTo(comicId).findFirst();
+  // Both local persistence and server reporting are ordered by the observed
+  // page changes, not by whichever asynchronous Isar query finishes first.
+  void saveProgress(int page) {
+    // Queue immediately so rapid Isar writes cannot reorder server positions.
+    unawaited(updatePagenum(comicId, page).catchError((Object error) {
+      logger.w('Could not queue page progress: $error');
+    }));
+    _pendingLocalPage = page;
+    if (!_savingLocalProgress) unawaited(_saveLocalProgress());
+  }
 
-    entry!.pageNum = page;
-    entry.progress = (page / (pageNums > 0 ? pageNums : 1)) * 100;
-
-    await isar.writeTxn(() async {
-      await isar.entrys.put(entry);
-    });
-
-    logger.d("saved progress: page $page / $pageNums");
-    updatePagenum(entry.id, entry.pageNum);
+  Future<void> _saveLocalProgress() async {
+    _savingLocalProgress = true;
+    try {
+      while (_pendingLocalPage != null) {
+        final page = _pendingLocalPage!;
+        _pendingLocalPage = null;
+        try {
+          final isar = Isar.getInstance();
+          if (isar == null) return;
+          final entry = await isar.entrys.where().idEqualTo(comicId).findFirst();
+          if (entry == null) return;
+          entry.pageNum = page;
+          entry.progress = (page / (pageNums > 0 ? pageNums : 1)) * 100;
+          await isar.writeTxn(() async => isar.entrys.put(entry));
+          logger.d('saved progress: page $page / $pageNums');
+        } catch (error) {
+          logger.w('Could not save local page progress: $error');
+        }
+      }
+    } finally {
+      _savingLocalProgress = false;
+    }
   }
 
   void _handleTap(TapUpDetails details) {

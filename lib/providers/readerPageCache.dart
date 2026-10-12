@@ -134,6 +134,38 @@ class ReaderPageCache {
     return current is num ? current.toInt() : null;
   }
 
+  /// After a Jellyfin library refresh, prefer the server's saved page without
+  /// deleting the existing cached images. If that page isn't cached, CbzReader
+  /// falls through to normal streaming instead of reopening a stale page.
+  static Future<void> restoreServerPage(String volumeId, int pageIndex) {
+    final operation = _writeQueue.catchError((Object _) {}).then((_) async {
+      final root = await _root();
+      final directory = Directory('${root.path}/${_key(volumeId)}');
+      if (!await directory.exists()) return;
+      final manifest = await _readManifest(directory);
+      final rawCount = manifest['pageCount'];
+      if (rawCount is! num || rawCount <= 0) return;
+      final count = rawCount.toInt();
+      final page = pageIndex.clamp(0, count - 1).toInt();
+      if (manifest['currentPage'] == page) return;
+
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      _positions[volumeId] = _ReaderPosition(count, page, timestamp);
+      manifest['currentPage'] = page;
+      final original = File('${directory.path}/manifest.json');
+      final temporary = File('${original.path}.tmp');
+      await temporary.writeAsString(jsonEncode(manifest), flush: true);
+      try {
+        await temporary.rename(original.path);
+      } on FileSystemException {
+        if (await original.exists()) await original.delete();
+        await temporary.rename(original.path);
+      }
+    });
+    _writeQueue = operation;
+    return operation;
+  }
+
   /// Chapter labels are based on archive image filenames and folders, not
   /// ComicInfo.xml. Keep them with the cached pages for offline reopening.
   static Future<Map<int, String>> getChapterLabels(String volumeId) async {

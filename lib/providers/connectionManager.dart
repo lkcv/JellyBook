@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:isar/isar.dart';
 import 'package:jellybook/models/login.dart';
 import 'package:jellybook/providers/login.dart';
+import 'package:jellybook/providers/updatePagenum.dart';
 import 'package:jellybook/variables.dart';
 
 enum ConnectionStatus { validating, online, offline, authFailed }
@@ -31,6 +32,12 @@ class ConnectionManager extends ChangeNotifier with WidgetsBindingObserver {
     if (_status != s) {
       logger.d('ConnectionManager: status changed from $_status to $s');
       _status = s;
+      if (s == ConnectionStatus.online) {
+        // Retry persisted offline positions after startup and reconnection.
+        unawaited(retryPendingProgress().catchError((Object error) {
+          logger.w('Could not retry saved reading progress: $error');
+        }));
+      }
       notifyListeners();
     }
   }

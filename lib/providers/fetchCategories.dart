@@ -65,6 +65,7 @@ List<Folder> visibleLibraryFolders(
 // have optional perameter to have the function return the list of folders
 Future<(List<Entry>, List<Folder>)> getServerCategories({
   force = false,
+  void Function()? onCacheHit,
 }) async {
   logger.d("getting server categories");
   final p_info.PackageInfo packageInfo =
@@ -100,6 +101,9 @@ Future<(List<Entry>, List<Folder>)> getServerCategories({
   final hasCachedBooks = booksTemp.isNotEmpty;
   booksTemp = booksTemp.where(isSupportedEntry).toList();
   if (foldersTemp.isNotEmpty && hasCachedBooks && !force) {
+    // Let the Library render from Isar immediately, then revalidate remote
+    // progress without holding up its first frame or cover prewarming.
+    onCacheHit?.call();
     return (booksTemp, withoutLibraries(foldersTemp, booksTemp));
   }
 

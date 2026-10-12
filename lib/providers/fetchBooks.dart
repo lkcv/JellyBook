@@ -9,6 +9,8 @@ import 'package:built_collection/built_collection.dart';
 import 'package:jellybook/models/entry.dart';
 import 'package:jellybook/models/folder.dart';
 import 'package:jellybook/providers/supportedFormats.dart';
+import 'package:jellybook/providers/updatePagenum.dart';
+import 'package:jellybook/providers/readerPageCache.dart';
 import 'package:isar/isar.dart';
 import 'package:jellybook/variables.dart';
 
@@ -47,6 +49,11 @@ Future<void> getComics(String comicsId) async {
 
   // turn into built list
   final api = Tentacle(basePathOverride: url).getLibraryApi();
+  final revisionBeforeFetch = progressRevision();
+  // Preserve pages that were pending when this network request began, even if
+  // their upload completes before the (possibly older) GET response arrives.
+  final protectedAtFetchStart =
+      await locallyProtectedProgressIds(revisionBeforeFetch);
   Response<BaseItemDtoQueryResult>? response;
   try {
     response = await api.getItems(
@@ -64,6 +71,9 @@ Future<void> getComics(String comicsId) async {
     logger.e(e);
   }
   BuiltList<BaseItemDto> responseData = response?.data?.items ?? BuiltList();
+  final protectedIds = protectedAtFetchStart
+    ..addAll(await locallyProtectedProgressIds(revisionBeforeFetch));
+  final restoredPages = <String, int>{};
 
   logger.d("Now saving comics to database");
 
@@ -82,7 +92,7 @@ Future<void> getComics(String comicsId) async {
   logger.d("got entries");
 
   // List<Map<String, dynamic>> comics = [];
-  responseData.forEach((element) {
+  for (final element in responseData) {
     // Jellyfin can flag a one-volume series directory as IsFolder while its
     // item type is still Book (the web UI opens it as the volume's detail
     // page, not a folder view). Treat those as books, not folders.
@@ -133,7 +143,7 @@ Future<void> getComics(String comicsId) async {
 
     // Do not import newly encountered unsupported files. Previously stored
     // rows remain in Isar but are hidden by the same format policy.
-    if (!isSupportedEntry(entry)) return;
+    if (!isSupportedEntry(entry)) continue;
 
     entries.indexWhere((element1) {
       if (element1.id == entry.id) {
@@ -150,11 +160,44 @@ Future<void> getComics(String comicsId) async {
         return false;
       }
     });
+    // Jellyfin reports comic page indices as 10,000 ticks per zero-based
+    // page. Only CBZ/ZIP progress uses this convention; EPUB is separate.
+    // A pending local upload or a page change during the GET wins over this
+    // potentially stale server snapshot.
+    final extension = entryFileExtension(entry.path);
+    final ticks = element.userData?.playbackPositionTicks;
+    if ((extension == 'cbz' || extension == 'zip') &&
+        !protectedIds.contains(entry.id) &&
+        ticks != null && ticks >= 0) {
+      final serverPage = ticks ~/ 10000;
+      if (entry.pageNum != serverPage) {
+        entry.pageNum = serverPage;
+        final serverPercent = element.userData?.playedPercentage;
+        if (serverPercent != null) {
+          entry.progress = serverPercent.toDouble().clamp(0.0, 100.0).toDouble();
+        } else if (serverPage == 0) {
+          entry.progress = 0;
+        }
+        restoredPages[entry.id] = serverPage;
+        logger.d('Restored Jellyfin page index $serverPage for ${entry.id}');
+      }
+    }
     entries.add(entry);
-  });
+  }
   await isar.writeTxn(() async {
     await isar.entrys.putAll(entries);
   });
+
+  // The streaming reader prefers the retained cache's page marker. Bring it
+  // into agreement with Isar without discarding downloaded page images.
+  for (final restored in restoredPages.entries) {
+    try {
+      await ReaderPageCache.restoreServerPage(
+        restored.key, restored.value);
+    } catch (error) {
+      logger.w('Could not align cached page for ${restored.key}: $error');
+    }
+  }
 
   // update folders
   await updateFolders();

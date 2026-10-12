@@ -56,6 +56,11 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
   List<Folder>? _lastFolders;
   final ScrollController _libraryScrollController = ScrollController();
   bool _inForeground = true;
+  bool _startupSyncScheduled = false;
+  bool _startupSyncPending = false;
+  bool _serverRefreshStarted = false;
+  Future<void>? _activeRefresh;
+  DateTime? _backgroundedAt;
   bool _warmScheduled = false;
   bool _warming = false;
   bool _warmAgain = false;
@@ -68,17 +73,73 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     // Never reissue a category request merely because a parent rebuilds.
-    _categoriesFuture = getServerCategories(force: false);
+    _categoriesFuture = getServerCategories(
+      force: false,
+      onCacheHit: _scheduleStartupSync,
+    );
     WidgetsBinding.instance.addObserver(this);
   }
 
-  Future<void> _reloadCategories() async {
-    final future = getServerCategories(force: true);
-    setState(() => _categoriesFuture = future);
+  // A warm launch reads Isar first. Schedule the remote revalidation after
+  // that initial data has been rendered; don't make the first frame wait for it.
+  void _scheduleStartupSync() {
+    if (_startupSyncScheduled) return;
+    _startupSyncScheduled = true;
+    unawaited(_syncAfterCachedFirstFrame());
+  }
+
+  Future<void> _syncAfterCachedFirstFrame() async {
     try {
-      await future;
+      await _categoriesFuture;
     } catch (_) {
-      // The FutureBuilder displays the error or the last successful grid.
+      return;
+    }
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _startupSyncPending = true;
+      _tryPendingSync();
+    });
+  }
+
+  void _tryPendingSync() {
+    if (!_startupSyncPending || !mounted || !_inForeground ||
+        !_initialCoversReady || _activeRefresh != null ||
+        _connectionManager?.status != ConnectionStatus.online) return;
+    _startupSyncPending = false;
+    if (!_serverRefreshStarted) unawaited(_reloadCategories(background: true));
+  }
+
+  Future<void> _reloadCategories({bool background = false}) {
+    final active = _activeRefresh;
+    if (active != null) return active;
+    _serverRefreshStarted = true;
+    final operation = _performReloadCategories(background);
+    _activeRefresh = operation;
+    return operation.whenComplete(() {
+      _activeRefresh = null;
+      // A resume while a request was running may require another GET.
+      _tryPendingSync();
+    });
+  }
+
+  Future<void> _performReloadCategories(bool background) async {
+    final future = getServerCategories(force: true);
+    if (!background) setState(() => _categoriesFuture = future);
+    try {
+      final result = await future;
+      if (mounted) {
+        // Silent revalidation must never replace a cached first frame with
+        // a loading spinner, or show an error dialog if Jellyfin is down.
+        if (background) {
+          setState(() => _categoriesFuture = Future.value(result));
+        }
+        // Server progress is now in Isar. Cards read progress from there.
+        _progressRevision.value++;
+      }
+    } catch (error) {
+      if (background) logger.w('Background library sync failed: $error');
+      // Interactive refresh keeps the existing FutureBuilder error handling.
     }
   }
 
@@ -93,11 +154,24 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    final wasInForeground = _inForeground;
     _inForeground = state == AppLifecycleState.resumed;
     if (_inForeground) {
       // Decoded images can be reclaimed while Android has us backgrounded.
       // This also runs when Library is not the selected bottom tab.
       _scheduleCoverWarming();
+      // A process can stay alive while the user reads in another Jellyfin
+      // client. Recheck after a meaningful absence, without polling in-app.
+      final awaySince = _backgroundedAt;
+      _backgroundedAt = null;
+      if (awaySince != null &&
+          DateTime.now().difference(awaySince) >= const Duration(minutes: 1)) {
+        _serverRefreshStarted = false;
+        _startupSyncPending = true;
+      }
+      _tryPendingSync();
+    } else if (wasInForeground) {
+      _backgroundedAt = DateTime.now();
     }
   }
 
@@ -263,13 +337,17 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
 
     if (status == ConnectionStatus.offline) {
       _wasOffline = true;
-    } else if (status == ConnectionStatus.online && _wasOffline) {
-      // only refresh when we are coming back from being offline
-      _wasOffline = false;
-      if (mounted) {
-        logger.d('MainMenu: connection restored, refreshing library');
-        _pagingController.refresh();
-        unawaited(_reloadCategories());
+    } else if (status == ConnectionStatus.online) {
+      if (_wasOffline) {
+        _wasOffline = false;
+        if (mounted) {
+          logger.d('MainMenu: connection restored, refreshing library');
+          _pagingController.refresh();
+          unawaited(_reloadCategories());
+        }
+      } else {
+        // Startup may have finished while connectivity was validating.
+        _tryPendingSync();
       }
     }
   }
