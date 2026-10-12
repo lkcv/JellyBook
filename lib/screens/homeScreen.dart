@@ -2,6 +2,7 @@
 // can see all their comics and manage them
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:jellybook/models/login.dart';
 import 'package:isar/isar.dart';
 import 'package:isar_flutter_libs/isar_flutter_libs.dart';
@@ -55,6 +56,8 @@ class _HomeScreenState extends State<HomeScreen> {
   int _previousIndex = 0;
 
   static const int _searchIndex = 1;
+  static const Duration _tabAnimationDuration = Duration(milliseconds: 200);
+  final Stopwatch _androidNavTapClock = Stopwatch();
 
   void _goBackFromSearch() {
     setState(() {
@@ -70,6 +73,18 @@ class _HomeScreenState extends State<HomeScreen> {
       }
       _selectedIndex = index;
     });
+  }
+
+  // GNav's buttons only hit-test their visible width. Give each tab an equal
+  // third of the full bar, while preserving GNav's animation and tap cooldown.
+  void _onWideTabTap(int index) {
+    if (_androidNavTapClock.isRunning &&
+        _androidNavTapClock.elapsed < _tabAnimationDuration) return;
+    _androidNavTapClock
+      ..reset()
+      ..start();
+    HapticFeedback.selectionClick();
+    _onTabChange(index);
   }
 
   // Keep the Library mounted to retain its image listeners and scroll state.
@@ -143,49 +158,85 @@ class _HomeScreenState extends State<HomeScreen> {
                   topRight: Radius.circular(20),
                 ),
               ),
-              child: Padding(
-                padding: const EdgeInsets.only(
-                    left: 15.0, right: 15.0, top: 8, bottom: 15),
-                child: GNav(
-                  rippleColor: Theme.of(context).colorScheme.secondary,
-                  hoverColor: Theme.of(context).colorScheme.secondary,
-                  activeColor: Colors.white,
-                  tabBorderRadius: 15,
-                  tabBackgroundGradient: LinearGradient(
-                    colors: [
-                      const Color(0xFFAA5CC3).withOpacity(0.75),
-                      const Color(0xFF00A4DC).withOpacity(0.75),
+              // Retain the original GNav as the visual/animation layer.
+              // A full-width hit layer assigns every point to one of 3 tabs.
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  ExcludeSemantics(
+                    child: IgnorePointer(
+                      child: Padding(
+                        padding: const EdgeInsets.only(
+                            left: 15.0, right: 15.0, top: 8, bottom: 15),
+                        child: GNav(
+                          rippleColor: Theme.of(context).colorScheme.secondary,
+                          hoverColor: Theme.of(context).colorScheme.secondary,
+                          activeColor: Colors.white,
+                          tabBorderRadius: 15,
+                          tabBackgroundGradient: LinearGradient(
+                            colors: [
+                              const Color(0xFFAA5CC3).withOpacity(0.75),
+                              const Color(0xFF00A4DC).withOpacity(0.75),
+                            ],
+                          ),
+                          tabActiveBorder:
+                              Theme.of(context).brightness == Brightness.dark
+                                  ? Border.all(
+                                      color: Colors.transparent, width: 0)
+                                  : Border.all(color: Colors.white, width: 1),
+                          haptic: true,
+                          iconSize: 24,
+                          gap: 7,
+                          padding: EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 7),
+                          duration: _tabAnimationDuration,
+                          tabBackgroundColor: Theme.of(context).primaryColor,
+                          color: Colors.white,
+                          tabs: [
+                            GButton(
+                              icon: Icons.local_library_outlined,
+                              text: AppLocalizations.of(context)?.library ??
+                                  'Library',
+                            ),
+                            GButton(
+                              icon: Icons.search,
+                              text: AppLocalizations.of(context)?.search ??
+                                  'Search',
+                            ),
+                            GButton(
+                              icon: Icons.settings,
+                              text: AppLocalizations.of(context)?.settings ??
+                                  'Settings',
+                            ),
+                          ],
+                          selectedIndex: _selectedIndex,
+                          onTabChange: _onTabChange,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (var index = 0; index < 3; index++)
+                        Expanded(
+                          child: Semantics(
+                            label: [
+                              AppLocalizations.of(context)?.library ?? 'Library',
+                              AppLocalizations.of(context)?.search ?? 'Search',
+                              AppLocalizations.of(context)?.settings ?? 'Settings',
+                            ][index],
+                            button: true,
+                            selected: _selectedIndex == index,
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () => _onWideTabTap(index),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
-                  tabActiveBorder:
-                      Theme.of(context).brightness == Brightness.dark
-                          ? Border.all(color: Colors.transparent, width: 0)
-                          : Border.all(color: Colors.white, width: 1),
-                  haptic: true,
-                  iconSize: 24,
-                  gap: 7,
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 7),
-                  duration: Duration(milliseconds: 200),
-                  tabBackgroundColor: Theme.of(context).primaryColor,
-                  color: Colors.white,
-                  tabs: [
-                    GButton(
-                      icon: Icons.local_library_outlined,
-                      text: AppLocalizations.of(context)?.library ?? 'Library',
-                    ),
-                    GButton(
-                      icon: Icons.search,
-                      text: AppLocalizations.of(context)?.search ?? 'Search',
-                    ),
-                    GButton(
-                      icon: Icons.settings,
-                      text:
-                          AppLocalizations.of(context)?.settings ?? 'Settings',
-                    ),
-                  ],
-                  selectedIndex: _selectedIndex,
-                  onTabChange: _onTabChange,
-                ),
+                ],
               ),
             ),
     );
