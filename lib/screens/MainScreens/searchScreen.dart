@@ -20,6 +20,42 @@ import 'package:jellybook/l10n/app_localizations.dart';
 import 'package:jellybook/variables.dart';
 import 'package:jellybook/screens/collectionScreen.dart' show KuroStyleBookCard;
 
+// Match the Library's two 17.5px concave header corners while leaving the
+// middle transparent for content scrolling behind the header.
+class _SearchHeaderCornersPainter extends CustomPainter {
+  const _SearchHeaderCornersPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, ui.Size size) {
+    final r = min(size.height, size.width / 2);
+    if (r <= 0) return;
+    final paint = Paint()..color = color;
+    final cornerRadius = Radius.circular(r);
+
+    final left = Path()
+      ..moveTo(0, 0)
+      ..lineTo(r, 0)
+      ..arcToPoint(Offset(0, r), radius: cornerRadius, clockwise: false)
+      ..close();
+    final right = Path()
+      ..moveTo(size.width - r, 0)
+      ..lineTo(size.width, 0)
+      ..lineTo(size.width, r)
+      ..arcToPoint(Offset(size.width - r, 0),
+          radius: cornerRadius, clockwise: false)
+      ..close();
+
+    canvas.drawPath(left, paint);
+    canvas.drawPath(right, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _SearchHeaderCornersPainter oldDelegate) =>
+      oldDelegate.color != color;
+}
+
 class SearchScreen extends StatefulWidget {
   /// Called when the user leaves Search (back arrow or system back).
   /// Used by the bottom-nav host to restore the previous tab.
@@ -33,6 +69,8 @@ class SearchScreen extends StatefulWidget {
 
 // _SearchScreenState
 class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver {
+  static const double _headerCornerRadius = 17.5;
+
   final _searchController = TextEditingController();
   final _searchFocusNode = FocusNode();
   bool _keyboardWasVisible = false;
@@ -251,7 +289,22 @@ class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver
             height: 48,
             child: Stack(
               alignment: Alignment.center,
+              clipBehavior: Clip.none,
               children: [
+                // Paint below the header without intercepting search gestures.
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: -_headerCornerRadius,
+                  height: _headerCornerRadius,
+                  child: IgnorePointer(
+                    child: CustomPaint(
+                      painter: _SearchHeaderCornersPainter(
+                        color: Colors.black.withOpacity(0.90),
+                      ),
+                    ),
+                  ),
+                ),
                 // Equal left/right margins center the pill on the *screen*,
                 // rather than in the space remaining after the back button.
                 Positioned.fill(

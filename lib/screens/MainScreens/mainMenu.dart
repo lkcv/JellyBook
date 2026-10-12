@@ -28,6 +28,7 @@ class MainMenu extends StatefulWidget {
 class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
   static const _pageSize = 20;
   static const double _toolbarHeight = 36;
+  static const double _headerCornerRadius = 17.5;
   static const double _gridTopGap = 12;
 
   double _headerHeight(BuildContext context) =>
@@ -485,7 +486,24 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
             height: _toolbarHeight,
             child: Stack(
               alignment: Alignment.center,
+              clipBehavior: Clip.none,
               children: [
+                // Extend just the outer edges below the bar. The concave
+                // arcs round the grid's top corners without moving the grid
+                // or the pull-to-refresh indicator.
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: -_headerCornerRadius,
+                  height: _headerCornerRadius,
+                  child: IgnorePointer(
+                    child: CustomPaint(
+                      painter: _LibraryHeaderCornersPainter(
+                        color: Colors.black.withOpacity(0.90),
+                      ),
+                    ),
+                  ),
+                ),
                 // On notched devices, pin title near the top (under the notch).
                 // On flat status bars / tablets, keep equal top & bottom padding.
                 Align(
@@ -589,6 +607,42 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
       ),
     );
   }
+}
+
+// Quarter-circle extensions below the translucent Library header. Paint
+// only the two corners, keeping the middle clear for scrolling covers.
+class _LibraryHeaderCornersPainter extends CustomPainter {
+  const _LibraryHeaderCornersPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final r = math.min(size.height, size.width / 2);
+    if (r <= 0) return;
+    final paint = Paint()..color = color;
+    final cornerRadius = Radius.circular(r);
+
+    final left = Path()
+      ..moveTo(0, 0)
+      ..lineTo(r, 0)
+      ..arcToPoint(Offset(0, r), radius: cornerRadius, clockwise: false)
+      ..close();
+    final right = Path()
+      ..moveTo(size.width - r, 0)
+      ..lineTo(size.width, 0)
+      ..lineTo(size.width, r)
+      ..arcToPoint(Offset(size.width - r, 0),
+          radius: cornerRadius, clockwise: false)
+      ..close();
+
+    canvas.drawPath(left, paint);
+    canvas.drawPath(right, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _LibraryHeaderCornersPainter oldDelegate) =>
+      oldDelegate.color != color;
 }
 
 class SeriesCard extends StatefulWidget {
