@@ -36,6 +36,9 @@ class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver
   final _searchController = TextEditingController();
   final _searchFocusNode = FocusNode();
   bool _keyboardWasVisible = false;
+  // A tap outside, a scroll, or Enter should hide the IME without leaving Search.
+  bool _keepSearchOnKeyboardClose = false;
+  bool _leavingSearch = false;
   final _resultsScrollController = ScrollController();
   final isar = Isar.getInstance();
   List<Entry> _catalog = [];
@@ -58,10 +61,38 @@ class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver
     // interfere with its dismissal animation.
     final keyboardVisible = View.of(context).viewInsets.bottom > 0;
     if (keyboardVisible) {
+      // Only reset when a *new* keyboard session starts, not on every inset
+      // update during its closing animation.
+      if (!_keyboardWasVisible) _keepSearchOnKeyboardClose = false;
       _keyboardWasVisible = true;
     } else if (_keyboardWasVisible) {
       _keyboardWasVisible = false;
+      final stay = _keepSearchOnKeyboardClose;
+      _keepSearchOnKeyboardClose = false;
       _searchFocusNode.unfocus();
+
+      // Android normally consumes Back to hide its keyboard. For an abandoned
+      // empty search, use that completed dismissal as the signal to go back.
+      // A deliberately dismissed keyboard (tap, scroll, Enter) stays here.
+      if (!stay &&
+          _searchController.text.trim().isEmpty &&
+          Theme.of(context).platform == TargetPlatform.android) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted ||
+              _leavingSearch ||
+              _keyboardWasVisible ||
+              _searchFocusNode.hasFocus ||
+              _searchController.text.trim().isNotEmpty ||
+              !(ModalRoute.of(context)?.isCurrent ?? false)) {
+            return;
+          }
+          final lifecycle = WidgetsBinding.instance.lifecycleState;
+          if (lifecycle != null && lifecycle != AppLifecycleState.resumed) {
+            return;
+          }
+          _handleBack();
+        });
+      }
     }
   }
 
@@ -169,11 +200,22 @@ class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver
     getSearchResults(query);
   }
 
+  void _dismissKeyboardAndStay() {
+    if (_keyboardWasVisible || _searchFocusNode.hasFocus) {
+      _keepSearchOnKeyboardClose = true;
+      _searchFocusNode.unfocus();
+    }
+  }
+
   void _handleBack() {
+    if (_leavingSearch) return;
+    _leavingSearch = true;
     if (widget.onBack != null) {
       widget.onBack!();
     } else {
-      Navigator.of(context).maybePop();
+      Navigator.of(context).maybePop().then((popped) {
+        if (mounted && !popped) _leavingSearch = false;
+      });
     }
   }
 
@@ -185,7 +227,14 @@ class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver
       canPop: false,
       onPopInvokedWithResult: (bool didPop, dynamic result) {
         if (!didPop) {
-          _handleBack();
+          // Some Android configurations deliver Back to PopScope even with
+          // the IME open; preserve the normal first-Back behavior for text.
+          if (_keyboardWasVisible &&
+              _searchController.text.trim().isNotEmpty) {
+            _dismissKeyboardAndStay();
+          } else {
+            _handleBack();
+          }
         }
       },
       child: Scaffold(
@@ -234,6 +283,9 @@ class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver
                           border: InputBorder.none,
                         ),
                         onChanged: _onQueryChanged,
+                        // Enter/Done is a deliberate keyboard dismissal, not
+                        // an attempt to exit an empty search.
+                        onEditingComplete: _dismissKeyboardAndStay,
                       ),
                     ),
                   ),
@@ -257,8 +309,12 @@ class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver
         ),
       ),
 
-      // body based on if searchResults is 0 or not
-      body: searchResults.isEmpty
+      // Only a completed tap counts as an outside tap. A pointer-down
+      // listener here would also intercept the start of Android's edge Back.
+      body: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: _dismissKeyboardAndStay,
+        child: searchResults.isEmpty
           ? _searchController.text.trim().isEmpty
               ? Center(
                   child: Text(
@@ -276,7 +332,15 @@ class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver
                               'No results found',
                           style: const TextStyle(fontSize: 20)),
                     )
-          : GridView.builder(
+          : NotificationListener<ScrollStartNotification>(
+              onNotification: (notification) {
+                if (notification.dragDetails != null) {
+                  _dismissKeyboardAndStay();
+                }
+                return false;
+              },
+              child: GridView.builder(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               controller: _resultsScrollController,
               padding: EdgeInsets.fromLTRB(
                 10,
@@ -317,7 +381,9 @@ class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver
                   ],
                 );
               },
+              ),
             ),
+      ),
     ),  // Scaffold
     );  // PopScope
   }
