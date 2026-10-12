@@ -54,7 +54,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   static const int _searchIndex = 1;
   static const Duration _tabAnimationDuration = Duration(milliseconds: 200);
-  final Stopwatch _navTapClock = Stopwatch();
 
   void _goBackFromSearch() {
     setState(() {
@@ -72,14 +71,10 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // GNav's buttons only hit-test their visible width. Give each tab an equal
-  // third of the full bar, while preserving GNav's animation and tap cooldown.
+  // Give each tab an equal third of the bar and allow immediate selection.
+  // GNav animates the visual change using its existing 200ms duration.
   void _onWideTabTap(int index) {
-    if (_navTapClock.isRunning &&
-        _navTapClock.elapsed < _tabAnimationDuration) return;
-    _navTapClock
-      ..reset()
-      ..start();
+    if (index == _selectedIndex) return;
     HapticFeedback.selectionClick();
     _onTabChange(index);
   }
