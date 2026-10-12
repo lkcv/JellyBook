@@ -9,6 +9,7 @@ import 'package:markdown/markdown.dart' as md;
 import 'package:isar/isar.dart';
 import 'package:isar_flutter_libs/isar_flutter_libs.dart';
 import 'package:jellybook/models/entry.dart';
+import 'package:jellybook/providers/supportedFormats.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_star/flutter_star.dart';
 import 'package:jellybook/models/folder.dart';
@@ -267,6 +268,7 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
         .filter()
         .anyOf(bookIds, (q, String id) => q.idEqualTo(id))
         .findAll();
+    entryList = entryList.where(isSupportedEntry).toList();
     entryList.forEach((element) {
       if (element.type == EntryType.folder) {
         logger.f(element.title);

@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:isar/isar.dart';
 import 'package:jellybook/models/entry.dart';
+import 'package:jellybook/providers/supportedFormats.dart';
 import 'package:jellybook/providers/fileNameFromTitle.dart';
 import 'package:jellybook/providers/ComicInfoXML.dart';
 import 'package:jellybook/variables.dart';
@@ -21,6 +22,11 @@ Future<Entry> downloadEntry(
   required ProgressCallback onProgress,
   bool forceDownload = false,
 }) async {
+  // Reject before writing to disk or issuing a download request.
+  if (!isSupportedEntry(entry)) {
+    throw UnsupportedError('Unsupported file format: ${entry.path}');
+  }
+
   final storage = await SharedPreferences.getInstance();
   final isar = Isar.getInstance();
   if (isar == null) throw Exception('Isar not initialized');
@@ -124,13 +130,6 @@ Future<void> _extractFile(
       }
       entry.downloaded = true;
       entry.folderPath = comicFolder;
-    } else if (entry.path.contains('.pdf')) {
-      var file = File('$dirLocation/$fileName');
-      await Directory(comicFolder).create(recursive: true);
-      file.renameSync('$comicFolder/$fileName');
-      entry.folderPath = comicFolder;
-      entry.filePath = '$comicFolder/$fileName';
-      entry.downloaded = true;
     } else if (dir.contains('.epub')) {
       var file = File('$dirLocation/$fileName');
       await Directory(comicFolder).create(recursive: true);

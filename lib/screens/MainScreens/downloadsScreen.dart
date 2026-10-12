@@ -6,6 +6,7 @@ import 'package:jellybook/screens/infoScreen.dart';
 import 'package:isar/isar.dart';
 import 'package:isar_flutter_libs/isar_flutter_libs.dart';
 import 'package:jellybook/models/entry.dart';
+import 'package:jellybook/providers/supportedFormats.dart';
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:jellybook/widgets/roundedImageWithShadow.dart';
 import 'package:jellybook/providers/fixRichText.dart';
@@ -24,7 +25,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     final isar = Isar.getInstance();
     final entryList =
         await isar!.entrys.where().filter().downloadedEqualTo(true).findAll();
-    return entryList;
+    return entryList.where(isSupportedEntry).toList();
   }
 
   Future<List<Entry>> get entries async {

@@ -54,7 +54,6 @@ dependencies:
   flutter_settings_screens: ^0.3.3-null-safety+2
   url_launcher: ^6.3.2
   #http: ^1.1.0
-  # flutter_pdfview: ^1.2.5
   open_filex: ^4.7.0
   jellybook_epub_view:
     # git: https://github.com/Kara-Zor-El/jellybook_epub_view.git
@@ -66,7 +65,6 @@ dependencies:
     git:
       url: https://github.com/Komodo5197/isar_flutter_libs.git
       ref: 21c20862e94bb33fca9e9c14b5ca72fc41307f4b
-  pdfx: ^2.11.0
   package_info_plus: ^10.2.1
   auto_size_text: ^3.0.0
   google_nav_bar: ^5.0.7

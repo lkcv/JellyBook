@@ -8,6 +8,7 @@ import 'package:built_collection/built_collection.dart';
 // database imports
 import 'package:jellybook/models/entry.dart';
 import 'package:jellybook/models/folder.dart';
+import 'package:jellybook/providers/supportedFormats.dart';
 import 'package:isar/isar.dart';
 import 'package:jellybook/variables.dart';
 
@@ -105,7 +106,7 @@ Future<void> getComics(String comicsId) async {
       isFavorited: element.userData?.isFavorite ?? false,
       downloaded: false,
     );
-    List<String> bookFileTypes = ['pdf', 'epub', 'mobi', 'azw3', 'kpf'];
+    List<String> bookFileTypes = ['epub', 'mobi', 'azw3', 'kpf'];
     List<String> comicFileTypes = ['cbz', 'cbr', 'zip', 'rar'];
     List<String> audioFileTypes = [
       'flac',
@@ -129,6 +130,10 @@ Future<void> getComics(String comicsId) async {
     } else if (audioFileTypes.contains(entryPath)) {
       entry.type = EntryType.audiobook;
     }
+
+    // Do not import newly encountered unsupported files. Previously stored
+    // rows remain in Isar but are hidden by the same format policy.
+    if (!isSupportedEntry(entry)) return;
 
     entries.indexWhere((element1) {
       if (element1.id == entry.id) {

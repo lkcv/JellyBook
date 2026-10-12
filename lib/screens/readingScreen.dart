@@ -7,9 +7,9 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:isar/isar.dart';
 import 'package:isar_flutter_libs/isar_flutter_libs.dart';
 import 'package:jellybook/models/entry.dart';
+import 'package:jellybook/providers/supportedFormats.dart';
 
 // reading screens
-import 'package:jellybook/screens/readingScreens/pdfReader.dart';
 import 'package:jellybook/screens/readingScreens/cbrCbzReader.dart';
 import 'package:jellybook/screens/readingScreens/epubReader.dart';
 import 'package:jellybook/screens/readingScreens/audiobookReader.dart';
@@ -82,7 +82,10 @@ class _ReadingScreenState extends State<ReadingScreen> {
 
   Future<void> checkDownloaded() async {
     final entry = await isar!.entrys.where().idEqualTo(comicId).findFirst();
-    
+
+    // This also protects direct navigation to stale unsupported Isar entries.
+    if (entry == null || !isSupportedEntry(entry)) return;
+
     logger.i("entry: $entry");
     logger.i("entry.path: ${entry!.path}");
     logger.i("entry.title: ${entry.title}");
@@ -134,33 +137,6 @@ class _ReadingScreenState extends State<ReadingScreen> {
 
     // use a switch statement to determine how to read the file
     switch (fileExtension) {
-      case 'pdf':
-        Navigator.push(
-          context,
-          // for the route, have no transition
-          PageRouteBuilder(
-            transitionDuration: const Duration(milliseconds: 0),
-            pageBuilder: (context, animation, secondaryAnimation) =>
-                PdfReader(comicId: comicId, title: title),
-            transitionsBuilder:
-                (context, animation, secondaryAnimation, child) {
-              var begin = const Offset(1.0, 0.0);
-              var end = Offset.zero;
-              var curve = Curves.ease;
-
-              var tween =
-                  Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
-
-              return SlideTransition(
-                position: animation.drive(tween),
-                child: child,
-              );
-            },
-          ),
-        );
-        logger.i("Filetype: $fileExtension");
-        break;
-
       case 'cbz':
       case 'cbr':
       case 'zip':

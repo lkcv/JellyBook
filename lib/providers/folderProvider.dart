@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:isar/isar.dart';
 import 'package:jellybook/models/folder.dart';
 import 'package:jellybook/models/entry.dart';
+import 'package:jellybook/providers/supportedFormats.dart';
 import 'package:jellybook/variables.dart';
 
 // This function takes the list of entries and creates folders if their parentId is not one of the categories
@@ -18,8 +19,9 @@ static Future<void> createFolders(
     List<String> categories = prefs.getStringList('categories') ?? [];
     List<Folder> newFolders = [];
     entries.forEach((entry) {
-      List<Entry> bookEntries =
-          isar!.entrys.filter().parentIdEqualTo(entry.id).findAllSync();
+      List<Entry> bookEntries = isar!.entrys
+          .filter().parentIdEqualTo(entry.id).findAllSync()
+          .where(isSupportedEntry).toList();
       List<String> bookEntryIds = bookEntries.map((entry) => entry.id).toList();
       
       // Get folder image - use first book's image if folder doesn't have one
@@ -77,8 +79,9 @@ static Future<void> createFolders(
         .where((f) => libraryNames.contains(f.title))
         .map((f) => f.id)
         .toSet();
-    final allBooks =
-        await isar.entrys.filter().not().typeEqualTo(EntryType.folder).findAll();
+    final allBooks = (await isar.entrys
+            .filter().not().typeEqualTo(EntryType.folder).findAll())
+        .where(isSupportedEntry).toList();
     final looseBooks = allBooks
         .where((b) =>
             libraryRootIds.contains(b.parentId) ||

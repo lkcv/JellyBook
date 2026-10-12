@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import 'package:isar_flutter_libs/isar_flutter_libs.dart';
 import 'package:jellybook/models/entry.dart';
+import 'package:jellybook/providers/supportedFormats.dart';
 import 'package:jellybook/screens/infoScreen.dart';
 import 'package:jellybook/screens/readingScreen.dart';
 import 'package:jellybook/screens/readingScreens/cbrCbzReader.dart';
@@ -73,7 +74,7 @@ class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver
         .typeEqualTo(EntryType.comic)
         .findAll();
     if (!mounted || version != _catalogVersion) return;
-    _catalog = books;
+    _catalog = books.where(isSupportedEntry).toList();
     _catalogReady = true;
     getSearchResults(_searchController.text);
   }

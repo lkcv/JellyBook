@@ -4,11 +4,63 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tentacle/tentacle.dart';
 import 'package:jellybook/providers/fetchBooks.dart';
 import 'package:jellybook/providers/folderProvider.dart';
+import 'package:jellybook/providers/supportedFormats.dart';
 import 'package:jellybook/models/entry.dart';
 import 'package:jellybook/models/folder.dart';
 import 'package:isar/isar.dart';
 import 'package:package_info_plus/package_info_plus.dart' as p_info;
 import 'package:jellybook/variables.dart';
+
+/// Return UI-only folder projections. Do not mutate persisted Folder records;
+/// previously indexed PDFs and downloaded files remain intact in Isar.
+/// Also handles nested folders and virtual one-volume folders whose folder ID
+/// equals their book ID.
+List<Folder> visibleLibraryFolders(
+  List<Folder> folders,
+  Iterable<Entry> entries, {
+  Iterable<String> excludedNames = const <String>[],
+}) {
+  final byEntryId = {for (final e in entries) e.id: e};
+  final byFolderId = {for (final folder in folders) folder.id: folder};
+  final excluded = excludedNames.toSet();
+
+  List<String> visibleMemberIds(Folder folder, Set<String> visiting) {
+    if (!visiting.add(folder.id)) return <String>[];
+    final members = <String>[];
+    for (final id in folder.bookIds) {
+      final entry = byEntryId[id];
+      if (entry != null && entry.type != EntryType.folder &&
+          isSupportedEntry(entry)) {
+        members.add(id);
+        continue;
+      }
+      final childFolder = byFolderId[id];
+      if (childFolder != null &&
+          visibleMemberIds(childFolder, visiting).isNotEmpty) {
+        members.add(id);
+      }
+    }
+    visiting.remove(folder.id);
+    return members;
+  }
+
+  final result = <Folder>[];
+  for (final folder in folders) {
+    if (excluded.contains(folder.name)) continue;
+    final members = visibleMemberIds(folder, <String>{});
+    if (members.isEmpty) continue;
+    final visible = Folder(
+      id: folder.id,
+      name: folder.name,
+      image: folder.image,
+      bookIds: members,
+    )..isarId = folder.isarId;
+    result.add(visible);
+  }
+  result.sort((a, b) =>
+      a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+  return result;
+}
 
 // have optional perameter to have the function return the list of folders
 Future<(List<Entry>, List<Folder>)> getServerCategories({
@@ -31,12 +83,10 @@ Future<(List<Entry>, List<Folder>)> getServerCategories({
   // Not final: on a first load the prefs are empty here, so this is updated
   // below once the library names have been fetched from the server.
   var libraryNames = prefs.getStringList('categories') ?? [];
-  // Hide library roots and keep the grid alphabetical (folders come back from
-  // Isar in insertion order, which puts one-book series last).
-  List<Folder> withoutLibraries(List<Folder> f) => f
-      .where((folder) => !libraryNames.contains(folder.name))
-      .toList()
-    ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+  // Project membership using the entries already loaded for the library.
+  // Avoid an extra Isar query during the startup cover prewarm.
+  List<Folder> withoutLibraries(List<Folder> folders, List<Entry> books) =>
+      visibleLibraryFolders(folders, books, excludedNames: libraryNames);
   final List<Folder> foldersTemp = await isar!.folders.where().findAll();
   QueryBuilder<Entry, Entry, QAfterFilterCondition> typeNotBook =
       await isar.entrys.filter().not().typeEqualTo(EntryType.folder);
@@ -47,8 +97,10 @@ Future<(List<Entry>, List<Folder>)> getServerCategories({
       .isFavoritedEqualTo(false)
       .sortByTitle()
       .findAll());
-  if (foldersTemp.length > 0 && booksTemp.length > 0 && !force) {
-    return (booksTemp, withoutLibraries(foldersTemp));
+  final hasCachedBooks = booksTemp.isNotEmpty;
+  booksTemp = booksTemp.where(isSupportedEntry).toList();
+  if (foldersTemp.isNotEmpty && hasCachedBooks && !force) {
+    return (booksTemp, withoutLibraries(foldersTemp, booksTemp));
   }
 
   // turn all the previous logger.d's into a single logger.d with multiple lines
@@ -106,7 +158,8 @@ Future<(List<Entry>, List<Folder>)> getServerCategories({
       await getComics(comicsIds[i]);
       // comics.addAll(comicsTemp);
     }
-    comics = await typeNotBook.sortByTitle().findAll();
+    comics = (await typeNotBook.sortByTitle().findAll())
+        .where(isSupportedEntry).toList();
     comics.sort((a, b) => a.title.compareTo(b.title));
 
     prefs.setStringList('comicsIds', comicsIds);
@@ -138,10 +191,9 @@ Future<(List<Entry>, List<Folder>)> getServerCategories({
     logger.i("categoriesList: $categoriesList");
     prefs.setStringList('categories', categoriesList);
     libraryNames = categoriesList;
-    // List<Entry> entries = await isar!.entrys.where().findAll();
-
     await CreateFolders.getFolders(categoriesList);
-    List<Folder> folders = withoutLibraries(await isar.folders.where().findAll());
+    List<Folder> folders = withoutLibraries(
+        await isar.folders.where().findAll(), comics);
     return (comics, folders);
   }
 }
@@ -158,7 +210,7 @@ Future<(int, List<Entry>)> fetchEntries(int offset, int limit) async {
       .isFavoritedEqualTo(false)
       .sortByTitle()
       .findAll());
-  entries = entries.skip(offset).take(limit).toList();
+  entries = entries.where(isSupportedEntry).skip(offset).take(limit).toList();
   int length = entries.length;
   logger.f("entries: " + entries.length.toString());
   return (length, entries);
