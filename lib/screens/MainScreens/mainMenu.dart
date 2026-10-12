@@ -27,6 +27,11 @@ class MainMenu extends StatefulWidget {
 
 class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
   static const _pageSize = 20;
+  static const double _toolbarHeight = 36;
+  static const double _gridTopGap = 12;
+
+  double _headerHeight(BuildContext context) =>
+      MediaQuery.paddingOf(context).top + _toolbarHeight;
   late final PagingController<int, Entry> _pagingController =
       PagingController<int, Entry>(
     getNextPageKey: (state) {
@@ -126,7 +131,7 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
       // Estimate the visible rows to decode them before the first grid frame.
       final width = math.max(1.0, MediaQuery.sizeOf(context).width - 16);
       final rowHeight = ((width - 6) / 2) / 0.63 + 6;
-      final gridTop = MediaQuery.paddingOf(context).top + 48;
+      final gridTop = _headerHeight(context) + _gridTopGap;
       final rows = math.max(1,
           ((MediaQuery.sizeOf(context).height - gridTop) / rowHeight).ceil() + 1);
       return (first: 0, end: math.min(count, math.max(10, rows * 2)));
@@ -136,7 +141,7 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
     final width = math.max(1.0, MediaQuery.sizeOf(context).width - 16);
     final tileWidth = (width - 6) / 2;
     final rowHeight = tileWidth / 0.63 + 6;
-    final gridTop = MediaQuery.paddingOf(context).top + 48;
+    final gridTop = _headerHeight(context) + _gridTopGap;
     final firstRow = math.max(0, ((offset - gridTop) / rowHeight).floor() - 1);
     final lastRow = math.max(firstRow + 1,
         ((offset + viewport - gridTop) / rowHeight).ceil() + 1);
@@ -275,8 +280,8 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
       slivers: <Widget>[
         SliverToBoxAdapter(
           child: SizedBox(
-            // match custom app bar: status/notch inset + compact bar content
-            height: MediaQuery.of(context).padding.top + 40 + 8,
+            // Leave the same gap below the overlay header as before.
+            height: _headerHeight(context) + _gridTopGap,
           ),
         ),
         SliverPadding(
@@ -388,16 +393,18 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    final topInset = MediaQuery.paddingOf(context).top;
+    final headerHeight = _headerHeight(context);
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: PreferredSize(
-        // Compact bar: only status/notch inset + 40px content (default AppBar is 56).
-        preferredSize: Size.fromHeight(MediaQuery.of(context).padding.top + 36),
+        // Compact bar: status/notch inset plus the 36dp toolbar.
+        preferredSize: Size.fromHeight(headerHeight),
         child: Container(
           color: Colors.black.withOpacity(0.90),
-          padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
+          padding: EdgeInsets.only(top: topInset),
           child: SizedBox(
-            height: 36,
+            height: _toolbarHeight,
             child: Stack(
               alignment: Alignment.center,
               children: [
@@ -455,6 +462,8 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
         ),
       ),
       body: RefreshIndicator(
+        // Keep the spinner below the translucent header, without moving the grid.
+        edgeOffset: headerHeight,
         onRefresh: () async {
           _pagingController.refresh();
           await _reloadCategories();
