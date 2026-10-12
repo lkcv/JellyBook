@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:jellybook/screens/downloadedVolumesScreen.dart';
 import 'package:jellybook/providers/readerPageCache.dart';
 import 'package:jellybook/widgets/jellybookImageCache.dart';
 
@@ -161,6 +162,19 @@ class _ReaderCacheSettingsState extends State<ReaderCacheSettings> {
           children: [
             Text('Storage & cache',
                 style: Theme.of(context).textTheme.titleMedium),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.download_for_offline_outlined),
+              title: const Text('Downloaded volumes'),
+              subtitle: const Text('Manage locally stored volumes'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const DownloadedVolumesScreen(),
+                ),
+              ),
+            ),
+            const Divider(height: 1),
             const SizedBox(height: 14),
             Text('Reader page cache',
                 style: Theme.of(context).textTheme.titleSmall),

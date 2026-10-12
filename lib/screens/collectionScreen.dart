@@ -31,17 +31,20 @@ class collectionScreen extends StatefulWidget {
   final String name;
   final String image;
   final List<String> bookIds;
+  final bool downloadedOnly;
 
   collectionScreen({
     required this.folderId,
     required this.name,
     required this.image,
     required this.bookIds,
+    this.downloadedOnly = false,
   });
 
   @override
   _collectionScreenState createState() => _collectionScreenState(
-      folderId: folderId, name: name, image: image, bookIds: bookIds);
+      folderId: folderId, name: name, image: image, bookIds: bookIds,
+      downloadedOnly: downloadedOnly);
 }
 
 class _collectionScreenState extends State<collectionScreen> with WidgetsBindingObserver {
@@ -51,12 +54,14 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
   final String name;
   final String image;
   final List<String> bookIds;
+  final bool downloadedOnly;
 
   _collectionScreenState({
     required this.folderId,
     required this.name,
     required this.image,
     required this.bookIds,
+    this.downloadedOnly = false,
   });
 
   final ScrollController _gridController = ScrollController();
@@ -80,7 +85,14 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
 
   void _refreshEntries() {
     if (!mounted) return;
-    setState(() => _entriesFuture = getEntries());
+    final refreshed = getEntries();
+    setState(() => _entriesFuture = refreshed);
+    if (downloadedOnly) {
+      // Removing the final download leaves this filtered series empty.
+      unawaited(refreshed.then((entries) async {
+        if (mounted && entries.isEmpty) await Navigator.of(context).maybePop();
+      }));
+    }
   }
 
   @override
@@ -270,7 +282,8 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
         .filter()
         .anyOf(bookIds, (q, String id) => q.idEqualTo(id))
         .findAll();
-    entryList = entryList.where(isSupportedEntry).toList();
+    entryList = entryList.where((entry) =>
+        isSupportedEntry(entry) && (!downloadedOnly || entry.downloaded)).toList();
     entryList.forEach((element) {
       if (element.type == EntryType.folder) {
         logger.f(element.title);

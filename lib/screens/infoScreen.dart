@@ -513,11 +513,10 @@ class _InfoScreenState extends State<InfoScreen> {
                 onSelected: (value) async {
                   if (value == "delete") {
                     logger.d("deleting comic");
-                    await deleteComic(entry.id, context);
-                    setState(() {
-                      entry.downloaded = false;
-                    });
-                    Navigator.pop(context, (entry));
+                    final removed = await deleteComic(entry.id, context);
+                    if (!mounted || !removed) return;
+                    setState(() => entry.downloaded = false);
+                    Navigator.pop(context, entry);
                   }
                   if (value == "edit") {
                     logger.d("editing comic");

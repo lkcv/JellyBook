@@ -11,7 +11,6 @@ import 'package:provider/provider.dart';
 // Screens imports
 import 'package:jellybook/screens/MainScreens/mainMenu.dart';
 import 'package:jellybook/screens/MainScreens/settingsScreen.dart';
-import 'package:jellybook/screens/MainScreens/downloadsScreen.dart';
 import 'package:jellybook/screens/MainScreens/searchScreen.dart';
 import 'package:jellybook/screens/loginScreen.dart';
 import 'package:jellybook/l10n/app_localizations.dart';
@@ -55,7 +54,7 @@ class _HomeScreenState extends State<HomeScreen> {
   // Last non-search tab so Search can return to wherever the user was
   int _previousIndex = 0;
 
-  static const int _searchIndex = 2;
+  static const int _searchIndex = 1;
 
   void _goBackFromSearch() {
     setState(() {
@@ -78,10 +77,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _otherTab() {
     switch (_selectedIndex) {
       case 1:
-        return DownloadsScreen();
-      case 2:
         return SearchScreen(onBack: _goBackFromSearch);
-      case 3:
+      case 2:
         return SettingsScreen();
       default:
         return const SizedBox.shrink();
@@ -111,7 +108,7 @@ class _HomeScreenState extends State<HomeScreen> {
       body: IndexedStack(
         index: _selectedIndex == 0 ? 0 : 1,
         children: [
-          MainMenu(),
+          MainMenu(isActive: _selectedIndex == 0),
           _otherTab(),
         ],
       ),
@@ -122,12 +119,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   : CupertinoTheme.of(context).barBackgroundColor,
               items: [
                 BottomNavigationBarItem(
-                  icon: Icon(Icons.home),
-                  label: AppLocalizations.of(context)?.home ?? 'Home',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.download),
-                  label: AppLocalizations.of(context)?.downloads ?? 'Downloads',
+                  icon: Icon(Icons.local_library_outlined),
+                  label: AppLocalizations.of(context)?.library ?? 'Library',
                 ),
                 BottomNavigationBarItem(
                   icon: Icon(Icons.search),
@@ -177,13 +170,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   color: Colors.white,
                   tabs: [
                     GButton(
-                      icon: Icons.home,
-                      text: AppLocalizations.of(context)?.home ?? 'Home',
-                    ),
-                    GButton(
-                      icon: Icons.download,
-                      text: AppLocalizations.of(context)?.downloads ??
-                          'Downloads',
+                      icon: Icons.local_library_outlined,
+                      text: AppLocalizations.of(context)?.library ?? 'Library',
                     ),
                     GButton(
                       icon: Icons.search,

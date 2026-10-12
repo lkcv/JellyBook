@@ -7,6 +7,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:jellybook/models/folder.dart';
 import 'package:jellybook/providers/fetchCategories.dart';
+import 'package:jellybook/providers/supportedFormats.dart';
 import 'package:jellybook/screens/collectionScreen.dart';
 import 'package:jellybook/screens/infoScreen.dart';
 import 'package:isar/isar.dart';
@@ -21,6 +22,11 @@ import 'package:provider/provider.dart';
 import 'package:jellybook/providers/connectionManager.dart';
 
 class MainMenu extends StatefulWidget {
+  // Library stays mounted in HomeScreen's IndexedStack across tab changes.
+  final bool isActive;
+
+  MainMenu({this.isActive = true});
+
   @override
   _MainMenuState createState() => _MainMenuState();
 }
@@ -55,7 +61,58 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
 
   bool _errorModalShowing = false;
   List<Folder>? _lastFolders;
-  final ScrollController _libraryScrollController = ScrollController();
+  // Separate PageStorage keys retain both filter modes' scroll positions.
+  final ScrollController _allScrollController = ScrollController();
+  final ScrollController _downloadedScrollController = ScrollController();
+  ScrollController get _libraryScrollController =>
+      _downloadedOnly ? _downloadedScrollController : _allScrollController;
+  bool _downloadedOnly = false;
+  bool _hadDownloadsWhenLeaving = false;
+
+  @override
+  void didUpdateWidget(covariant MainMenu oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isActive && !widget.isActive) {
+      // Remember whether this was a populated filter before leaving Library.
+      // An intentionally empty Downloaded view must stay empty on return.
+      _hadDownloadsWhenLeaving =
+          _downloadedOnly && _downloadedIds().isNotEmpty;
+    } else if (!oldWidget.isActive && widget.isActive) {
+      if (_hadDownloadsWhenLeaving && _downloadedOnly &&
+          _downloadedIds().isEmpty) {
+        // Settings removed the final download while Library was mounted but
+        // inactive. Restore All and its independent scroll position.
+        _downloadedOnly = false;
+        _coverSignature = null;
+        _scheduleCoverWarming();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No downloads remaining — showing all series'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        });
+      }
+      _hadDownloadsWhenLeaving = false;
+    }
+  }
+
+  Set<String> _downloadedIds() {
+    final isar = Isar.getInstance();
+    if (isar == null) return <String>{};
+    return isar.entrys.where().filter().downloadedEqualTo(true).findAllSync()
+        .where(isSupportedEntry).map((entry) => entry.id).toSet();
+  }
+
+  List<Folder> _visibleFolders(List<Folder> all) {
+    if (!_downloadedOnly) return all;
+    final downloaded = _downloadedIds();
+    return all.where((folder) =>
+        folder.bookIds.any(downloaded.contains)).toList();
+  }
+
   bool _inForeground = true;
   bool _startupSyncScheduled = false;
   bool _startupSyncPending = false;
@@ -231,8 +288,9 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
     _warmAgain = false;
     _warming = true;
     try {
-      final folders = _lastFolders;
-      if (folders == null) return;
+      final allFolders = _lastFolders;
+      if (allFolders == null) return;
+      final folders = _visibleFolders(allFolders);
       final signatureAtStart = _coverSignature;
       final range = _visibleCoverRange(folders.length);
       // At most two concurrent decodes, joining the exact same providers
@@ -353,8 +411,15 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
     }
   }
 
-  Widget _buildGrid(List<Folder> folders) {
+  Widget _buildGrid(List<Folder> allFolders) {
+    final downloaded = _downloadedOnly ? _downloadedIds() : <String>{};
+    final folders = _downloadedOnly
+        ? allFolders.where((f) => f.bookIds.any(downloaded.contains)).toList()
+        : allFolders;
     return CustomScrollView(
+      key: PageStorageKey<String>(
+          _downloadedOnly ? 'library-downloaded' : 'library-all'),
+      physics: const AlwaysScrollableScrollPhysics(),
       controller: _libraryScrollController,
       slivers: <Widget>[
         SliverToBoxAdapter(
@@ -363,7 +428,21 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
             height: _headerHeight(context) + _gridTopGap,
           ),
         ),
-        SliverPadding(
+        if (_downloadedOnly && folders.isEmpty)
+          const SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.download_for_offline_outlined, size: 48),
+                  SizedBox(height: 12),
+                  Text('No downloaded volumes'),
+                ],
+              ),
+            ),
+          ),
+        if (folders.isNotEmpty) SliverPadding(
           padding: const EdgeInsets.symmetric(horizontal: 8.0),
           sliver: SliverGrid(
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -379,6 +458,9 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
                   valueListenable: _progressRevision,
                   builder: (context, _, __) => SeriesCard(
                     folder: folder,
+                    downloadedCount: _downloadedOnly
+                        ? folder.bookIds.where(downloaded.contains).length
+                        : null,
                     onTap: () async {
                       await Navigator.push(
                         context,
@@ -388,11 +470,36 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
                             name: folder.name,
                             image: folder.image,
                             bookIds: folder.bookIds,
+                            downloadedOnly: _downloadedOnly,
                           ),
                         ),
                       );
                       // Read saved progress from Isar, not from the server.
-                      if (mounted) _progressRevision.value++;
+                      if (mounted) {
+                        // Leaving a filtered Collection after deleting the
+                        // very last download should restore normal browsing.
+                        // Other series with downloads keep the filter active.
+                        final showAll =
+                            _downloadedOnly && _downloadedIds().isEmpty;
+                        setState(() {
+                          if (showAll) _downloadedOnly = false;
+                        });
+                        _progressRevision.value++;
+                        if (showAll) {
+                          // Use the existing All scroll controller and warm
+                          // its visible covers, exactly as with a manual toggle.
+                          _coverSignature = null;
+                          _scheduleCoverWarming();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'No downloads remaining — showing all series',
+                              ),
+                              duration: Duration(seconds: 2),
+                            ),
+                          );
+                        }
+                      }
                     },
                   ),
                 );
@@ -418,7 +525,8 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
     _inForeground = false;
     WidgetsBinding.instance.removeObserver(this);
     _releaseStartupCoverPins();
-    _libraryScrollController.dispose();
+    _allScrollController.dispose();
+    _downloadedScrollController.dispose();
     _connectionManager?.removeListener(_onConnectionChanged);
     _progressRevision.dispose();
     _pagingController.dispose();
@@ -517,6 +625,26 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
                     ),
+                  ),
+                ),
+                // A single tap filters to series with complete local volumes.
+                Positioned(
+                  left: 4,
+                  child: IconButton(
+                    icon: Icon(
+                      Icons.download_for_offline_outlined,
+                      color: _downloadedOnly
+                          ? Theme.of(context).colorScheme.primary
+                          : Colors.white,
+                    ),
+                    tooltip: _downloadedOnly
+                        ? 'Show all series'
+                        : 'Show downloaded series',
+                    onPressed: () {
+                      setState(() => _downloadedOnly = !_downloadedOnly);
+                      _coverSignature = null;
+                      _scheduleCoverWarming();
+                    },
                   ),
                 ),
                 // Connection status icon (right)
@@ -647,9 +775,11 @@ class _LibraryHeaderCornersPainter extends CustomPainter {
 
 class SeriesCard extends StatefulWidget {
   final Folder folder;
+  final int? downloadedCount;
   final VoidCallback onTap;
 
-  const SeriesCard({super.key, required this.folder, required this.onTap});
+  const SeriesCard({super.key, required this.folder, required this.onTap,
+      this.downloadedCount});
 
   @override
   State<SeriesCard> createState() => _SeriesCardState();
@@ -668,10 +798,13 @@ class _SeriesCardState extends State<SeriesCard> {
         .filter()
         .anyOf(widget.folder.bookIds, (q, String id) => q.idEqualTo(id))
         .findAllSync();
-    if (entries.isEmpty) return 0.0;
+    final shown = widget.downloadedCount == null
+        ? entries
+        : entries.where((entry) => entry.downloaded).toList();
+    if (shown.isEmpty) return 0.0;
     // entry.progress is a percentage (0-100); return a 0-1 fraction
-    final total = entries.fold<double>(0.0, (sum, e) => sum + e.progress);
-    return (total / entries.length / 100).clamp(0.0, 1.0);
+    final total = shown.fold<double>(0.0, (sum, e) => sum + e.progress);
+    return (total / shown.length / 100).clamp(0.0, 1.0);
   }
 
   @override
@@ -733,7 +866,7 @@ class _SeriesCardState extends State<SeriesCard> {
                           border: Border.all(color: scheme.outlineVariant),
                         ),
                         child: Text(
-                          '${folder.bookIds.length} ${folder.bookIds.length == 1 ? 'Book' : 'Books'}',
+                          '${widget.downloadedCount ?? folder.bookIds.length} ${(widget.downloadedCount ?? folder.bookIds.length) == 1 ? 'Book' : 'Books'}',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 12,
