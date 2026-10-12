@@ -126,6 +126,9 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       bottomNavigationBar: Container(
+        // Reserve space beneath the bar for the keyboard so GNav stays
+        // visible and tappable directly above it.
+        margin: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
         height: 70 + iosBottomInset,
         padding: EdgeInsets.only(bottom: iosBottomInset),
         decoration: BoxDecoration(
