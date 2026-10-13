@@ -96,6 +96,9 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
         });
       }
       _hadDownloadsWhenLeaving = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && widget.isActive) _refreshOnLibraryReturnIfStale();
+      });
     }
   }
 
@@ -119,6 +122,9 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
   bool _serverRefreshStarted = false;
   Future<void>? _activeRefresh;
   DateTime? _backgroundedAt;
+  static const _libraryReturnRefreshInterval = Duration(minutes: 1);
+  DateTime? _lastSuccessfulServerRefreshAt;
+  DateTime? _lastServerRefreshAttemptAt;
   bool _warmScheduled = false;
   bool _warming = false;
   bool _warmAgain = false;
@@ -134,7 +140,13 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
     _categoriesFuture = getServerCategories(
       force: false,
       onCacheHit: _scheduleStartupSync,
-    );
+    ).then((result) {
+      // Without a cache hit, initial loading already fetched the server.
+      if (!_startupSyncScheduled) {
+        _lastSuccessfulServerRefreshAt = DateTime.now();
+      }
+      return result;
+    });
     WidgetsBinding.instance.addObserver(this);
   }
 
@@ -168,9 +180,29 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
     if (!_serverRefreshStarted) unawaited(_reloadCategories(background: true));
   }
 
+  // Only revalidate on returning to Library; never poll while it is idle.
+  void _refreshOnLibraryReturnIfStale() {
+    if (!mounted || !widget.isActive || !_inForeground ||
+        !_initialCoversReady || _activeRefresh != null ||
+        _connectionManager?.status != ConnectionStatus.online) return;
+    if (_startupSyncPending) {
+      _tryPendingSync();
+      return;
+    }
+    final now = DateTime.now();
+    final success = _lastSuccessfulServerRefreshAt;
+    final attempt = _lastServerRefreshAttemptAt;
+    if ((success != null &&
+            now.difference(success) < _libraryReturnRefreshInterval) ||
+        (attempt != null &&
+            now.difference(attempt) < _libraryReturnRefreshInterval)) return;
+    unawaited(_reloadCategories(background: true));
+  }
+
   Future<void> _reloadCategories({bool background = false}) {
     final active = _activeRefresh;
     if (active != null) return active;
+    _lastServerRefreshAttemptAt = DateTime.now();
     _serverRefreshStarted = true;
     final operation = _performReloadCategories(background);
     _activeRefresh = operation;
@@ -186,6 +218,7 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
     if (!background) setState(() => _categoriesFuture = future);
     try {
       final result = await future;
+      _lastSuccessfulServerRefreshAt = DateTime.now();
       if (mounted) {
         // Silent revalidation must never replace a cached first frame with
         // a loading spinner, or show an error dialog if Jellyfin is down.
@@ -487,6 +520,11 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
                           if (showAll) _downloadedOnly = false;
                         });
                         _progressRevision.value++;
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (mounted && widget.isActive) {
+                            _refreshOnLibraryReturnIfStale();
+                          }
+                        });
                         if (showAll) {
                           // Use the existing All scroll controller and warm
                           // its visible covers, exactly as with a manual toggle.
