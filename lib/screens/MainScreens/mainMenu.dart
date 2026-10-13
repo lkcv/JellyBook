@@ -308,6 +308,8 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
         // Release the extra listeners only after those widgets have mounted.
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _releaseStartupCoverPins();
+          // The grid has painted; retry any startup sync waiting on covers.
+          _tryPendingSync();
         });
       }
     } finally {
