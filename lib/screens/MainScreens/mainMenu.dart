@@ -122,7 +122,9 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
   bool _startupSyncPending = false;
   bool _serverRefreshStarted = false;
   Future<void>? _activeRefresh;
-  DateTime? _backgroundedAt;
+  // True only after the app was actually backgrounded (including screen lock).
+  // A brief inactive/focus change alone should not cause a network refresh.
+  bool _wasBackgrounded = false;
   static const _libraryReturnRefreshInterval = Duration(minutes: 1);
   DateTime? _lastSuccessfulServerRefreshAt;
   DateTime? _lastServerRefreshAttemptAt;
@@ -247,24 +249,22 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    final wasInForeground = _inForeground;
     _inForeground = state == AppLifecycleState.resumed;
     if (_inForeground) {
       // Decoded images can be reclaimed while Android has us backgrounded.
       // This also runs when Library is not the selected bottom tab.
       _scheduleCoverWarming();
-      // A process can stay alive while the user reads in another Jellyfin
-      // client. Recheck after a meaningful absence, without polling in-app.
-      final awaySince = _backgroundedAt;
-      _backgroundedAt = null;
-      if (awaySince != null &&
-          DateTime.now().difference(awaySince) >= const Duration(minutes: 1)) {
+      // Refresh immediately after an actual background/lock transition,
+      // regardless of how briefly the app was away. This is a silent fetch.
+      if (_wasBackgrounded) {
+        _wasBackgrounded = false;
         _serverRefreshStarted = false;
         _startupSyncPending = true;
       }
       _tryPendingSync();
-    } else if (wasInForeground) {
-      _backgroundedAt = DateTime.now();
+    } else if (state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.paused) {
+      _wasBackgrounded = true;
     }
   }
 
