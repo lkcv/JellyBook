@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:jellybook/providers/updatePagenum.dart';
-import 'package:jellybook/screens/downloaderScreen.dart';
+import 'package:jellybook/providers/downloadManager.dart';
 import 'package:jellybook/providers/fileNameFromTitle.dart';
 import 'package:isar/isar.dart';
 import 'package:isar_flutter_libs/isar_flutter_libs.dart';
@@ -22,7 +22,6 @@ import 'package:flutter/scheduler.dart';
 import 'package:provider/provider.dart';
 import 'package:jellybook/providers/connectionManager.dart';
 import 'package:jellybook/providers/cbzStream.dart';
-import 'package:jellybook/providers/downloadEntry.dart';
 import 'package:jellybook/providers/readerPageCache.dart';
 import 'package:jellybook/widgets/readerPinchZoom.dart';
 
@@ -611,38 +610,34 @@ class _CbzReaderState extends State<CbzReader>
     if (_downloadInProgress) return;
     final isar = Isar.getInstance();
     final entry = await isar!.entrys.where().idEqualTo(comicId).findFirst();
-    if (entry == null) return;
+    if (entry == null || !mounted) return;
 
+    final manager = DownloadManager.instance;
+    final job = manager.enqueue(entry);
+    void updateProgress() {
+      if (!mounted) return;
+      if ((job.progress - _downloadProgress).abs() < 1 &&
+          job.state == DownloadJobState.downloading) return;
+      setState(() => _downloadProgress = job.progress);
+    }
+    manager.addListener(updateProgress);
     setState(() {
       _downloadInProgress = true;
-      _downloadProgress = 0.0;
+      _downloadProgress = job.progress;
     });
     try {
-      await downloadEntry(
-        entry,
-        onProgress: (p) {
-          if (!mounted) return;
-          if (p < 100 && (p - _downloadProgress).abs() < 1) return;
-          setState(() => _downloadProgress = p);
-        },
-      );
+      // The manager owns the transfer, not this reader route. Closing the
+      // reader only removes the listener; the queue continues independently.
+      final downloaded = await job.result;
+      if (!mounted || downloaded == null) return;
       await createPageList(); // local page paths ready
       if (!mounted) return;
-
-      // Decode the pages currently on screen from disk *before* flipping
-      // off streaming. Otherwise Image.file has a cold cache and the black
-      // scaffold shows through for a frame.
+      // Warm the visible local pages before switching off streaming.
       await _precacheLocalAround(_currentPage);
       if (!mounted) return;
-
-      setState(() {
-        _isStreaming = false;
-        _downloadInProgress = false;
-      });
+      setState(() => _isStreaming = false);
       _pageCache.clear();
       _precacheAround(_currentPage);
-
-      // Drop stream temp files only after the local images have painted
       final stream = _stream;
       _stream = null;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -650,6 +645,8 @@ class _CbzReaderState extends State<CbzReader>
       });
     } catch (e) {
       logger.e('CbzReader: download failed: $e');
+    } finally {
+      manager.removeListener(updateProgress);
       if (mounted) setState(() => _downloadInProgress = false);
     }
   }

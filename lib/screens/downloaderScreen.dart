@@ -4,7 +4,7 @@ import 'package:jellybook/widgets/WaveProgressBar.dart';
 import 'package:jellybook/models/entry.dart';
 import 'package:jellybook/l10n/app_localizations.dart';
 import 'package:jellybook/variables.dart';
-import 'package:jellybook/providers/downloadEntry.dart';
+import 'package:jellybook/providers/downloadManager.dart';
 
 class DownloadScreen extends StatefulWidget {
   Entry entry;
@@ -22,34 +22,42 @@ class _DownloadScreenState extends State<DownloadScreen> {
   bool downloading = false;
   bool downloaded = false;
 
+  DownloadJob? _job;
+  bool _scheduledPop = false;
+
   @override
   void initState() {
     super.initState();
+    DownloadManager.instance.addListener(_onJobChanged);
     _download();
   }
 
-  Future<void> _download() async {
-    setState(() => downloading = true);
-    try {
-      final result = await downloadEntry(
-        entry,
-        onProgress: (p) => setState(() => progress = p),
-        forceDownload: false,
-      );
-      setState(() {
-        entry = result;
-        downloading = false;
-        downloaded = true;
-        progress = 100;
-      });
+  @override
+  void dispose() {
+    DownloadManager.instance.removeListener(_onJobChanged);
+    super.dispose();
+  }
+
+  void _download() {
+    _scheduledPop = false;
+    _job = DownloadManager.instance.enqueue(entry);
+    _onJobChanged();
+  }
+
+  void _onJobChanged() {
+    final job = _job;
+    if (!mounted || job == null) return;
+    setState(() {
+      progress = job.progress;
+      downloading = job.state == DownloadJobState.downloading ||
+          job.state == DownloadJobState.queued;
+      downloaded = job.state == DownloadJobState.completed;
+      if (downloaded) entry = job.entry;
+    });
+    if (downloaded && !_scheduledPop) {
+      _scheduledPop = true;
       Future.delayed(const Duration(seconds: 1), () {
         if (mounted) Navigator.pop(context, entry);
-      });
-    } catch (e) {
-      logger.e('Download error: $e');
-      setState(() {
-        downloading = false;
-        downloaded = false;
       });
     }
   }

@@ -7,6 +7,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:jellybook/models/folder.dart';
 import 'package:jellybook/providers/fetchCategories.dart';
+import 'package:jellybook/providers/downloadManager.dart';
+import 'package:jellybook/widgets/downloadQueueSheet.dart';
 import 'package:jellybook/providers/serverProgressRevision.dart';
 import 'package:jellybook/providers/supportedFormats.dart';
 import 'package:jellybook/screens/collectionScreen.dart';
@@ -343,6 +345,9 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
         // Release the extra listeners only after those widgets have mounted.
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _releaseStartupCoverPins();
+          // Recover pending downloads only after startup covers have painted,
+          // so resumed transfers don't compete with the first Library frame.
+          unawaited(DownloadManager.instance.restoreQueue());
           // The grid has painted; retry any startup sync waiting on covers.
           _tryPendingSync();
         });
@@ -686,6 +691,71 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
                       setState(() => _downloadedOnly = !_downloadedOnly);
                       _coverSignature = null;
                       _scheduleCoverWarming();
+                    },
+                  ),
+                ),
+                // Only this header control observes the download queue;
+                // progress ticks never rebuild Library cards or cover images.
+                Positioned(
+                  right: 48,
+                  child: ValueListenableBuilder<int>(
+                    valueListenable: DownloadManager.instance.headerChanges,
+                    builder: (context, _, __) {
+                      final manager = DownloadManager.instance;
+                      final pending = manager.pendingCount;
+                      final failed = manager.failedCount;
+                      if (pending == 0 && failed == 0) {
+                        return const SizedBox.shrink();
+                      }
+                      return IconButton(
+                        tooltip: 'Download queue',
+                        onPressed: () => showModalBottomSheet<void>(
+                          context: context,
+                          isScrollControlled: true,
+                          builder: (_) => const DownloadQueueSheet(),
+                        ),
+                        icon: SizedBox(
+                          width: 27,
+                          height: 27,
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              Center(child: Icon(
+                                pending == 0 ? Icons.error_outline :
+                                    Icons.downloading_rounded,
+                                color: pending == 0 ? Colors.redAccent :
+                                    Colors.white,
+                                size: 23,
+                              )),
+                              if (pending > 0)
+                                Positioned(
+                                  bottom: -4,
+                                  right: -5,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 4, vertical: 1),
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFFAA5CC3),
+                                      borderRadius: BorderRadius.all(
+                                          Radius.circular(10)),
+                                    ),
+                                    child: Text(pending > 99 ? '99+' : '$pending',
+                                        style: const TextStyle(
+                                            color: Colors.white, fontSize: 9,
+                                            fontWeight: FontWeight.bold)),
+                                  ),
+                                ),
+                              if (failed > 0 && pending > 0)
+                                const Positioned(
+                                  top: -2,
+                                  right: -3,
+                                  child: Icon(Icons.circle,
+                                      size: 8, color: Colors.redAccent),
+                                ),
+                            ],
+                          ),
+                        ),
+                      );
                     },
                   ),
                 ),
