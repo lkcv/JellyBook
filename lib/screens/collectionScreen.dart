@@ -10,6 +10,7 @@ import 'package:isar/isar.dart';
 import 'package:isar_flutter_libs/isar_flutter_libs.dart';
 import 'package:jellybook/models/entry.dart';
 import 'package:jellybook/providers/supportedFormats.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_star/flutter_star.dart';
 import 'package:jellybook/models/folder.dart';
@@ -20,6 +21,7 @@ import 'package:jellybook/variables.dart';
 import 'package:jellybook/widgets/jellybookImageCache.dart';
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:jellybook/screens/readingScreen.dart';
+import 'package:jellybook/providers/serverProgressRevision.dart';
 import 'package:jellybook/providers/readerPageCache.dart';
 import 'package:jellybook/screens/readingScreens/cbzReader.dart';
 import 'package:jellybook/widgets/coverOpeningRoute.dart';
@@ -69,6 +71,9 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
   // fresh Future in build() briefly replaces the grid with a spinner.
   late Future<List<Entry>> _entriesFuture;
   List<Entry>? _latestEntries;
+  // Notifies just the visible badge/progress widgets, never the cover images.
+  final ValueNotifier<int> _cardProgressRevision = ValueNotifier<int>(0);
+  int _progressReadGeneration = 0;
   bool _warmScheduled = false;
   bool _warming = false;
   bool _warmAgain = false;
@@ -80,7 +85,39 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
   void initState() {
     super.initState();
     _entriesFuture = getEntries();
+    serverProgressRevision.addListener(_onServerProgressRefreshed);
     WidgetsBinding.instance.addObserver(this);
+  }
+
+  // A server refresh already wrote to Isar; reread only the saved page and
+  // percentage, leaving the rendered entry list and its cover providers alone.
+  void _onServerProgressRefreshed() {
+    unawaited(_updateCardProgress());
+  }
+
+  Future<void> _updateCardProgress() async {
+    final displayed = _latestEntries;
+    if (!mounted || displayed == null) return;
+    final generation = ++_progressReadGeneration;
+    try {
+      final refreshed = await getEntries();
+      if (!mounted || generation != _progressReadGeneration ||
+          !identical(displayed, _latestEntries)) return;
+      final byId = {for (final entry in refreshed) entry.id: entry};
+      var changed = false;
+      for (final entry in displayed) {
+        final newest = byId[entry.id];
+        if (newest == null ||
+            (entry.pageNum == newest.pageNum &&
+                entry.progress == newest.progress)) continue;
+        entry.pageNum = newest.pageNum;
+        entry.progress = newest.progress;
+        changed = true;
+      }
+      if (changed) _cardProgressRevision.value++;
+    } catch (error) {
+      logger.w('Could not update Collection progress indicators: $error');
+    }
   }
 
   void _refreshEntries() {
@@ -109,6 +146,8 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
   @override
   void dispose() {
     _inForeground = false;
+    serverProgressRevision.removeListener(_onServerProgressRefreshed);
+    _cardProgressRevision.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _gridController.dispose();
     super.dispose();
@@ -386,6 +425,7 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
                   Entry entry = snapshot.data[index];
                   return KuroStyleBookCard(
                     entry: entry,
+                    progressRevision: _cardProgressRevision,
                     onEntryTapped: (coverRect) async {
                       if (entry.type == EntryType.folder) {
                         var folder = isar!.folders
@@ -584,11 +624,13 @@ class _CollectionHeaderCornersPainter extends CustomPainter {
 // Kuro Reader-inspired book card widget
 class KuroStyleBookCard extends StatefulWidget {
   final Entry entry;
+  final ValueListenable<int>? progressRevision;
   final ValueChanged<Rect> onEntryTapped;
   final VoidCallback? onEntryLongPressed; // new
 
   const KuroStyleBookCard({
     required this.entry,
+    this.progressRevision,
     required this.onEntryTapped,
     this.onEntryLongPressed, // new
   });
@@ -616,12 +658,6 @@ class KuroStyleBookCardState extends State<KuroStyleBookCard> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    // entry.progress is stored as a percentage (0-100), not a 0-1 fraction
-    final double progressPercent = widget.entry.progress;
-    final bool isUnread = widget.entry.pageNum == 0 && progressPercent <= 0;
-    final bool isFinished = progressPercent >= 100;
-    final double progress = (progressPercent / 100).clamp(0.0, 1.0);
-
     // Check if offline
     final connectionStatus =
         Provider.of<ConnectionManager>(context).status;
@@ -653,30 +689,40 @@ class KuroStyleBookCardState extends State<KuroStyleBookCard> {
                       Positioned(
                         top: 2,
                         left: 2,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: isUnread
-                                ? const Color(0xFFE91E63)
-                                : isFinished
-                                    ? const Color(0xFF4CAF50)
-                                    : const Color(0xFFFF9800),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            isUnread
-                                ? 'UNREAD'
-                                : isFinished
-                                    ? 'FINISHED'
-                                    : 'READING',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 9,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
+                        child: ValueListenableBuilder<int>(
+                          valueListenable:
+                              widget.progressRevision ?? serverProgressRevision,
+                          builder: (context, _, __) {
+                            final progressPercent = widget.entry.progress;
+                            final isUnread = widget.entry.pageNum == 0 &&
+                                progressPercent <= 0;
+                            final isFinished = progressPercent >= 100;
+                            return Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: isUnread
+                                    ? const Color(0xFFE91E63)
+                                    : isFinished
+                                        ? const Color(0xFF4CAF50)
+                                        : const Color(0xFFFF9800),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                isUnread
+                                    ? 'UNREAD'
+                                    : isFinished
+                                        ? 'FINISHED'
+                                        : 'READING',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            );
+                          },
                         ),
                       ),
                       if (widget.entry.isFavorited == true)
@@ -707,11 +753,15 @@ class KuroStyleBookCardState extends State<KuroStyleBookCard> {
                   borderRadius: BorderRadius.circular(2),
                   child: SizedBox(
                     height: 3,
-                    child: LinearProgressIndicator(
-                      value: progress,
-                      backgroundColor: scheme.outlineVariant,
-                      valueColor:
-                          AlwaysStoppedAnimation<Color>(scheme.primary),
+                    child: ValueListenableBuilder<int>(
+                      valueListenable:
+                              widget.progressRevision ?? serverProgressRevision,
+                      builder: (context, _, __) => LinearProgressIndicator(
+                        value: (widget.entry.progress / 100).clamp(0.0, 1.0),
+                        backgroundColor: scheme.outlineVariant,
+                        valueColor:
+                            AlwaysStoppedAnimation<Color>(scheme.primary),
+                      ),
                     ),
                   ),
                 ),

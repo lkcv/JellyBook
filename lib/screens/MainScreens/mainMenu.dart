@@ -7,6 +7,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:jellybook/models/folder.dart';
 import 'package:jellybook/providers/fetchCategories.dart';
+import 'package:jellybook/providers/serverProgressRevision.dart';
 import 'package:jellybook/providers/supportedFormats.dart';
 import 'package:jellybook/screens/collectionScreen.dart';
 import 'package:jellybook/screens/infoScreen.dart';
@@ -227,6 +228,7 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
         }
         // Server progress is now in Isar. Cards read progress from there.
         _progressRevision.value++;
+        serverProgressRevision.value++;
       }
     } catch (error) {
       if (background) logger.w('Background library sync failed: $error');
