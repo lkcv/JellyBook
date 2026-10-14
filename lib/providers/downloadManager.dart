@@ -14,6 +14,7 @@ import 'package:jellybook/providers/downloadEntry.dart';
 import 'package:jellybook/providers/downloadBackground.dart';
 import 'package:jellybook/providers/resumableTransfer.dart';
 import 'package:jellybook/providers/fileNameFromTitle.dart';
+import 'package:jellybook/providers/supportedFormats.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:jellybook/providers/connectionManager.dart';
 
@@ -238,8 +239,11 @@ class DownloadManager extends ChangeNotifier {
               state != 'failed') continue;
           if (!savedIds.add(id)) continue;
           final entry = await isar.entrys.where().idEqualTo(id).findFirst();
-          // Downloads completed before an app crash are already in Isar.
-          if (entry == null || entry.downloaded) continue;
+          // Never resurrect queued downloads for formats we no longer support.
+          // Leave any partial files on disk; only prune the queue journal.
+          if (entry == null || entry.downloaded || !isSupportedEntry(entry)) {
+            continue;
+          }
           final job = DownloadJob(entry);
           final fileName = await fileNameFromTitle(entry.path.split('/').last);
           final directory = await getApplicationDocumentsDirectory();

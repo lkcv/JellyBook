@@ -12,7 +12,6 @@ import 'package:jellybook/providers/supportedFormats.dart';
 // reading screens
 import 'package:jellybook/screens/readingScreens/cbzReader.dart';
 import 'package:jellybook/screens/readingScreens/epubReader.dart';
-import 'package:jellybook/screens/readingScreens/audiobookReader.dart';
 
 import 'package:jellybook/l10n/app_localizations.dart';
 import 'package:jellybook/variables.dart';
@@ -191,43 +190,6 @@ class _ReadingScreenState extends State<ReadingScreen> {
             },
           ),
         );
-      // audiobook
-      case 'flac':
-      case 'mpga':
-      case 'mp3':
-      case 'm3u':
-      case 'm3u8':
-      case 'm4a':
-      case 'm4b':
-      case 'wav':
-        Navigator.push(
-          context,
-          // for the route, have no transition
-          PageRouteBuilder(
-            transitionDuration: const Duration(milliseconds: 0),
-            pageBuilder: (context, animation, secondaryAnimation) =>
-                AudioBookReader(
-              audioBookId: comicId,
-              title: title,
-            ),
-            transitionsBuilder:
-                (context, animation, secondaryAnimation, child) {
-              var begin = const Offset(1.0, 0.0);
-              var end = Offset.zero;
-              var curve = Curves.ease;
-
-              var tween =
-                  Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
-
-              return SlideTransition(
-                position: animation.drive(tween),
-                child: child,
-              );
-            },
-          ),
-        );
-
-        break;
       default:
         // if the file extension is not supported, tell the user
         logger.e('File extension not supported');

@@ -9,6 +9,8 @@ enum EntryType {
   book,
   comic,
   folder,
+  // Legacy Isar enum value: keep its index stable for existing installations.
+  // Audio entries are filtered out by supportedFormats.dart.
   audiobook,
 }
 

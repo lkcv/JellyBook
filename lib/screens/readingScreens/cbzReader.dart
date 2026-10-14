@@ -10,10 +10,6 @@ import 'package:jellybook/models/entry.dart';
 import 'package:jellybook/providers/progress.dart';
 import 'package:jellybook/l10n/app_localizations.dart';
 import 'package:jellybook/variables.dart';
-import 'package:audioplayers/audioplayers.dart';
-import 'package:jellybook/screens/AudioPicker.dart';
-import 'package:flutter_background_service/flutter_background_service.dart';
-import 'package:jellybook/widgets/AudioPlayerWidget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
 import 'package:auto_size_text/auto_size_text.dart';
@@ -106,13 +102,6 @@ class _CbzReaderState extends State<CbzReader>
   bool _downloadInProgress = false;
   double _downloadProgress = 0.0;
 
-  // Audio variables
-  String audioPath = '';
-  AudioPlayer audioPlayer = AudioPlayer();
-  bool isPlaying = false;
-  Duration audioPosition = Duration();
-  String audioId = '';
-
   @override
   void initState() {
     super.initState();
@@ -125,7 +114,6 @@ class _CbzReaderState extends State<CbzReader>
   void dispose() {
     _pageController?.dispose();
     _verticalScrollController.dispose();
-    audioPlayer.dispose();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     _tapTicker.dispose();
     _clearStreamAfterPageWork(_stream);

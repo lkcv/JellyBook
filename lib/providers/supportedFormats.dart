@@ -7,7 +7,6 @@ const supportedFileExtensions = <String>{
   'epub',
   // Preserve formats already listed by the importer until a separate cleanup.
   'mobi', 'azw3', 'kpf',
-  'flac', 'mpga', 'mp3', 'm3u', 'm3u8', 'm4a', 'm4b', 'wav',
 };
 
 String entryFileExtension(String path) {

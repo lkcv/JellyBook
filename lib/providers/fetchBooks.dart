@@ -118,27 +118,15 @@ Future<void> getComics(String comicsId) async {
     );
     List<String> bookFileTypes = ['epub', 'mobi', 'azw3', 'kpf'];
     List<String> comicFileTypes = ['cbz', 'zip'];
-    List<String> audioFileTypes = [
-      'flac',
-      'mpga',
-      'mp3',
-      'm3u',
-      'm3u8',
-      'm4a',
-      'm4b',
-      'wav',
-    ];
 
     String entryPath = element.path.toString().toLowerCase();
-    // check if its a book, comic, or audiobook
+    // Audio entries are excluded by the shared format policy.
     if (element.type.toString().toLowerCase() == 'folder') {
       entry.type = EntryType.folder;
     } else if (bookFileTypes.contains(entryPath)) {
       entry.type = EntryType.book;
     } else if (comicFileTypes.contains(entryPath)) {
       entry.type = EntryType.comic;
-    } else if (audioFileTypes.contains(entryPath)) {
-      entry.type = EntryType.audiobook;
     }
 
     // Do not import newly encountered unsupported files. Previously stored

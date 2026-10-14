@@ -16,7 +16,7 @@
 
 <p align="center">
   Hi, this is a passion project I am working on.
-  Its an app that's meant to allow you to read ebooks, comics, and listen to audiobooks from your Jellyfin server.
+  Its an app that's meant to allow you to read ebooks and comics from your Jellyfin server.
 </p>
 
 <h1>Table of Contents</h1>
@@ -24,9 +24,7 @@
    * [⚡ Installation:](#zap-installation)
    * [📷 Screenshots (and videos):](#camera-screenshots-and-videos)
    * [📁 File formats:](#file_folder-file-formats)
-      * [🎵 Audiobook formats:](#musical_note-audiobook-formats)
    * [ Currently Unsupported Filetypes ](#-currently-unsupported-filetypes-)
-   * [ Currently Unsupported Audiobooks Filetypes ](#-currently-unsupported-audiobooks-filetypes-)
    * [🚧 Todo:](#construction-todo)
    * [📞 Contact Me](#telephone_receiver-contact-me)
    * [⚙️ Contributing:](#️-contributing)
@@ -69,29 +67,11 @@
 | :----- | :---------- | :------------ |
 | `.cbz` & `.zip` | <ul><li>The view for them currently does not show a progress indicator. | <ul><li>[CBZ/ZIP](http://www.idea2ic.com/File_Formats/ZIP%20File%20Format%20Specification.pdf)</li></ul> |
 | `.epub` | <ul><li>Image support is not the greatest.</li><li>No horizontal support yet.</li><li>Just not in a state where I'd consider the support proper.</li></ul> | <ul><li>[EPUB 3.2](https://www.w3.org/publishing/epub3/epub-spec.html) |
-### :musical_note: Audiobook formats:
-- Currently, the app supports the following formats:
-  - `flac`
-  - `mpga`
-  - `mp3`
-  - `m3u`
-  - `m3u8`
-  - `m4a`
-  - `m4b`
-  - `wav`
-</br>
-
-
-> Note: this is partially due to the fact that [Jellyfin Bookshelf Plugin](https://github.com/jellyfin/jellyfin-plugin-bookshelf) only currently supports `epub`, `mobi`, `pdf`, `cbz`, and `cbr` for books and `mp3`, `m4a`, `m4b`, and `flac` for audiobooks. I am unsure if other formats can be added here until the plugin is updated.
-
 | <h2> Currently Unsupported Filetypes </h2> |
 | :-- |
 | <ul><li>`.pdf`</li><li>`.cbr`/`.rar`</li><li>`.cbt`/`.tar`<li>`.cba`/`.ACE`</li><li>`.cb7`/`.7z`</li><li>`tar.gz`</li><li>`.WebP`</li><li>`.gif`</li><li>`.lrf`/`.lrx`</li><li>`.djvu`</li><li>`.pdb`</li><li>`.fb2`</li><li>`.ibooks`</li><li>`.azw`/`.azw3`/`.kf8`/`.kfx`</li><li>`.pcf`/`.mobi`</li><li>`.opf`</li><li>`.txt`</li><li>`.oxps`/`.xps`</li></ul> |
 
-PDF and CBR/RAR archives are intentionally unsupported and hidden from JellyBook’s Library, Collections, Search, and Downloads screens. Existing downloaded files are not deleted.
-
-| <h2> Currently Unsupported Audiobooks Filetypes </h2> |
-| <ul><li>`.aax`</li><li>`.aac`</li><li>`.ogg`</li></ul>
+PDF, CBR/RAR, and audiobook files are intentionally unsupported and hidden from JellyBook’s Library, Collections, Search, and Downloads screens. Existing downloaded files are not deleted.
 
 ## :construction: Todo:
  - [ ] A more consistent experience between all book formats
@@ -111,7 +91,6 @@ PDF and CBR/RAR archives are intentionally unsupported and hidden from JellyBook
  - [ ] Add dynamic loading of books on library view to prevent slowdowns
  - [X] Allow user to edit metadata of books (both locally and on the server)
  - [X] Vertical scrolling
- - [X] Audiobooks
  - [X] Allow local caching of current files while viewing collection when offline (proper offline support)
  - [X] Remember user support
  - [X] Settings page
