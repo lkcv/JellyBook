@@ -1,6 +1,10 @@
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
+import 'dart:io';
+
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:dio/dio.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:isar/isar.dart';
@@ -11,12 +15,21 @@ import 'package:jellybook/providers/downloadBackground.dart';
 import 'package:jellybook/providers/resumableTransfer.dart';
 import 'package:jellybook/providers/fileNameFromTitle.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:jellybook/providers/connectionManager.dart';
 
 /// Shared queue with a persistent journal and optional Android foreground
 /// execution while it drains. The service helps with lock/background survival,
 /// but cannot survive a force-stop or process kill. Interrupted transfers are
 /// resumed from retained bytes after restart, while queued work survives.
-enum DownloadJobState { queued, downloading, completed, failed, canceled }
+enum DownloadJobState {
+  queued,
+  downloading,
+  waitingForNetwork,
+  waitingForServer,
+  completed,
+  failed,
+  canceled,
+}
 
 class DownloadJob {
   DownloadJob(this.entry);
@@ -35,12 +48,152 @@ class DownloadJob {
 
 class DownloadManager extends ChangeNotifier {
   DownloadManager._();
+
+  /// Use the same authenticated server status as the Library header.
+  /// Binding is performed once from the app's ConnectionManager provider.
+  /// The OS connectivity stream is NOT a signal to start an HTTP transfer.
+  void bindConnectionManager(ConnectionManager manager) {
+    if (identical(_connectionManager, manager)) return;
+    _connectionManager?.removeListener(_onConnectionChanged);
+    _connectionManager = manager;
+    _lastConnectionStatus = null;
+    manager.addListener(_onConnectionChanged);
+    _onConnectionChanged();
+  }
+
+  void _onConnectionChanged() {
+    final current = _connectionManager?.status;
+    if (current == null || current == _lastConnectionStatus) return;
+    final wasOnline = _lastConnectionStatus == ConnectionStatus.online;
+    _lastConnectionStatus = current;
+
+    if (current != ConnectionStatus.online) {
+      // The provider is still validating (or has confirmed an outage).
+      // Don't let a scheduled retry race ahead of that validation.
+      _retryTimer?.cancel();
+      _retryTimer = null;
+      return;
+    }
+    if (wasOnline) return;
+
+    // Jellyfin's /System/Info/Public and authenticated /Users/Me checks
+    // have succeeded. Wake only now, not when Android first sees Wi-Fi.
+    _consecutiveInterruptions = 0;
+    _recentReconnectUntil = DateTime.now().add(
+      const Duration(seconds: 30),
+    );
+    _quickReconnectRetryAvailable = true;
+    _retryTimer?.cancel();
+    _retryTimer = null;
+    if (!_restored) return; // Preserve Library's deferred startup restore.
+    _wakeWaitingJobs();
+    if (_nextRunnableJob() != null) unawaited(_drain());
+  }
+
   static final DownloadManager instance = DownloadManager._();
 
   final List<DownloadJob> _jobs = [];
   final ValueNotifier<int> _headerChanges = ValueNotifier<int>(0);
   bool _draining = false;
   DateTime? _lastProgressNotice;
+  ConnectionManager? _connectionManager;
+  ConnectionStatus? _lastConnectionStatus;
+  Timer? _retryTimer;
+  int _consecutiveInterruptions = 0;
+  DateTime? _recentReconnectUntil;
+  bool _quickReconnectRetryAvailable = false;
+
+  bool _isWaiting(DownloadJobState state) =>
+      state == DownloadJobState.waitingForNetwork ||
+      state == DownloadJobState.waitingForServer;
+
+  // Do not let a waiting head-of-line job bypass the FIFO ordering.
+  DownloadJob? _nextRunnableJob() {
+    for (final job in _jobs) {
+      if (_isWaiting(job.state)) return null;
+      if (job.state == DownloadJobState.queued) return job;
+    }
+    return null;
+  }
+
+  void _wakeWaitingJobs() {
+    // ConnectivityResult.wifi is not sufficient: wait for Jellyfin validation.
+    if (_connectionManager?.status != ConnectionStatus.online) return;
+    if (!_jobs.any((job) => _isWaiting(job.state))) return;
+    _retryTimer?.cancel();
+    _retryTimer = null;
+    for (final job in _jobs) {
+      if (_isWaiting(job.state)) {
+        job.state = DownloadJobState.queued;
+        job.error = null;
+      }
+    }
+    _changed();
+    // If the previous _drain is still stopping the foreground service,
+    // its finally block will start the new queued attempt instead.
+    unawaited(_drain());
+  }
+
+  void _scheduleRetry({bool quickReconnect = false}) {
+    _retryTimer?.cancel();
+    _retryTimer = null;
+    // ConnectionManager handles revalidation while offline. Timed retries
+    // are only for transient transfer errors with a verified online server.
+    if (_connectionManager?.status != ConnectionStatus.online) return;
+    // One quick retry after Wi-Fi comes back handles a transient socket or
+    // route switch. Otherwise keep bounded backoff for a real server outage.
+    final int seconds;
+    if (quickReconnect) {
+      seconds = 2;
+    } else {
+      final shift = (_consecutiveInterruptions++).clamp(0, 4).toInt();
+      seconds = (5 * (1 << shift)).clamp(5, 60).toInt();
+    }
+    debugPrint('DownloadManager: retrying waiting download in ${seconds}s'
+        '${quickReconnect ? ' (reconnect grace)' : ''}');
+    _retryTimer = Timer(Duration(seconds: seconds), _wakeWaitingJobs);
+  }
+
+  bool _recoverable(Object error) {
+    if (error is InterruptedDownload || error is SocketException ||
+        error is HttpException || error is TimeoutException ||
+        error is HandshakeException) return true;
+    if (error is! DioException) return false;
+    final status = error.response?.statusCode;
+    if (status != null) {
+      return status == 408 || status == 429 || status >= 500;
+    }
+    // Streaming-body errors may be wrapped as DioExceptionType.unknown.
+    // File errors and malformed bodies must remain terminal failures.
+    if (error.error is FileSystemException ||
+        error.error is FormatException) return false;
+    return error.type == DioExceptionType.connectionError ||
+        error.type == DioExceptionType.connectionTimeout ||
+        error.type == DioExceptionType.receiveTimeout ||
+        error.type == DioExceptionType.sendTimeout ||
+        error.type == DioExceptionType.unknown;
+  }
+
+  Future<DownloadJobState> _waitingState() async {
+    try {
+      final interfaces = await Connectivity().checkConnectivity();
+      if (interfaces.isNotEmpty &&
+          interfaces.every((item) => item == ConnectivityResult.none)) {
+        return DownloadJobState.waitingForNetwork;
+      }
+    } catch (_) {
+      // Platform connectivity may be unavailable, but periodic retries work.
+    }
+    return DownloadJobState.waitingForServer;
+  }
+
+  @override
+  void dispose() {
+    _retryTimer?.cancel();
+    _connectionManager?.removeListener(_onConnectionChanged);
+    _headerChanges.dispose();
+    super.dispose();
+  }
 
   static const _queueStorageKey = 'jellybook_download_queue_v1';
   Future<void>? _restoreFuture;
@@ -79,6 +232,7 @@ class DownloadManager extends ChangeNotifier {
           final state = record['state'];
           if (id is! String || id.isEmpty) continue;
           if (state != 'queued' && state != 'downloading' &&
+              state != 'waitingForNetwork' && state != 'waitingForServer' &&
               state != 'failed') continue;
           if (!savedIds.add(id)) continue;
           final entry = await isar.entrys.where().idEqualTo(id).findFirst();
@@ -88,7 +242,8 @@ class DownloadManager extends ChangeNotifier {
           final fileName = await fileNameFromTitle(entry.path.split('/').last);
           final directory = await getApplicationDocumentsDirectory();
           job.progress = await retainedDownloadProgress('${directory.path}/$fileName');
-          if (state == 'queued' || state == 'downloading') {
+          if (state == 'queued' || state == 'downloading' ||
+              state == 'waitingForNetwork' || state == 'waitingForServer') {
             job.state = DownloadJobState.queued;
           } else {
             job.state = DownloadJobState.failed;
@@ -129,6 +284,7 @@ class DownloadManager extends ChangeNotifier {
       for (final job in _jobs)
         if (job.state == DownloadJobState.queued ||
             job.state == DownloadJobState.downloading ||
+            _isWaiting(job.state) ||
             job.state == DownloadJobState.failed)
           {'id': job.id, 'state': job.state.name},
     ]);
@@ -147,7 +303,8 @@ class DownloadManager extends ChangeNotifier {
   UnmodifiableListView<DownloadJob> get jobs => UnmodifiableListView(_jobs);
   int get pendingCount => _jobs.where((job) =>
       job.state == DownloadJobState.queued ||
-      job.state == DownloadJobState.downloading).length;
+      job.state == DownloadJobState.downloading ||
+      _isWaiting(job.state)).length;
   int get failedCount => _jobs.where((job) =>
       job.state == DownloadJobState.failed).length;
 
@@ -196,10 +353,15 @@ class DownloadManager extends ChangeNotifier {
   /// has no cancellation token yet, so never pretend it has been stopped.
   void cancelQueued(String id) {
     for (final job in _jobs.toList()) {
-      if (job.id != id || job.state != DownloadJobState.queued) continue;
+      if (job.id != id ||
+          (job.state != DownloadJobState.queued && !_isWaiting(job.state))) continue;
       job.state = DownloadJobState.canceled;
       job._completion.complete(null);
       _jobs.remove(job);
+      if (!_jobs.any((other) => _isWaiting(other.state))) {
+        _retryTimer?.cancel();
+        _retryTimer = null;
+      }
       _changed();
       return;
     }
@@ -228,19 +390,13 @@ class DownloadManager extends ChangeNotifier {
       if (!_restored) return; // Never start work before the journal is read.
       // Run the foreground service before starting the first network transfer.
       // It stays up across the whole FIFO queue, then stops when work finishes.
-      if (_jobs.any((job) => job.state == DownloadJobState.queued)) {
+      if (_connectionManager?.status == ConnectionStatus.online &&
+          _nextRunnableJob() != null) {
         await DownloadBackground.start();
       }
-      while (true) {
-        DownloadJob? current;
-        for (final job in _jobs) {
-          if (job.state == DownloadJobState.queued) {
-            current = job;
-            break;
-          }
-        }
-        if (current == null) break;
-        final job = current;
+      while (_connectionManager?.status == ConnectionStatus.online) {
+        final job = _nextRunnableJob();
+        if (job == null) break;
         job.state = DownloadJobState.downloading;
         _changed();
         // Record the in-flight state before network/disk work begins. If the
@@ -261,12 +417,19 @@ class DownloadManager extends ChangeNotifier {
               if (value >= 100 || _lastProgressNotice == null ||
                   now.difference(_lastProgressNotice!) >=
                       const Duration(milliseconds: 250)) {
+                // Real forward byte progress is a successful connection,
+                // even if this large transfer isn't finished yet.
+                if (value > job.progress + 0.01) {
+                  _consecutiveInterruptions = 0;
+                }
                 job.progress = value.clamp(0.0, 100.0).toDouble();
                 _lastProgressNotice = now;
                 _changed(status: false);
               }
             },
           );
+          _consecutiveInterruptions = 0;
+          _quickReconnectRetryAvailable = false;
           job.entry = result;
           job.progress = 100;
           job.state = DownloadJobState.completed;
@@ -274,6 +437,21 @@ class DownloadManager extends ChangeNotifier {
           _jobs.remove(job); // Completed files live in the Downloaded filter.
         } catch (error) {
           job.error = error;
+          if (_recoverable(error)) {
+            job.state = await _waitingState();
+            debugPrint('DownloadManager: ${job.id} interrupted ($error), '
+                'waiting as ${job.state.name}');
+            // Preserve the existing completion Future and .part bytes.
+            // No immediate requeue: only a connectivity event or timer wakes it.
+            _changed();
+            final quickReconnect = _quickReconnectRetryAvailable &&
+                _recentReconnectUntil != null &&
+                DateTime.now().isBefore(_recentReconnectUntil!) &&
+                job.state != DownloadJobState.waitingForNetwork;
+            if (quickReconnect) _quickReconnectRetryAvailable = false;
+            _scheduleRetry(quickReconnect: quickReconnect);
+            break;
+          }
           job.state = DownloadJobState.failed;
           job._completion.complete(null);
         }
@@ -286,7 +464,8 @@ class DownloadManager extends ChangeNotifier {
       _draining = false;
       // Enqueue could have happened after the final empty-queue check while
       // the service was being stopped. Don't strand that late request.
-      if (_jobs.any((job) => job.state == DownloadJobState.queued)) {
+      if (_connectionManager?.status == ConnectionStatus.online &&
+          _nextRunnableJob() != null) {
         unawaited(_drain());
       }
     }

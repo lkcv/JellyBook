@@ -11,6 +11,7 @@ import 'package:jellybook/models/folder.dart';
 import 'package:jellybook/models/login.dart';
 import 'package:jellybook/screens/homeScreen.dart';
 import 'package:jellybook/providers/connectionManager.dart';
+import 'package:jellybook/providers/downloadManager.dart';
 import 'dart:io';
 
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -150,6 +151,8 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider<ConnectionManager>(
           create: (context) {
             final manager = ConnectionManager();
+            // Resume queued transfers only after this provider verifies Jellyfin.
+            DownloadManager.instance.bindConnectionManager(manager);
             // Start monitoring after creation
             WidgetsBinding.instance.addPostFrameCallback((_) {
               manager.startMonitoring();

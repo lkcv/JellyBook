@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 /// A short read is a connectivity failure, even if the HTTP stream ends
 /// normally instead of reporting a SocketException.
@@ -10,6 +12,25 @@ class InterruptedDownload implements Exception {
   final String reason;
   @override
   String toString() => reason;
+}
+
+// A socket can still close mid-body after the app has verified Jellyfin is
+// online. Only retry genuine transport problems here; validation and disk
+// failures must still be surfaced to the manager.
+bool _isTransientBodyError(Object error) {
+  if (error is SocketException || error is HttpException ||
+      error is TimeoutException || error is HandshakeException) {
+    return true;
+  }
+  if (error is! DioException) return false;
+  if (error.error is FileSystemException || error.error is FormatException) {
+    return false;
+  }
+  return error.type == DioExceptionType.connectionError ||
+      error.type == DioExceptionType.connectionTimeout ||
+      error.type == DioExceptionType.receiveTimeout ||
+      error.type == DioExceptionType.sendTimeout ||
+      error.type == DioExceptionType.unknown;
 }
 
 /// Keep incoming bytes in .part, with a small sidecar describing the HTTP
@@ -43,8 +64,12 @@ Future<void> downloadResumableArchive({
       return;
     }
 
-    // At most one restart when the server refuses or changes a Range.
-    for (var attempt = 0; attempt < 2; attempt++) {
+    // A changed/unsupported Range may restart once. Independently, one
+    // interrupted *active* HTTP body may reconnect inline without switching
+    // the job to Waiting. Keep these budgets separate and bounded.
+    var rangeRestarts = 0;
+    var inlineReconnects = 0;
+    while (true) {
       final size = await part.exists() ? await part.length() : 0;
       Map<String, dynamic>? saved;
       if (await meta.exists()) {
@@ -91,6 +116,9 @@ Future<void> downloadResumableArchive({
       );
       final status = response.statusCode;
       if (status == 416 && offset > 0) {
+        if (rangeRestarts++ >= 1) {
+          throw const FormatException('Unable to restart changed download');
+        }
         await discardPart();
         continue;
       }
@@ -113,9 +141,11 @@ Future<void> downloadResumableArchive({
       if (status == 206 && (match == null || rangeStart != offset ||
           rangeEnd! < rangeStart! || rangeTotal! <= rangeEnd)) {
         // A mismatched Range must never be appended to saved bytes.
+        if (offset == 0 || rangeRestarts++ >= 1) {
+          throw const FormatException('Invalid Content-Range');
+        }
         await discardPart();
-        if (offset > 0) continue;
-        throw const FormatException('Invalid Content-Range');
+        continue;
       }
       // A 200 in response to Range is a full replacement; truncate safely.
       final length = int.tryParse(response.headers.value('content-length') ?? '');
@@ -124,6 +154,9 @@ Future<void> downloadResumableArchive({
         throw const FormatException('Jellyfin did not supply a download length');
       }
       if (append && total != totalSaved) {
+        if (rangeRestarts++ >= 1) {
+          throw const FormatException('Unable to restart changed download');
+        }
         await discardPart();
         continue;
       }
@@ -136,18 +169,24 @@ Future<void> downloadResumableArchive({
             (oldTag == null && oldModified is String &&
                 newModified != null && oldModified != newModified)) {
           // Some proxies ignore If-Range. Never stitch two revisions together.
+          if (rangeRestarts++ >= 1) {
+            throw const FormatException('Unable to restart changed download');
+          }
           await discardPart();
           continue;
         }
       }
       if (status == 206 && length != null &&
           length != rangeEnd! - rangeStart! + 1) {
+        if (!append || rangeRestarts++ >= 1) {
+          throw const FormatException('Inconsistent Content-Range length');
+        }
         await discardPart();
-        if (append) continue;
-        throw const FormatException('Inconsistent Content-Range length');
+        continue;
       }
       final file = await part.open(mode: append ? FileMode.append : FileMode.write);
       var received = append ? offset : 0;
+      Object? bodyError;
       try {
         // Truncate the old bytes BEFORE changing the sidecar in a 200 reply.
         // A crash here can no longer label old bytes with new metadata.
@@ -160,19 +199,42 @@ Future<void> downloadResumableArchive({
               (append && saved != null ? saved['lastModified'] : null),
         }), flush: true);
         onProgress(received / total * 90);
-        await for (final bytes in response.data!.stream) {
-          await file.writeFrom(bytes);
-          received += bytes.length;
-          if (received > total) {
-            throw const FormatException('Download larger than Content-Length');
+        try {
+          await for (final bytes in response.data!.stream) {
+            await file.writeFrom(bytes);
+            received += bytes.length;
+            if (received > total) {
+              throw const FormatException('Download larger than Content-Length');
+            }
+            onProgress(received / total * 90);
           }
-          onProgress(received / total * 90);
+        } catch (error, stack) {
+          if (!_isTransientBodyError(error) || received <= offset ||
+              inlineReconnects >= 1) {
+            Error.throwWithStackTrace(error, stack);
+          }
+          // Preserve all received bytes; the next iteration will validate
+          // Content-Range and append only if the server honors our offset.
+          bodyError = error;
         }
-        await file.flush();
       } finally {
-        await file.close();
+        try {
+          await file.flush();
+        } finally {
+          await file.close();
+        }
       }
-      if (received != total) {
+      if (bodyError != null || received != total) {
+        if (received > offset && inlineReconnects < 1) {
+          inlineReconnects++;
+          debugPrint('ResumableTransfer: HTTP body interrupted after '
+              '$received/$total bytes (${bodyError?.runtimeType ?? 'early EOF'}); '
+              'continuing from retained bytes');
+          continue;
+        }
+        if (bodyError != null) {
+          throw bodyError;
+        }
         throw const InterruptedDownload('Connection closed before transfer completed');
       }
       await part.rename(destination.path);
@@ -180,7 +242,6 @@ Future<void> downloadResumableArchive({
       onProgress(90);
       return;
     }
-    throw const FormatException('Unable to restart changed download');
   } finally {
     dio.close(force: true);
   }
