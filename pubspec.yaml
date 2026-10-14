@@ -65,7 +65,6 @@ dependencies:
   auto_size_text: ^3.0.0
   google_nav_bar: ^5.0.7
   cached_network_image: ^3.4.1
-  fancy_shimmer_image: ^2.0.2
   tentacle:
     path: ./submodules/tentacle
   string_similarity: ^2.0.0
