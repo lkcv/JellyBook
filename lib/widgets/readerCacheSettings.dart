@@ -165,8 +165,10 @@ class _ReaderCacheSettingsState extends State<ReaderCacheSettings> {
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.download_for_offline_outlined),
-              title: const Text('Downloaded volumes'),
-              subtitle: const Text('Manage locally stored volumes'),
+              title: Text('Downloaded volumes',
+                  style: Theme.of(context).textTheme.bodyLarge),
+              subtitle: Text('Manage locally stored volumes',
+                  style: Theme.of(context).textTheme.bodySmall),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(
@@ -176,48 +178,69 @@ class _ReaderCacheSettingsState extends State<ReaderCacheSettings> {
             ),
             const Divider(height: 1),
             const SizedBox(height: 14),
-            Text('Reader page cache',
-                style: Theme.of(context).textTheme.titleSmall),
-            const SizedBox(height: 2),
-            Text(
-              'Seven nearby pages per recently opened volume',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 12),
-            if (_loading)
-              const LinearProgressIndicator()
-            else
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    crossAxisAlignment: WrapCrossAlignment.center,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Icon(
+                    Icons.menu_book_outlined,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('${_displayMb(_usageBytes)} MB used of'),
-                      OutlinedButton.icon(
-                        onPressed: _busy ? null : _editLimit,
-                        icon: const Icon(Icons.edit_outlined, size: 16),
-                        label: Text('$_limitMb MB'),
-                        style: OutlinedButton.styleFrom(
-                          visualDensity: VisualDensity.compact,
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                        ),
+                      Text('Reader page cache',
+                          style: Theme.of(context).textTheme.bodyLarge),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Seven nearby pages per recently opened volume',
+                        style: Theme.of(context).textTheme.bodySmall,
                       ),
+                      const SizedBox(height: 12),
+                      if (_loading)
+                        const LinearProgressIndicator()
+                      else
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                Text('${_displayMb(_usageBytes)} MB used of'),
+                                OutlinedButton.icon(
+                                  onPressed: _busy ? null : _editLimit,
+                                  icon: const Icon(Icons.edit_outlined, size: 16),
+                                  label: Text('$_limitMb MB'),
+                                  style: OutlinedButton.styleFrom(
+                                    visualDensity: VisualDensity.compact,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 10),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            LinearProgressIndicator(value: usageFraction),
+                          ],
+                        ),
+                      if (_error != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Text(_error!,
+                              style: TextStyle(
+                                  color: Theme.of(context).colorScheme.error)),
+                        ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  LinearProgressIndicator(value: usageFraction),
-                ],
-              ),
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(_error!,
-                    style: TextStyle(
-                        color: Theme.of(context).colorScheme.error)),
-              ),
+                ),
+              ],
+            ),
             Align(
               alignment: Alignment.centerRight,
               child: TextButton.icon(
@@ -228,27 +251,46 @@ class _ReaderCacheSettingsState extends State<ReaderCacheSettings> {
             ),
             const Divider(),
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Text('Cover image cache',
-                      style: Theme.of(context).textTheme.titleSmall),
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Icon(
+                    Icons.image_outlined,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
-              ],
-            ),
-            Text(
-              'Covers and profile images are stored separately',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            Row(
-              children: [
-                if (!_loading)
-                  Text('${_displayMb(_coverUsageBytes)} MB used',
-                      style: Theme.of(context).textTheme.bodyMedium),
-                const Spacer(),
-                TextButton.icon(
-                  onPressed: _busy ? null : _clearCovers,
-                  icon: const Icon(Icons.delete_outline),
-                  label: const Text('Clear covers'),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Cover image cache',
+                          style: Theme.of(context).textTheme.bodyLarge),
+                      Text(
+                        'Covers and profile images are stored separately',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      Row(
+                        children: [
+                          if (!_loading)
+                            Expanded(
+                              child: Text(
+                                '${_displayMb(_coverUsageBytes)} MB used',
+                                style: Theme.of(context).textTheme.bodyMedium,
+                              ),
+                            )
+                          else
+                            const Spacer(),
+                          TextButton.icon(
+                            onPressed: _busy ? null : _clearCovers,
+                            icon: const Icon(Icons.delete_outline),
+                            label: const Text('Clear covers'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
