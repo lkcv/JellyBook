@@ -146,8 +146,13 @@ class MyApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider<LocaleChangeNotifier>(
             create: (context) => LocaleChangeNotifier(context, prefs)),
-        ChangeNotifierProvider<ThemeChangeNotifier>(
-            create: (context) => ThemeChangeNotifier(context, prefs)),
+        ChangeNotifierProvider<ThemeChangeNotifier>(create: (context) {
+          final notifier = ThemeChangeNotifier(context, prefs);
+          // The settings screen persists the selected theme, but a new provider
+          // otherwise starts with its default theme on every app launch.
+          notifier.setTheme = prefs.getString('theme') ?? 'system';
+          return notifier;
+        }),
         ChangeNotifierProvider<ConnectionManager>(
           create: (context) {
             final manager = ConnectionManager();
