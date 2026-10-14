@@ -325,7 +325,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       'RTL': l10n?.rtl ?? 'Right to Left',
       'Vertical': l10n?.vertical ?? 'Vertical',
     };
-    final selectedTheme = prefs?.getString('theme') ?? 'system';
+    final selectedTheme = prefs?.getString('themeSelection') ??
+        prefs?.getString('theme') ?? 'system';
     final selectedDirection = prefs?.getString('readingDirection') ?? 'LTR';
 
     return Card(
@@ -345,7 +346,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 return;
               }
               final sharedPrefs = await SharedPreferences.getInstance();
-              await sharedPrefs.setString('theme', selected);
+              // Persist the selection independently. ThemeChangeNotifier
+              // writes the *applied* theme to 'theme', which may be light or
+              // dark when the selection is 'system'.
+              await sharedPrefs.setString('themeSelection', selected);
               if (!mounted) return;
               prefs = sharedPrefs;
               context.read<ThemeChangeNotifier>().setTheme = selected;

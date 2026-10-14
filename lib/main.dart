@@ -150,7 +150,18 @@ class MyApp extends StatelessWidget {
           final notifier = ThemeChangeNotifier(context, prefs);
           // The settings screen persists the selected theme, but a new provider
           // otherwise starts with its default theme on every app launch.
-          notifier.setTheme = prefs.getString('theme') ?? 'system';
+          // The provider persists the effective light/dark theme to 'theme'.
+          // Save the user's chosen mode separately so automatic system changes
+          // never turn the System choice into an explicit Light or Dark choice.
+          // Existing installs migrate their original 'theme' selection here.
+          final selectedTheme = prefs.getString('themeSelection') ??
+              prefs.getString('theme') ?? 'system';
+          if (!prefs.containsKey('themeSelection')) {
+            prefs.setString('themeSelection', selectedTheme);
+          }
+          notifier.setTheme = selectedTheme == 'system'
+              ? _systemThemeForPlatform()
+              : selectedTheme;
           return notifier;
         }),
         ChangeNotifierProvider<ConnectionManager>(
@@ -167,7 +178,9 @@ class MyApp extends StatelessWidget {
         ),
       ],
       builder: (context, _) {
-        return Consumer2<LocaleChangeNotifier, ThemeChangeNotifier>(
+        return _SystemThemeFollower(
+          prefs: prefs,
+          child: Consumer2<LocaleChangeNotifier, ThemeChangeNotifier>(
             builder: (context, localeChangeNotifier, themeChangeNotifier, _) {
           Locale locale = localeChangeNotifier.locale;
           ThemeData themeData = themeChangeNotifier.getTheme;
@@ -182,10 +195,98 @@ class MyApp extends StatelessWidget {
                 ? HomeScreen()
                 : LoginScreen(),
           );
-        });
+            },
+          ),
+        );
       },
     );
   }
+}
+
+// Resolve the saved 'system' selection against the OS appearance rather than
+// treating it as a fifth fixed color scheme. This works on Android and iOS.
+String _systemThemeForPlatform() =>
+    WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark
+        ? 'dark'
+        : 'light';
+
+// The Settings screen updates the selected mode separately from the effective
+// theme. Observe provider changes and platform brightness without ever changing
+// the stored user selection during automatic OS appearance updates.
+class _SystemThemeFollower extends StatefulWidget {
+  const _SystemThemeFollower({required this.prefs, required this.child});
+
+  final SharedPreferences prefs;
+  final Widget child;
+
+  @override
+  State<_SystemThemeFollower> createState() => _SystemThemeFollowerState();
+}
+
+class _SystemThemeFollowerState extends State<_SystemThemeFollower>
+    with WidgetsBindingObserver {
+  ThemeChangeNotifier? _themeNotifier;
+  bool _updateScheduled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final notifier = Provider.of<ThemeChangeNotifier>(context, listen: false);
+    if (!identical(notifier, _themeNotifier)) {
+      _themeNotifier?.removeListener(_syncSystemTheme);
+      _themeNotifier = notifier;
+      notifier.addListener(_syncSystemTheme);
+    }
+    _syncSystemTheme();
+  }
+
+  @override
+  void didChangePlatformBrightness() {
+    _syncSystemTheme();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _syncSystemTheme();
+  }
+
+  void _syncSystemTheme() {
+    if (!mounted || widget.prefs.getString('themeSelection') != 'system' ||
+        _updateScheduled) return;
+
+    // The provider can notify listeners during a Settings rebuild. Apply any
+    // correction after that frame instead of notifying during build.
+    _updateScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _updateScheduled = false;
+      if (!mounted || widget.prefs.getString('themeSelection') != 'system') return;
+      final notifier = _themeNotifier;
+      if (notifier == null) return;
+      final systemBrightness =
+          WidgetsBinding.instance.platformDispatcher.platformBrightness;
+      if (notifier.getTheme.brightness != systemBrightness) {
+        // This setter updates the effective 'theme' key only. It must never
+        // overwrite 'themeSelection', which records the user's System choice.
+        notifier.setTheme = _systemThemeForPlatform();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _themeNotifier?.removeListener(_syncSystemTheme);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 class MyHttpOverrides extends HttpOverrides {
