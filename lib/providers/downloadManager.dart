@@ -8,11 +8,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:jellybook/models/entry.dart';
 import 'package:jellybook/providers/downloadEntry.dart';
 import 'package:jellybook/providers/downloadBackground.dart';
+import 'package:jellybook/providers/resumableTransfer.dart';
+import 'package:jellybook/providers/fileNameFromTitle.dart';
+import 'package:path_provider/path_provider.dart';
 
 /// Shared queue with a persistent journal and optional Android foreground
 /// execution while it drains. The service helps with lock/background survival,
 /// but cannot survive a force-stop or process kill. Interrupted transfers are
-/// recovered as failed jobs, while queued work survives an app restart.
+/// resumed from retained bytes after restart, while queued work survives.
 enum DownloadJobState { queued, downloading, completed, failed, canceled }
 
 class DownloadJob {
@@ -82,7 +85,10 @@ class DownloadManager extends ChangeNotifier {
           // Downloads completed before an app crash are already in Isar.
           if (entry == null || entry.downloaded) continue;
           final job = DownloadJob(entry);
-          if (state == 'queued') {
+          final fileName = await fileNameFromTitle(entry.path.split('/').last);
+          final directory = await getApplicationDocumentsDirectory();
+          job.progress = await retainedDownloadProgress('${directory.path}/$fileName');
+          if (state == 'queued' || state == 'downloading') {
             job.state = DownloadJobState.queued;
           } else {
             job.state = DownloadJobState.failed;
@@ -180,7 +186,7 @@ class DownloadManager extends ChangeNotifier {
   void _retryJob(DownloadJob job) {
     job.state = DownloadJobState.queued;
     job.error = null;
-    job.progress = 0;
+    // Keep the last visible partial progress during a manual retry.
     job._completion = Completer<Entry?>();
     _changed();
     unawaited(_drain());

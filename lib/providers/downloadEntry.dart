@@ -1,7 +1,5 @@
 import 'dart:io';
 import 'dart:isolate';
-import 'dart:typed_data';
-import 'package:dio/dio.dart';
 import 'package:archive/archive_io.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,7 +9,7 @@ import 'package:jellybook/providers/supportedFormats.dart';
 import 'package:jellybook/providers/fileNameFromTitle.dart';
 import 'package:jellybook/providers/ComicInfoXML.dart';
 import 'package:jellybook/variables.dart';
-import 'package:tentacle/tentacle.dart';
+import 'package:jellybook/providers/resumableTransfer.dart';
 
 typedef ProgressCallback = void Function(double progress);
 
@@ -30,8 +28,6 @@ Future<Entry> downloadEntry(
   final isar = Isar.getInstance();
   if (isar == null) throw Exception('Isar not initialized');
 
-  onProgress(0);
-
   // Check if already downloaded
   if (entry.folderPath.isNotEmpty && entry.downloaded && !forceDownload) {
     onProgress(100);
@@ -48,34 +44,19 @@ Future<Entry> downloadEntry(
 
   logger.d('Downloading: ${entry.title} to $dir');
 
-  // Fetch the file
-  final api = _getTentacleApi(entry);
+  // Stream the archive into a persisted .part file, rather than buffering an
+  // entire volume in memory. Range requests resume existing bytes.
   final headers = _getHeaders(entry, storage);
-
   try {
-    Response<Uint8List> download = await api
-        .getDownload(
-          itemId: entry.id,
-          headers: headers,
-          onReceiveProgress: (received, total) {
-            if (total > 0) {
-              onProgress((received / total) * 90); // 0-90% for download
-            }
-          },
-        )
-        .timeout(const Duration(minutes: 30));
-
-    if (download.statusCode != 200) {
-      throw Exception('Download failed with ${download.statusCode}');
-    }
-
-    // Write archive to disk, then drop the in-memory copy before extract so
-    // peak RAM is not (download buffer + full decoded zip) at the same time.
-    final bytes = download.data;
-    if (bytes == null || bytes.isEmpty) {
-      throw Exception('Download returned empty body');
-    }
-    await File(dir).writeAsBytes(bytes, flush: true);
+    final base = Uri.parse(entry.url);
+    final prefix = base.path.endsWith('/') ? base.path : '${base.path}/';
+    final uri = base.replace(path: '${prefix}Items/${Uri.encodeComponent(entry.id)}/Download');
+    await downloadResumableArchive(
+      url: uri,
+      headers: headers,
+      destination: File(dir),
+      onProgress: onProgress,
+    );
     onProgress(92);
 
     await _extractFile(entry, dirLocation, fileName, dir);
@@ -87,6 +68,10 @@ Future<Entry> downloadEntry(
       await isar.entrys.put(entry);
     });
 
+    // Retain the complete archive through extraction and the final Isar commit.
+    // After a crash during extraction, startup can safely try again.
+    final archive = File(dir);
+    if (await archive.exists()) await archive.delete();
     logger.d('Download complete: ${entry.title}');
     return entry;
   } catch (e) {
@@ -110,13 +95,14 @@ Future<void> _extractFile(
 
   try {
     if (dir.contains('.zip') || dir.contains('.cbz')) {
+      // Clear any files left by a previous interrupted extraction.
+      if (await Directory(comicFolder).exists()) {
+        await Directory(comicFolder).delete(recursive: true);
+      }
+      await Directory(comicFolder).create(recursive: true);
       // Stream entries to disk on a background isolate. Avoids decodeBytes()
       // which keeps the entire archive in RAM and starves the reader.
       await _extractZipOffUi(dir, comicFolder);
-      final archiveFile = File('$dirLocation/$fileName');
-      if (await archiveFile.exists()) {
-        await archiveFile.delete();
-      }
       entry.downloaded = true;
       entry.folderPath = comicFolder;
     } else if (dir.contains('.epub')) {
@@ -192,11 +178,6 @@ bool _isAudioFile(String path) {
     '.wav'
   ];
   return audioExts.any(path.toLowerCase().endsWith);
-}
-
-dynamic _getTentacleApi(Entry entry) {
-  final api = Tentacle(basePathOverride: entry.url).getLibraryApi();
-  return api;
 }
 
 Map<String, String> _getHeaders(Entry entry, SharedPreferences prefs) {
