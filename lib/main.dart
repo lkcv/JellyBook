@@ -20,6 +20,7 @@ import 'package:jellybook/l10n/app_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:jellybook/providers/languageProvider.dart';
 import 'package:jellybook/providers/themeProvider.dart';
+import 'themes/floatingSurfaceTheme.dart';
 import 'package:jellybook/variables.dart';
 
 Future<String> get _localPath async {
@@ -190,7 +191,11 @@ class MyApp extends StatelessWidget {
             localizationsDelegates: AppLocalizations.localizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             locale: locale,
-            theme: themeData,
+            // Use one consistent floating snackbar style for Light, Dark,
+            // AMOLED and the OS-resolved System theme.
+            theme: themeData.copyWith(
+              snackBarTheme: floatingSnackBarTheme(themeData),
+            ),
             home: url != null && username != null && password != null
                 ? HomeScreen()
                 : LoginScreen(),
