@@ -1,12 +1,14 @@
 // the goal of this file is to create a screen that displays information about the selected book/comic
 
+import 'dart:async';
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_star/flutter_star.dart';
 import 'package:jellybook/models/login.dart';
 import 'package:jellybook/providers/deleteComic.dart';
 import 'package:jellybook/providers/fixRichText.dart';
-import 'package:jellybook/screens/downloaderScreen.dart';
+import 'package:jellybook/providers/downloadManager.dart';
+import 'package:jellybook/providers/supportedFormats.dart';
 import 'package:jellybook/screens/EditScreen.dart';
 import 'package:jellybook/screens/readingScreen.dart';
 import 'package:jellybook/widgets/roundedImageWithShadow.dart';
@@ -328,6 +330,53 @@ class _InfoScreenState extends State<InfoScreen> {
     return shortestSide > 600;
   }
 
+  // Download without leaving Info. The Library queue owns the transfer and
+  // survives navigation; only the Read action may open the reader afterwards.
+  bool _readAwaitingDownload = false;
+
+  void _queueDownload({bool readWhenReady = false}) {
+    if (readWhenReady && _readAwaitingDownload) return;
+    if (entry.downloaded) {
+      if (readWhenReady) {
+        _openReader();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Already downloaded')),
+        );
+      }
+      return;
+    }
+
+    final manager = DownloadManager.instance;
+    final alreadyQueued = manager.jobs.any((job) =>
+        job.id == entry.id &&
+        job.state != DownloadJobState.failed &&
+        job.state != DownloadJobState.canceled &&
+        job.state != DownloadJobState.completed);
+    final job = manager.enqueue(entry);
+    if (readWhenReady) _readAwaitingDownload = true;
+    unawaited(_onDownloadFinished(job, readWhenReady));
+
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(readWhenReady
+          ? 'Queued for download. Reader will open when ready.'
+          : alreadyQueued
+              ? 'Already in download queue'
+              : 'Queued for download'),
+      duration: const Duration(seconds: 2),
+    ));
+  }
+
+  Future<void> _onDownloadFinished(DownloadJob job, bool readWhenReady) async {
+    final result = await job.result;
+    if (readWhenReady) _readAwaitingDownload = false;
+    if (!mounted || result == null) return;
+    setState(() => entry = result);
+    if (readWhenReady && (ModalRoute.of(context)?.isCurrent ?? false)) {
+      _openReader();
+    }
+  }
+
   // actionRow
   Widget actionRow({double size = -1}) {
     return ConstrainedBox(
@@ -345,19 +394,14 @@ class _InfoScreenState extends State<InfoScreen> {
                 foregroundColor: Colors.white,
               ),
               onPressed: () async {
-                if (entry.downloaded) {
+                if (entry.downloaded ||
+                    entryFileExtension(entry.path) == 'cbz') {
+                  // CBZ supports streaming; opening it must not force a download.
                   _openReader();
                 } else if (!offline) {
-                  final result = await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => DownloadScreen(entry: entry),
-                    ),
-                  );
-                  if (result != null) {
-                    setState(() => entry = result);
-                    if (entry.downloaded) _openReader();
-                  }
+                  // Other formats keep the legacy download-then-read behavior,
+                  // but the queue runs it without a full-screen downloader.
+                  _queueDownload(readWhenReady: true);
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
@@ -464,22 +508,12 @@ class _InfoScreenState extends State<InfoScreen> {
                       color: Colors.greenAccent,
                     ),
               onPressed: () {
-                if (!offline) {
-                  // push to the downloader screen and on return check if it returns a value of true and assign that to isDownloaded
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => DownloadScreen(
-                        entry: entry,
-                      ),
-                    ),
-                  ).then((value) {
-                    if (value != null) {
-                      setState(() {
-                        entry = value;
-                      });
-                    }
-                  });
+                if (entry.downloaded) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Already downloaded')),
+                  );
+                } else if (!offline) {
+                  _queueDownload();
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
