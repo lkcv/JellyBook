@@ -17,6 +17,7 @@ import 'package:jellybook/models/folder.dart';
 import 'package:jellybook/screens/infoScreen.dart';
 import 'package:jellybook/providers/fixRichText.dart';
 import 'package:jellybook/l10n/app_localizations.dart';
+import 'package:jellybook/themes/themeConstants.dart';
 import 'package:jellybook/variables.dart';
 import 'package:jellybook/widgets/jellybookImageCache.dart';
 import 'package:auto_size_text/auto_size_text.dart';
@@ -465,6 +466,11 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
 
   @override
   Widget build(BuildContext context) {
+    final headerBrightness = Theme.of(context).brightness;
+    final headerBackground =
+        FloatingSurfacePalette.topBarBackground(headerBrightness);
+    final headerForeground =
+        FloatingSurfacePalette.foreground(headerBrightness);
     return Scaffold(
       // Let covers scroll behind the translucent header, as on the home screen.
       extendBodyBehindAppBar: true,
@@ -474,7 +480,7 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
           MediaQuery.of(context).padding.top + kToolbarHeight,
         ),
         child: Container(
-          color: Colors.black.withOpacity(0.90),
+          color: headerBackground,
           padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
           child: SizedBox(
             height: kToolbarHeight,
@@ -491,7 +497,7 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
                   child: IgnorePointer(
                     child: CustomPaint(
                       painter: _CollectionHeaderCornersPainter(
-                        color: Colors.black.withOpacity(0.90),
+                        color: headerBackground,
                       ),
                     ),
                   ),
@@ -502,7 +508,7 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
                       width: kToolbarHeight,
                       child: IconButton(
                         tooltip: 'Back',
-                        icon: const Icon(Icons.arrow_back, color: Colors.white),
+                        icon: Icon(Icons.arrow_back, color: headerForeground),
                         onPressed: () => Navigator.of(context).maybePop(),
                       ),
                     ),
@@ -516,9 +522,9 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
                           maxFontSize: 20,
                           stepGranularity: 0.5,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                            color: headerForeground,
                           ),
                         ),
                       ),

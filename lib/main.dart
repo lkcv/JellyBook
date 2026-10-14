@@ -20,7 +20,7 @@ import 'package:jellybook/l10n/app_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:jellybook/providers/languageProvider.dart';
 import 'package:jellybook/providers/themeProvider.dart';
-import 'themes/floatingSurfaceTheme.dart';
+import 'widgets/floatingSnackbar.dart';
 import 'package:jellybook/variables.dart';
 
 Future<String> get _localPath async {

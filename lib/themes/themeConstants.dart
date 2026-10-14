@@ -2,6 +2,29 @@
 
 import 'package:flutter/material.dart';
 
+/// Shared surface palette for floating headers and snackbars.
+/// System uses the resolved Light/Dark ThemeData; Dark and AMOLED intentionally
+/// share snackbar charcoal, while their top bars remain translucent black.
+class FloatingSurfacePalette {
+  static const Color lightBase = Color(0xFFF4F5F7);
+  static const Color darkSnackBarBase = Color(0xFF242428);
+  static const Color lightText = Color(0xFF24262A);
+  static const Color darkText = Colors.white;
+  static const double topBarOpacity = 0.90;
+  static const double snackBarOpacity = 0.94;
+
+  static Color topBarBackground(Brightness brightness) =>
+      (brightness == Brightness.dark ? Colors.black : lightBase)
+          .withOpacity(topBarOpacity);
+
+  static Color snackBarBackground(Brightness brightness) =>
+      (brightness == Brightness.dark ? darkSnackBarBase : lightBase)
+          .withOpacity(snackBarOpacity);
+
+  static Color foreground(Brightness brightness) =>
+      brightness == Brightness.dark ? darkText : lightText;
+}
+
 // Dark theme
 ThemeData darkTheme = ThemeData(
   brightness: Brightness.dark,

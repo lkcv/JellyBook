@@ -20,6 +20,7 @@ import 'package:jellybook/providers/languageProvider.dart';
 import 'package:jellybook/widgets/SettingsItem.dart';
 import 'package:jellybook/widgets/jellybookImageCache.dart';
 import 'package:jellybook/widgets/readerCacheSettings.dart';
+import 'package:jellybook/themes/themeConstants.dart';
 import 'package:jellybook/variables.dart';
 
 import 'package:tentacle/tentacle.dart';
@@ -152,12 +153,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     // ThemeManager themeManager = Provider.of<ThemeManager>(context);
+    final headerBrightness = Theme.of(context).brightness;
+    final headerBackground =
+        FloatingSurfacePalette.topBarBackground(headerBrightness);
+    final headerForeground =
+        FloatingSurfacePalette.foreground(headerBrightness);
     return Scaffold(
-      // Match the Library screen's compact, centered black header.
+      // Match the Library's compact, theme-aware translucent header.
       appBar: PreferredSize(
         preferredSize: Size.fromHeight(MediaQuery.of(context).padding.top + 36),
         child: Container(
-          color: Colors.black.withOpacity(0.90),
+          color: headerBackground,
           padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
           child: SizedBox(
             height: 36,
@@ -174,7 +180,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: IgnorePointer(
                     child: CustomPaint(
                       painter: _SettingsHeaderCornersPainter(
-                        color: Colors.black.withOpacity(0.90),
+                        color: headerBackground,
                       ),
                     ),
                   ),
@@ -186,10 +192,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       : Alignment.center,
                   child: Text(
                     AppLocalizations.of(context)?.settings ?? 'Settings',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: headerForeground,
                     ),
                   ),
                 ),

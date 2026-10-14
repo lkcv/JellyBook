@@ -17,6 +17,7 @@ import 'package:jellybook/widgets/coverOpeningRoute.dart';
 import 'package:provider/provider.dart';
 import 'package:string_similarity/string_similarity.dart';
 import 'package:jellybook/l10n/app_localizations.dart';
+import 'package:jellybook/themes/themeConstants.dart';
 import 'package:jellybook/variables.dart';
 import 'package:jellybook/screens/collectionScreen.dart' show KuroStyleBookCard;
 
@@ -259,6 +260,11 @@ class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver
 
   @override
   Widget build(BuildContext context) {
+    final headerBrightness = Theme.of(context).brightness;
+    final headerBackground =
+        FloatingSurfacePalette.topBarBackground(headerBrightness);
+    final headerForeground =
+        FloatingSurfacePalette.foreground(headerBrightness);
     // Intercept Android system/gesture back. iOS edge-swipe only works for
     // pushed routes; Search is a tab, so the leading control covers that case.
     return PopScope(
@@ -283,7 +289,7 @@ class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver
         // Settings-style translucent header with breathing room around the pill.
         preferredSize: ui.Size.fromHeight(MediaQuery.of(context).padding.top + 48),
         child: Container(
-          color: Colors.black.withOpacity(0.90),
+          color: headerBackground,
           padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
           child: SizedBox(
             height: 48,
@@ -300,7 +306,7 @@ class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver
                   child: IgnorePointer(
                     child: CustomPaint(
                       painter: _SearchHeaderCornersPainter(
-                        color: Colors.black.withOpacity(0.90),
+                        color: headerBackground,
                       ),
                     ),
                   ),
@@ -346,7 +352,7 @@ class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver
                 Align(
                   alignment: Alignment.centerLeft,
                   child: IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.white),
+                    icon: Icon(Icons.arrow_back, color: headerForeground),
                     tooltip: MaterialLocalizations.of(context).backButtonTooltip,
                     onPressed: _handleBack,
                     padding: EdgeInsets.zero,

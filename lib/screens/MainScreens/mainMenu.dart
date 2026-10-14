@@ -18,6 +18,7 @@ import 'package:isar_flutter_libs/isar_flutter_libs.dart';
 import 'package:jellybook/models/entry.dart';
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:jellybook/l10n/app_localizations.dart';
+import 'package:jellybook/themes/themeConstants.dart';
 import 'package:jellybook/variables.dart';
 import 'package:jellybook/widgets/jellybookImageCache.dart';
 import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
@@ -906,13 +907,18 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final topInset = MediaQuery.paddingOf(context).top;
     final headerHeight = _headerHeight(context);
+    final headerBrightness = Theme.of(context).brightness;
+    final headerBackground =
+        FloatingSurfacePalette.topBarBackground(headerBrightness);
+    final headerForeground =
+        FloatingSurfacePalette.foreground(headerBrightness);
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: PreferredSize(
         // Compact bar: status/notch inset plus the 36dp toolbar.
         preferredSize: Size.fromHeight(headerHeight),
         child: Container(
-          color: Colors.black.withOpacity(0.90),
+          color: headerBackground,
           padding: EdgeInsets.only(top: topInset),
           child: SizedBox(
             height: _toolbarHeight,
@@ -931,7 +937,7 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
                   child: IgnorePointer(
                     child: CustomPaint(
                       painter: _LibraryHeaderCornersPainter(
-                        color: Colors.black.withOpacity(0.90),
+                        color: headerBackground,
                       ),
                     ),
                   ),
@@ -944,10 +950,10 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
                       : Alignment.center,
                   child: Text(
                     AppLocalizations.of(context)?.library ?? "Library",
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: headerForeground,
                     ),
                   ),
                 ),
@@ -959,7 +965,7 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
                       Icons.download_for_offline_outlined,
                       color: _downloadedOnly
                           ? Theme.of(context).colorScheme.primary
-                          : Colors.white,
+                          : headerForeground,
                     ),
                     tooltip: _downloadedOnly
                         ? 'Show all series'
@@ -1001,7 +1007,7 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
                                 pending == 0 ? Icons.error_outline :
                                     Icons.downloading_rounded,
                                 color: pending == 0 ? Colors.redAccent :
-                                    Colors.white,
+                                    headerForeground,
                                 size: 23,
                               )),
                               if (pending > 0)
@@ -1045,21 +1051,21 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
 
                       if (status == ConnectionStatus.offline) {
                         return IconButton(
-                          icon: const Icon(Icons.cloud_off, color: Colors.white),
+                          icon: Icon(Icons.cloud_off, color: headerForeground),
                           tooltip: 'Offline - tap to retry',
                           onPressed: () {
                             connectionManager.retry();
                           },
                         );
                       } else if (status == ConnectionStatus.validating) {
-                        return const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 16.0),
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
                           child: SizedBox(
                             width: 20,
                             height: 20,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              color: Colors.white,
+                              color: headerForeground,
                             ),
                           ),
                         );
