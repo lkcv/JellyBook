@@ -5,6 +5,17 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
+/// An explicit user cancellation must never enter the network retry path.
+class DownloadCanceled implements Exception {
+  const DownloadCanceled();
+  @override
+  String toString() => 'Download canceled';
+}
+
+void checkDownloadCanceled(CancelToken? token) {
+  if (token?.isCancelled ?? false) throw const DownloadCanceled();
+}
+
 /// A short read is a connectivity failure, even if the HTTP stream ends
 /// normally instead of reporting a SocketException.
 class InterruptedDownload implements Exception {
@@ -40,17 +51,23 @@ Future<void> downloadResumableArchive({
   required Map<String, String> headers,
   required File destination,
   required void Function(double) onProgress,
+  CancelToken? cancelToken,
 }) async {
   final part = File('${destination.path}.part');
   final meta = File('${destination.path}.part.json');
   await destination.parent.create(recursive: true);
 
+  checkDownloadCanceled(cancelToken);
   final dio = Dio(BaseOptions(
     connectTimeout: const Duration(seconds: 15),
     receiveTimeout: const Duration(seconds: 30),
     // We handle 200/206/416 and all other statuses explicitly below.
     validateStatus: (_) => true,
   ));
+
+  // Dio's cancellation closes the active request. Force-close the streaming
+  // connection too, in case a server stops sending chunks without closing it.
+  cancelToken?.whenCancel.then((_) => dio.close(force: true));
 
   Future<void> discardPart() async {
     if (await part.exists()) await part.delete();
@@ -70,6 +87,7 @@ Future<void> downloadResumableArchive({
     var rangeRestarts = 0;
     var inlineReconnects = 0;
     while (true) {
+      checkDownloadCanceled(cancelToken);
       final size = await part.exists() ? await part.length() : 0;
       Map<String, dynamic>? saved;
       if (await meta.exists()) {
@@ -91,6 +109,7 @@ Future<void> downloadResumableArchive({
       final totalSaved = sameEntity ? saved!['total'] as int : 0;
       if (offset > 0 && offset == totalSaved) {
         // The last byte reached the file but the app stopped before rename.
+        checkDownloadCanceled(cancelToken);
         await part.rename(destination.path);
         if (await meta.exists()) await meta.delete();
         onProgress(90);
@@ -113,7 +132,9 @@ Future<void> downloadResumableArchive({
       final response = await dio.get<ResponseBody>(
         url.toString(),
         options: Options(headers: requestHeaders, responseType: ResponseType.stream),
+        cancelToken: cancelToken,
       );
+      checkDownloadCanceled(cancelToken);
       final status = response.statusCode;
       if (status == 416 && offset > 0) {
         if (rangeRestarts++ >= 1) {
@@ -201,7 +222,9 @@ Future<void> downloadResumableArchive({
         onProgress(received / total * 90);
         try {
           await for (final bytes in response.data!.stream) {
+            checkDownloadCanceled(cancelToken);
             await file.writeFrom(bytes);
+            checkDownloadCanceled(cancelToken);
             received += bytes.length;
             if (received > total) {
               throw const FormatException('Download larger than Content-Length');
@@ -224,6 +247,7 @@ Future<void> downloadResumableArchive({
           await file.close();
         }
       }
+      checkDownloadCanceled(cancelToken);
       if (bodyError != null || received != total) {
         if (received > offset && inlineReconnects < 1) {
           inlineReconnects++;
@@ -237,6 +261,7 @@ Future<void> downloadResumableArchive({
         }
         throw const InterruptedDownload('Connection closed before transfer completed');
       }
+      checkDownloadCanceled(cancelToken);
       await part.rename(destination.path);
       if (await meta.exists()) await meta.delete();
       onProgress(90);

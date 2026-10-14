@@ -24,6 +24,7 @@ import 'package:jellybook/providers/connectionManager.dart';
 enum DownloadJobState {
   queued,
   downloading,
+  canceling,
   waitingForNetwork,
   waitingForServer,
   completed,
@@ -41,6 +42,7 @@ class DownloadJob {
   double progress = 0;
   Object? error;
   Completer<Entry?> _completion = Completer<Entry?>();
+  CancelToken? _cancelToken;
 
   /// Returns null on failure/cancellation; inspect [state] for the reason.
   Future<Entry?> get result => _completion.future;
@@ -304,6 +306,7 @@ class DownloadManager extends ChangeNotifier {
   int get pendingCount => _jobs.where((job) =>
       job.state == DownloadJobState.queued ||
       job.state == DownloadJobState.downloading ||
+      job.state == DownloadJobState.canceling ||
       _isWaiting(job.state)).length;
   int get failedCount => _jobs.where((job) =>
       job.state == DownloadJobState.failed).length;
@@ -349,23 +352,55 @@ class DownloadManager extends ChangeNotifier {
     unawaited(_drain());
   }
 
-  /// Only queued jobs can be cancelled in this phase. An in-flight Dio request
-  /// has no cancellation token yet, so never pretend it has been stopped.
-  void cancelQueued(String id) {
+  /// Cancel any unfinished job. Canceling is intentionally NOT journaled;
+  /// a killed app must not resume an item the user removed.
+  void cancel(String id) {
     for (final job in _jobs.toList()) {
-      if (job.id != id ||
-          (job.state != DownloadJobState.queued && !_isWaiting(job.state))) continue;
-      job.state = DownloadJobState.canceled;
-      job._completion.complete(null);
-      _jobs.remove(job);
+      if (job.id != id || job.state == DownloadJobState.canceling ||
+          job.state == DownloadJobState.canceled) continue;
+      if (job.state == DownloadJobState.downloading) {
+        job.state = DownloadJobState.canceling;
+        _changed();
+        // This interrupts the socket, including a currently streamed body.
+        job._cancelToken?.cancel('Canceled by user');
+      } else {
+        job.state = DownloadJobState.canceling;
+        _changed();
+        unawaited(_finishCanceledJob(job));
+      }
       if (!_jobs.any((other) => _isWaiting(other.state))) {
         _retryTimer?.cancel();
         _retryTimer = null;
       }
-      _changed();
       return;
     }
   }
+
+  Future<void> _finishCanceledJob(DownloadJob job) async {
+    try {
+      // A canceled queue entry must not reuse its old Range sidecar when
+      // somebody explicitly requests the same book again.
+      final filename = await fileNameFromTitle(job.entry.path.split('/').last);
+      final folder = await getApplicationDocumentsDirectory();
+      final archive = '${folder.path}/$filename';
+      for (final path in [archive, '$archive.part', '$archive.part.json']) {
+        final file = File(path);
+        if (await file.exists()) await file.delete();
+      }
+    } catch (error) {
+      debugPrint('DownloadManager: could not clean canceled download: $error');
+    } finally {
+      job.state = DownloadJobState.canceled;
+      if (!job._completion.isCompleted) job._completion.complete(null);
+      _jobs.remove(job);
+      _changed();
+      // Canceling a waiting head-of-line job can unblock the next queued job.
+      if (_nextRunnableJob() != null) unawaited(_drain());
+    }
+  }
+
+  /// Compatibility for any callers still using the queue-only API.
+  void cancelQueued(String id) => cancel(id);
 
   void dismissFailure(String id) {
     _jobs.removeWhere((job) =>
@@ -398,6 +433,7 @@ class DownloadManager extends ChangeNotifier {
         final job = _nextRunnableJob();
         if (job == null) break;
         job.state = DownloadJobState.downloading;
+        job._cancelToken = CancelToken();
         _changed();
         // Record the in-flight state before network/disk work begins. If the
         // process dies during extraction, don't auto-retry a partial folder.
@@ -408,8 +444,12 @@ class DownloadManager extends ChangeNotifier {
           final isar = Isar.getInstance();
           final latest = isar == null ? null :
               await isar.entrys.where().idEqualTo(job.id).findFirst();
+          if (job.state == DownloadJobState.canceling) {
+            throw const DownloadCanceled();
+          }
           final result = await downloadEntry(
             latest ?? job.entry,
+            cancelToken: job._cancelToken,
             onProgress: (value) {
               if (job.state != DownloadJobState.downloading) return;
               final now = DateTime.now();
@@ -428,6 +468,10 @@ class DownloadManager extends ChangeNotifier {
               }
             },
           );
+          if (job.state == DownloadJobState.canceling) {
+            await _finishCanceledJob(job);
+            continue;
+          }
           _consecutiveInterruptions = 0;
           _quickReconnectRetryAvailable = false;
           job.entry = result;
@@ -436,6 +480,12 @@ class DownloadManager extends ChangeNotifier {
           job._completion.complete(result);
           _jobs.remove(job); // Completed files live in the Downloaded filter.
         } catch (error) {
+          if (job.state == DownloadJobState.canceling ||
+              job._cancelToken?.isCancelled == true ||
+              error is DownloadCanceled) {
+            await _finishCanceledJob(job);
+            continue;
+          }
           job.error = error;
           if (_recoverable(error)) {
             job.state = await _waitingState();

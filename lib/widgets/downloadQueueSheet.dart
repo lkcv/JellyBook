@@ -15,7 +15,8 @@ class DownloadQueueSheet extends StatelessWidget {
         builder: (context, _) {
           // Keep FIFO order within each state; never alphabetize the queue.
           final jobs = [
-            ...manager.jobs.where((j) => j.state == DownloadJobState.downloading),
+            ...manager.jobs.where((j) => j.state == DownloadJobState.downloading ||
+                j.state == DownloadJobState.canceling),
             ...manager.jobs.where((j) =>
                 j.state == DownloadJobState.waitingForNetwork ||
                 j.state == DownloadJobState.waitingForServer),
@@ -47,6 +48,7 @@ class DownloadQueueSheet extends StatelessWidget {
                       itemBuilder: (context, index) {
                         final job = jobs[index];
                         final active = job.state == DownloadJobState.downloading;
+                        final canceling = job.state == DownloadJobState.canceling;
                         final queued = job.state == DownloadJobState.queued;
                         final failed = job.state == DownloadJobState.failed;
                         final waitingNetwork = job.state == DownloadJobState.waitingForNetwork;
@@ -67,7 +69,8 @@ class DownloadQueueSheet extends StatelessWidget {
                                   Text(job.title, maxLines: 1,
                                       overflow: TextOverflow.ellipsis),
                                   const SizedBox(height: 4),
-                                  Text(active ? '${job.progress.round()}% · Downloading' :
+                                  Text(canceling ? 'Canceling…' :
+                                      active ? '${job.progress.round()}% · Downloading' :
                                       waitingNetwork ? '${job.progress.round()}% · Waiting for network' :
                                       waitingServer ? '${job.progress.round()}% · Reconnecting to Jellyfin' :
                                       queued ? (job.progress > 0
@@ -76,7 +79,7 @@ class DownloadQueueSheet extends StatelessWidget {
                                   if (waiting)
                                     Text('Will resume automatically',
                                         style: Theme.of(context).textTheme.bodySmall),
-                                  if (active || waiting || (queued && job.progress > 0)) ...[
+                                  if (active || canceling || waiting || (queued && job.progress > 0)) ...[
                                     const SizedBox(height: 5),
                                     LinearProgressIndicator(value: job.progress / 100),
                                   ],
@@ -86,11 +89,11 @@ class DownloadQueueSheet extends StatelessWidget {
                                 ],
                               ),
                             ),
-                            if (queued || waiting)
+                            if (active || queued || waiting || canceling)
                               IconButton(
-                                tooltip: waiting ? 'Remove waiting download' : 'Remove queued download',
+                                tooltip: canceling ? 'Canceling download' : 'Cancel download',
                                 icon: const Icon(Icons.close),
-                                onPressed: () => manager.cancelQueued(job.id),
+                                onPressed: canceling ? null : () => manager.cancel(job.id),
                               ),
                             if (failed) ...[
                               IconButton(
@@ -101,7 +104,7 @@ class DownloadQueueSheet extends StatelessWidget {
                               IconButton(
                                 tooltip: 'Dismiss failure',
                                 icon: const Icon(Icons.close),
-                                onPressed: () => manager.dismissFailure(job.id),
+                                onPressed: () => manager.cancel(job.id),
                               ),
                             ],
                           ],

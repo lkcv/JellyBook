@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:isolate';
+import 'package:dio/dio.dart';
 import 'package:archive/archive_io.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -18,7 +19,12 @@ Future<Entry> downloadEntry(
   Entry entry, {
   required ProgressCallback onProgress,
   bool forceDownload = false,
+  CancelToken? cancelToken,
 }) async {
+  checkDownloadCanceled(cancelToken);
+  final originalDownloaded = entry.downloaded;
+  final originalFolderPath = entry.folderPath;
+  final originalFilePath = entry.filePath;
   // Reject before writing to disk or issuing a download request.
   if (!isSupportedEntry(entry)) {
     throw UnsupportedError('Unsupported file format: ${entry.path}');
@@ -47,7 +53,10 @@ Future<Entry> downloadEntry(
   // Stream the archive into a persisted .part file, rather than buffering an
   // entire volume in memory. Range requests resume existing bytes.
   final headers = _getHeaders(entry, storage);
+  var extractionStarted = false;
+  var databaseCommitted = false;
   try {
+    checkDownloadCanceled(cancelToken);
     final base = Uri.parse(entry.url);
     final prefix = base.path.endsWith('/') ? base.path : '${base.path}/';
     final uri = base.replace(path: '${prefix}Items/${Uri.encodeComponent(entry.id)}/Download');
@@ -56,25 +65,55 @@ Future<Entry> downloadEntry(
       headers: headers,
       destination: File(dir),
       onProgress: onProgress,
+      cancelToken: cancelToken,
     );
+    checkDownloadCanceled(cancelToken);
     onProgress(92);
 
+    extractionStarted = true;
     await _extractFile(entry, dirLocation, fileName, dir);
+    checkDownloadCanceled(cancelToken);
     onProgress(100);
 
     // Update the entry (do not reset reading progress)
     entry.downloaded = true;
+    checkDownloadCanceled(cancelToken);
     await isar.writeTxn(() async {
       await isar.entrys.put(entry);
     });
+    databaseCommitted = true;
+    checkDownloadCanceled(cancelToken);
 
     // Retain the complete archive through extraction and the final Isar commit.
     // After a crash during extraction, startup can safely try again.
     final archive = File(dir);
     if (await archive.exists()) await archive.delete();
+    // Cancellation can arrive during the final asynchronous file operation.
+    checkDownloadCanceled(cancelToken);
     logger.d('Download complete: ${entry.title}');
     return entry;
   } catch (e) {
+    if (cancelToken?.isCancelled ?? false) {
+      // Do not leave an archive or half-extracted book behind. The extraction
+      // isolate has finished before this cleanup runs, so files aren't deleted
+      // while it still writes to them.
+      entry.downloaded = originalDownloaded;
+      entry.folderPath = originalFolderPath;
+      entry.filePath = originalFilePath;
+      if (databaseCommitted) {
+        await isar.writeTxn(() async => isar.entrys.put(entry));
+      }
+      if (extractionStarted && !originalDownloaded) {
+        final folderName = await fileNameFromTitle(entry.title);
+        final folder = Directory('$dirLocation/$folderName');
+        if (await folder.exists()) await folder.delete(recursive: true);
+      }
+      for (final path in [dir, '$dir.part', '$dir.part.json']) {
+        final file = File(path);
+        if (await file.exists()) await file.delete();
+      }
+      throw const DownloadCanceled();
+    }
     logger.e('Download failed: $e');
     rethrow;
   }
@@ -121,10 +160,9 @@ Future<void> _extractFile(
       entry.downloaded = true;
     }
 
+    // The caller performs the single durable Isar update after checking
+    // cancellation. Committing here could resurrect a canceled download.
     parseXML(entry);
-    await isar.writeTxn(() async {
-      await isar.entrys.put(entry);
-    });
   } catch (e) {
     logger.e('Extract failed: $e');
     rethrow;
