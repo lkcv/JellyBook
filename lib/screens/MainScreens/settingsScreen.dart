@@ -81,7 +81,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   // Clears the saved login and all cached library data, then returns to the
-  // login screen. (Moved here from the main menu's app bar.)
+  // login screen. (Moved here from the library's app bar.)
   Future<void> logout() async {
     final isar = Isar.getInstance();
     if (isar == null) return;

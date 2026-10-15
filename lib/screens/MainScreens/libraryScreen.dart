@@ -1,4 +1,4 @@
-// The purpose of this file is to create the main menu screen (this is part of the list of screens in the bottom navigation bar)
+// The purpose of this file is to create the library screen (this is part of the list of screens in the bottom navigation bar)
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
@@ -26,17 +26,17 @@ import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
 import 'package:provider/provider.dart';
 import 'package:jellybook/providers/connectionManager.dart';
 
-class MainMenu extends StatefulWidget {
+class LibraryScreen extends StatefulWidget {
   // Library stays mounted in HomeScreen's IndexedStack across tab changes.
   final bool isActive;
 
-  MainMenu({this.isActive = true});
+  LibraryScreen({this.isActive = true});
 
   @override
-  _MainMenuState createState() => _MainMenuState();
+  _LibraryScreenState createState() => _LibraryScreenState();
 }
 
-class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
+class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserver {
   static const _pageSize = 20;
   static const double _gridTopGap = 12;
 
@@ -117,7 +117,7 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
   bool _hadMatchesWhenLeaving = false;
 
   @override
-  void didUpdateWidget(covariant MainMenu oldWidget) {
+  void didUpdateWidget(covariant LibraryScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.isActive && !widget.isActive) {
       // An intentionally empty filtered view stays empty across tab changes.
@@ -759,7 +759,7 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
         _scheduleCoverWarming();
         _wasOffline = false;
         if (mounted) {
-          logger.d('MainMenu: connection restored, refreshing library');
+          logger.d('LibraryScreen: connection restored, refreshing library');
           _pagingController.refresh();
           unawaited(_reloadCategories());
         }

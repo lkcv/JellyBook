@@ -10,7 +10,7 @@ import 'package:google_nav_bar/google_nav_bar.dart';
 import 'package:provider/provider.dart';
 
 // Screens imports
-import 'package:jellybook/screens/MainScreens/mainMenu.dart';
+import 'package:jellybook/screens/MainScreens/libraryScreen.dart';
 import 'package:jellybook/screens/MainScreens/settingsScreen.dart';
 import 'package:jellybook/screens/MainScreens/searchScreen.dart';
 import 'package:jellybook/screens/loginScreen.dart';
@@ -121,7 +121,7 @@ class _HomeScreenState extends State<HomeScreen> {
       body: IndexedStack(
         index: _selectedIndex == 0 ? 0 : 1,
         children: [
-          MainMenu(isActive: _selectedIndex == 0),
+          LibraryScreen(isActive: _selectedIndex == 0),
           _otherTab(),
         ],
       ),
