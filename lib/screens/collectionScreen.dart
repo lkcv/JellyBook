@@ -10,6 +10,7 @@ import 'package:isar/isar.dart';
 import 'package:isar_flutter_libs/isar_flutter_libs.dart';
 import 'package:jellybook/models/entry.dart';
 import 'package:jellybook/providers/supportedFormats.dart';
+import 'package:jellybook/providers/libraryFilter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_star/flutter_star.dart';
@@ -454,8 +455,8 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
         .filter()
         .anyOf(bookIds, (q, String id) => q.idEqualTo(id))
         .findAll();
-    entryList = entryList.where((entry) =>
-        isSupportedEntry(entry) && (!downloadedOnly || entry.downloaded)).toList();
+    entryList = LibraryFilter(downloadedOnly: downloadedOnly)
+        .filterEntries(entryList);
     entryList.forEach((element) {
       if (element.type == EntryType.folder) {
         logger.f(element.title);

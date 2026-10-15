@@ -7,10 +7,10 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:jellybook/models/folder.dart';
 import 'package:jellybook/providers/fetchCategories.dart';
+import 'package:jellybook/providers/libraryFilter.dart';
 import 'package:jellybook/providers/downloadManager.dart';
 import 'package:jellybook/widgets/downloadQueueSheet.dart';
 import 'package:jellybook/providers/serverProgressRevision.dart';
-import 'package:jellybook/providers/supportedFormats.dart';
 import 'package:jellybook/screens/collectionScreen.dart';
 import 'package:jellybook/screens/infoScreen.dart';
 import 'package:isar/isar.dart';
@@ -96,8 +96,8 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
   final ScrollController _allScrollController = ScrollController();
   final ScrollController _downloadedScrollController = ScrollController();
   ScrollController get _libraryScrollController =>
-      _downloadedOnly ? _downloadedScrollController : _allScrollController;
-  bool _downloadedOnly = false;
+      _filter.downloadedOnly ? _downloadedScrollController : _allScrollController;
+  LibraryFilter _filter = const LibraryFilter();
   bool _hadDownloadsWhenLeaving = false;
 
   @override
@@ -107,13 +107,13 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
       // Remember whether this was a populated filter before leaving Library.
       // An intentionally empty Downloaded view must stay empty on return.
       _hadDownloadsWhenLeaving =
-          _downloadedOnly && _downloadedIds().isNotEmpty;
+          _filter.downloadedOnly && _downloadedIds().isNotEmpty;
     } else if (!oldWidget.isActive && widget.isActive) {
-      if (_hadDownloadsWhenLeaving && _downloadedOnly &&
+      if (_hadDownloadsWhenLeaving && _filter.downloadedOnly &&
           _downloadedIds().isEmpty) {
         // Settings removed the final download while Library was mounted but
         // inactive. Restore All and its independent scroll position.
-        _downloadedOnly = false;
+        _filter = _filter.copyWith(downloadedOnly: false);
         _coverSignature = null;
         _scheduleCoverWarming();
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -137,19 +137,11 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
     }
   }
 
-  Set<String> _downloadedIds() {
-    final isar = Isar.getInstance();
-    if (isar == null) return <String>{};
-    return isar.entrys.where().filter().downloadedEqualTo(true).findAllSync()
-        .where(isSupportedEntry).map((entry) => entry.id).toSet();
-  }
+  Set<String> _downloadedIds() =>
+      _filter.matchingEntryIds(Isar.getInstance());
 
-  List<Folder> _visibleFolders(List<Folder> all) {
-    if (!_downloadedOnly) return all;
-    final downloaded = _downloadedIds();
-    return all.where((folder) =>
-        folder.bookIds.any(downloaded.contains)).toList();
-  }
+  List<Folder> _visibleFolders(List<Folder> all) =>
+      _filter.filterFolders(all, _downloadedIds());
 
   bool _inForeground = true;
   bool _startupSyncScheduled = false;
@@ -620,7 +612,7 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
     final fast = _scrollVelocity > 2200;
     final ahead = math.min(fast ? 36 : 28, span * (fast ? 4 : 3));
     final behind = math.min(16, span);
-    final key = '$_scrollCatalogVersion:${_downloadedOnly}:${range.first}:'
+    final key = '$_scrollCatalogVersion:${_filter.downloadedOnly}:${range.first}:'
         '${range.end}:${_scrollDirection}:$fast';
     if (key == _scrollWindowKey) return;
     _scrollWindowKey = key;
@@ -729,13 +721,11 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
   }
 
   Widget _buildGrid(List<Folder> allFolders) {
-    final downloaded = _downloadedOnly ? _downloadedIds() : <String>{};
-    final folders = _downloadedOnly
-        ? allFolders.where((f) => f.bookIds.any(downloaded.contains)).toList()
-        : allFolders;
+    final downloaded = _filter.downloadedOnly ? _downloadedIds() : <String>{};
+    final folders = _filter.filterFolders(allFolders, downloaded);
     return CustomScrollView(
       key: PageStorageKey<String>(
-          _downloadedOnly ? 'library-downloaded' : 'library-all'),
+          _filter.downloadedOnly ? 'library-downloaded' : 'library-all'),
       physics: const AlwaysScrollableScrollPhysics(),
       controller: _libraryScrollController,
       slivers: <Widget>[
@@ -745,7 +735,7 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
             height: _headerHeight(context) + _gridTopGap,
           ),
         ),
-        if (_downloadedOnly && folders.isEmpty)
+        if (_filter.downloadedOnly && folders.isEmpty)
           const SliverFillRemaining(
             hasScrollBody: false,
             child: Center(
@@ -775,9 +765,9 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
                   valueListenable: _progressRevision,
                   builder: (context, _, __) => SeriesCard(
                     folder: folder,
-                    downloadedCount: _downloadedOnly
-                        ? folder.bookIds.where(downloaded.contains).length
-                        : null,
+                    downloadedCount:
+                        _filter.matchingVolumeCount(folder, downloaded),
+                    filter: _filter,
                     onTap: () async {
                       final collectionRoute = MaterialPageRoute<void>(
                         builder: (context) => collectionScreen(
@@ -785,7 +775,7 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
                           name: folder.name,
                           image: folder.image,
                           bookIds: folder.bookIds,
-                          downloadedOnly: _downloadedOnly,
+                          downloadedOnly: _filter.downloadedOnly,
                         ),
                       );
                       await Navigator.of(context).push<void>(collectionRoute);
@@ -798,9 +788,9 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
                         // very last download should restore normal browsing.
                         // Other series with downloads keep the filter active.
                         final showAll =
-                            _downloadedOnly && _downloadedIds().isEmpty;
+                            _filter.downloadedOnly && _downloadedIds().isEmpty;
                         setState(() {
-                          if (showAll) _downloadedOnly = false;
+                          if (showAll) _filter = _filter.copyWith(downloadedOnly: false);
                         });
                         _progressRevision.value++;
                         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -971,15 +961,16 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
                   child: IconButton(
                     icon: Icon(
                       Icons.download_for_offline_outlined,
-                      color: _downloadedOnly
+                      color: _filter.downloadedOnly
                           ? Theme.of(context).colorScheme.primary
                           : headerForeground,
                     ),
-                    tooltip: _downloadedOnly
+                    tooltip: _filter.downloadedOnly
                         ? 'Show all series'
                         : 'Show downloaded series',
                     onPressed: () {
-                      setState(() => _downloadedOnly = !_downloadedOnly);
+                      setState(() => _filter = _filter.copyWith(
+                          downloadedOnly: !_filter.downloadedOnly));
                       _coverSignature = null;
                       _scheduleCoverWarming();
                     },
@@ -1179,10 +1170,11 @@ class _LibraryHeaderCornersPainter extends CustomPainter {
 class SeriesCard extends StatefulWidget {
   final Folder folder;
   final int? downloadedCount;
+  final LibraryFilter filter;
   final VoidCallback onTap;
 
   const SeriesCard({super.key, required this.folder, required this.onTap,
-      this.downloadedCount});
+      this.downloadedCount, this.filter = const LibraryFilter()});
 
   @override
   State<SeriesCard> createState() => _SeriesCardState();
@@ -1201,9 +1193,7 @@ class _SeriesCardState extends State<SeriesCard> {
         .filter()
         .anyOf(widget.folder.bookIds, (q, String id) => q.idEqualTo(id))
         .findAllSync();
-    final shown = widget.downloadedCount == null
-        ? entries
-        : entries.where((entry) => entry.downloaded).toList();
+    final shown = entries.where(widget.filter.matchesEntry).toList();
     if (shown.isEmpty) return 0.0;
     // entry.progress is a percentage (0-100); return a 0-1 fraction
     final total = shown.fold<double>(0.0, (sum, e) => sum + e.progress);
