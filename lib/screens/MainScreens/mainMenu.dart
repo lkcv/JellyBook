@@ -779,18 +779,19 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
                         ? folder.bookIds.where(downloaded.contains).length
                         : null,
                     onTap: () async {
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => collectionScreen(
-                            folderId: folder.id,
-                            name: folder.name,
-                            image: folder.image,
-                            bookIds: folder.bookIds,
-                            downloadedOnly: _downloadedOnly,
-                          ),
+                      final collectionRoute = MaterialPageRoute<void>(
+                        builder: (context) => collectionScreen(
+                          folderId: folder.id,
+                          name: folder.name,
+                          image: folder.image,
+                          bookIds: folder.bookIds,
+                          downloadedOnly: _downloadedOnly,
                         ),
                       );
+                      await Navigator.of(context).push<void>(collectionRoute);
+                      // Navigator.push completes when pop begins. Wait for the
+                      // reverse animation to finish before revalidating covers.
+                      await collectionRoute.completed;
                       // Read saved progress from Isar, not from the server.
                       if (mounted) {
                         // Leaving a filtered Collection after deleting the
@@ -804,6 +805,13 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
                         _progressRevision.value++;
                         WidgetsBinding.instance.addPostFrameCallback((_) {
                           if (mounted && widget.isActive) {
+                            // Reader decoding may have evicted Library covers.
+                            // Retain old pins until replacements are decoded.
+                            _scrollCoverRefreshPending.addAll(_scrollCoverPins.keys);
+                            _scrollCoverFailures.clear();
+                            _scrollVelocity = 0;
+                            _scrollWindowKey = null;
+                            _scheduleCoverWarming();
                             _refreshOnLibraryReturnIfStale();
                           }
                         });
