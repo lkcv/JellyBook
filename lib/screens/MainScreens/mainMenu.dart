@@ -19,6 +19,7 @@ import 'package:jellybook/models/entry.dart';
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:jellybook/l10n/app_localizations.dart';
 import 'package:jellybook/themes/themeConstants.dart';
+import 'package:jellybook/widgets/jellybookHeader.dart';
 import 'package:jellybook/variables.dart';
 import 'package:jellybook/widgets/jellybookImageCache.dart';
 import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
@@ -37,12 +38,10 @@ class MainMenu extends StatefulWidget {
 
 class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
   static const _pageSize = 20;
-  static const double _toolbarHeight = 36;
-  static const double _headerCornerRadius = 17.5;
   static const double _gridTopGap = 12;
 
   double _headerHeight(BuildContext context) =>
-      MediaQuery.paddingOf(context).top + _toolbarHeight;
+      MediaQuery.paddingOf(context).top + JellyBookHeader.toolbarHeight;
   late final PagingController<int, Entry> _pagingController =
       PagingController<int, Entry>(
     getNextPageKey: (state) {
@@ -971,40 +970,14 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
     final topInset = MediaQuery.paddingOf(context).top;
     final headerHeight = _headerHeight(context);
     final headerBrightness = Theme.of(context).brightness;
-    final headerBackground =
-        FloatingSurfacePalette.topBarBackground(headerBrightness);
     final headerForeground =
         FloatingSurfacePalette.foreground(headerBrightness);
     return Scaffold(
       extendBodyBehindAppBar: true,
-      appBar: PreferredSize(
-        // Compact bar: status/notch inset plus the 36dp toolbar.
-        preferredSize: Size.fromHeight(headerHeight),
-        child: Container(
-          color: headerBackground,
-          padding: EdgeInsets.only(top: topInset),
-          child: SizedBox(
-            height: _toolbarHeight,
-            child: Stack(
-              alignment: Alignment.center,
-              clipBehavior: Clip.none,
-              children: [
-                // Extend just the outer edges below the bar. The concave
-                // arcs round the grid's top corners without moving the grid
-                // or the pull-to-refresh indicator.
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: -_headerCornerRadius,
-                  height: _headerCornerRadius,
-                  child: IgnorePointer(
-                    child: CustomPaint(
-                      painter: _LibraryHeaderCornersPainter(
-                        color: headerBackground,
-                      ),
-                    ),
-                  ),
-                ),
+      appBar: JellyBookHeader(
+        topInset: topInset,
+        alignment: Alignment.center,
+        children: [
                 // On notched devices, pin title near the top (under the notch).
                 // On flat status bars / tablets, keep equal top & bottom padding.
                 Align(
@@ -1154,10 +1127,7 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
                         readingOnly: !_filter.readingOnly)),
                   ),
                 ),
-              ],
-            ),
-          ),
-        ),
+          ],
       ),
       body: RefreshIndicator(
         // Keep the spinner below the translucent header, without moving the grid.
@@ -1209,42 +1179,6 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
       ),
     );
   }
-}
-
-// Quarter-circle extensions below the translucent Library header. Paint
-// only the two corners, keeping the middle clear for scrolling covers.
-class _LibraryHeaderCornersPainter extends CustomPainter {
-  const _LibraryHeaderCornersPainter({required this.color});
-
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final r = math.min(size.height, size.width / 2);
-    if (r <= 0) return;
-    final paint = Paint()..color = color;
-    final cornerRadius = Radius.circular(r);
-
-    final left = Path()
-      ..moveTo(0, 0)
-      ..lineTo(r, 0)
-      ..arcToPoint(Offset(0, r), radius: cornerRadius, clockwise: false)
-      ..close();
-    final right = Path()
-      ..moveTo(size.width - r, 0)
-      ..lineTo(size.width, 0)
-      ..lineTo(size.width, r)
-      ..arcToPoint(Offset(size.width - r, 0),
-          radius: cornerRadius, clockwise: false)
-      ..close();
-
-    canvas.drawPath(left, paint);
-    canvas.drawPath(right, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant _LibraryHeaderCornersPainter oldDelegate) =>
-      oldDelegate.color != color;
 }
 
 class SeriesCard extends StatefulWidget {

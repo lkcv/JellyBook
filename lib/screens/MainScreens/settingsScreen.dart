@@ -2,7 +2,6 @@
 
 import 'dart:io';
 import 'dart:typed_data';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
@@ -21,45 +20,10 @@ import 'package:jellybook/widgets/SettingsItem.dart';
 import 'package:jellybook/widgets/jellybookImageCache.dart';
 import 'package:jellybook/widgets/readerCacheSettings.dart';
 import 'package:jellybook/themes/themeConstants.dart';
+import 'package:jellybook/widgets/jellybookHeader.dart';
 import 'package:jellybook/variables.dart';
 
 import 'package:tentacle/tentacle.dart';
-
-// Match the Library's two 17.5px concave header corners without moving
-// the Settings list or changing its scrolling behavior.
-class _SettingsHeaderCornersPainter extends CustomPainter {
-  const _SettingsHeaderCornersPainter({required this.color});
-
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final r = math.min(size.height, size.width / 2);
-    if (r <= 0) return;
-    final paint = Paint()..color = color;
-    final cornerRadius = Radius.circular(r);
-
-    final left = Path()
-      ..moveTo(0, 0)
-      ..lineTo(r, 0)
-      ..arcToPoint(Offset(0, r), radius: cornerRadius, clockwise: false)
-      ..close();
-    final right = Path()
-      ..moveTo(size.width - r, 0)
-      ..lineTo(size.width, 0)
-      ..lineTo(size.width, r)
-      ..arcToPoint(Offset(size.width - r, 0),
-          radius: cornerRadius, clockwise: false)
-      ..close();
-
-    canvas.drawPath(left, paint);
-    canvas.drawPath(right, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant _SettingsHeaderCornersPainter oldDelegate) =>
-      oldDelegate.color != color;
-}
 
 class SettingsScreen extends StatefulWidget {
   @override
@@ -67,7 +31,6 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  static const double _headerCornerRadius = 17.5;
 
   String userName = '';
   String serverUrl = '';
@@ -154,37 +117,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     // ThemeManager themeManager = Provider.of<ThemeManager>(context);
     final headerBrightness = Theme.of(context).brightness;
-    final headerBackground =
-        FloatingSurfacePalette.topBarBackground(headerBrightness);
     final headerForeground =
         FloatingSurfacePalette.foreground(headerBrightness);
     return Scaffold(
       // Match the Library's compact, theme-aware translucent header.
-      appBar: PreferredSize(
-        preferredSize: Size.fromHeight(MediaQuery.of(context).padding.top + 36),
-        child: Container(
-          color: headerBackground,
-          padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
-          child: SizedBox(
-            height: 36,
-            child: Stack(
-              alignment: Alignment.center,
-              clipBehavior: Clip.none,
-              children: [
-                // Paint below the header without intercepting settings taps.
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: -_headerCornerRadius,
-                  height: _headerCornerRadius,
-                  child: IgnorePointer(
-                    child: CustomPaint(
-                      painter: _SettingsHeaderCornersPainter(
-                        color: headerBackground,
-                      ),
-                    ),
-                  ),
-                ),
+      appBar: JellyBookHeader(
+        topInset: MediaQuery.paddingOf(context).top,
+        alignment: Alignment.center,
+        children: [
                 Align(
                   // Same notch-aware title alignment as the Library header.
                   alignment: MediaQuery.of(context).padding.top > 30
@@ -199,10 +139,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                 ),
-              ],
-            ),
-          ),
-        ),
+          ],
       ),
       body: Container(
         padding: const EdgeInsets.all(10),

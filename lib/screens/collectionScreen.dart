@@ -20,6 +20,7 @@ import 'package:jellybook/screens/infoScreen.dart';
 import 'package:jellybook/providers/fixRichText.dart';
 import 'package:jellybook/l10n/app_localizations.dart';
 import 'package:jellybook/themes/themeConstants.dart';
+import 'package:jellybook/widgets/jellybookHeader.dart';
 import 'package:jellybook/variables.dart';
 import 'package:jellybook/widgets/jellybookImageCache.dart';
 import 'package:auto_size_text/auto_size_text.dart';
@@ -55,7 +56,6 @@ class collectionScreen extends StatefulWidget {
 }
 
 class _collectionScreenState extends State<collectionScreen> with WidgetsBindingObserver {
-  static const double _headerCornerRadius = 17.5;
 
   final String folderId;
   final String name;
@@ -553,41 +553,14 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
   @override
   Widget build(BuildContext context) {
     final headerBrightness = Theme.of(context).brightness;
-    final headerBackground =
-        FloatingSurfacePalette.topBarBackground(headerBrightness);
     final headerForeground =
         FloatingSurfacePalette.foreground(headerBrightness);
     return Scaffold(
       // Let covers scroll behind the translucent header, as on the home screen.
       extendBodyBehindAppBar: true,
-      appBar: PreferredSize(
-        // Preserve the default AppBar's 56px toolbar plus status-bar inset.
-        preferredSize: Size.fromHeight(
-          MediaQuery.of(context).padding.top + kToolbarHeight,
-        ),
-        child: Container(
-          color: headerBackground,
-          padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
-          child: SizedBox(
-            height: kToolbarHeight,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                // Same 17.5px concave transitions as the Library header.
-                // Draw only along the edges so covers remain visible below.
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: -_headerCornerRadius,
-                  height: _headerCornerRadius,
-                  child: IgnorePointer(
-                    child: CustomPaint(
-                      painter: _CollectionHeaderCornersPainter(
-                        color: headerBackground,
-                      ),
-                    ),
-                  ),
-                ),
+      appBar: JellyBookHeader(
+        topInset: MediaQuery.paddingOf(context).top,
+        children: [
                 Row(
                   children: [
                     SizedBox(
@@ -617,10 +590,7 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
                     ),
                   ],
                 ),
-              ],
-            ),
-          ),
-        ),
+          ],
       ),
       body: FutureBuilder<List<Entry>>(
         future: _entriesFuture,
@@ -822,42 +792,6 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
       ),
     );
   }
-}
-
-// Match the Library header's two quarter-circle extensions. The center
-// remains transparent so scrolling covers are visible behind the bar.
-class _CollectionHeaderCornersPainter extends CustomPainter {
-  const _CollectionHeaderCornersPainter({required this.color});
-
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final r = math.min(size.height, size.width / 2);
-    if (r <= 0) return;
-    final paint = Paint()..color = color;
-    final cornerRadius = Radius.circular(r);
-
-    final left = Path()
-      ..moveTo(0, 0)
-      ..lineTo(r, 0)
-      ..arcToPoint(Offset(0, r), radius: cornerRadius, clockwise: false)
-      ..close();
-    final right = Path()
-      ..moveTo(size.width - r, 0)
-      ..lineTo(size.width, 0)
-      ..lineTo(size.width, r)
-      ..arcToPoint(Offset(size.width - r, 0),
-          radius: cornerRadius, clockwise: false)
-      ..close();
-
-    canvas.drawPath(left, paint);
-    canvas.drawPath(right, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant _CollectionHeaderCornersPainter oldDelegate) =>
-      oldDelegate.color != color;
 }
 
 // A single reader route for the entire reading session. Replacing the keyed
