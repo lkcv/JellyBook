@@ -305,14 +305,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.2.2"
-  drop_cap_text:
-    dependency: "direct main"
-    description:
-      name: drop_cap_text
-      sha256: "9839d788ad6600c6c374fbc995a3cf784bbe9bf1823bcfa7dc49c4c50d918757"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.1.3"
   epubx:
     dependency: transitive
     description:
@@ -467,14 +459,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.2.2"
-  flutter_settings_screens:
-    dependency: "direct main"
-    description:
-      name: flutter_settings_screens
-      sha256: b9e5ff87537fceeb67012560db6ef4bb0ff7d7a031e8184e1689538756ca99a0
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.3.4"
   flutter_staggered_grid_view:
     dependency: transitive
     description:
@@ -826,14 +810,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.1.0"
-  palette_generator_master:
-    dependency: "direct main"
-    description:
-      name: palette_generator_master
-      sha256: "66e3e307a1e7b8ebbd5439d427be0bcb47d7035f45f1888c779122e3df9b9dce"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.1.0"
   path:
     dependency: transitive
     description:
@@ -1262,14 +1238,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.2"
-  turn_page_transition:
-    dependency: "direct main"
-    description:
-      name: turn_page_transition
-      sha256: b60f306a847ebb58fe693db47d46f69339b1ed13f9930e43c9257bc3477f7b80
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.5.0"
   typed_data:
     dependency: transitive
     description:
