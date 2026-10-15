@@ -74,6 +74,8 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
   });
 
   final ScrollController _gridController = ScrollController();
+  // Only mounted cards are tracked; the sliver still disposes offscreen cards.
+  final Map<String, KuroStyleBookCardState> _mountedCards = {};
   // Reuse one database query across animation and layout rebuilds. Creating a
   // fresh Future in build() briefly replaces the grid with a spinner.
   late Future<List<Entry>> _entriesFuture;
@@ -165,6 +167,54 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
         !(ModalRoute.of(context)?.isCurrent ?? false)) return;
     _emptyFilteredPopPending = true;
     unawaited(Navigator.of(context).maybePop());
+  }
+
+  Future<CoverReturnTarget> _resolveReturnCover(Entry entry) async {
+    // A Library filter can hide the volume reached by swiping. Respect the
+    // filter; don't animate its cover into the originally tapped card.
+    final entries = _latestEntries;
+    final index = entries?.indexWhere((item) => item.id == entry.id) ?? -1;
+    if (!mounted || index < 0 || !_gridController.hasClients) {
+      return CoverReturnTarget(coverPath: entry.imagePath, rect: null);
+    }
+
+    // Jump the Collection grid behind the non-opaque reader route, before the
+    // reverse animation begins. This doesn't enable cover prewarming while
+    // the reader is open, and doesn't animate the grid itself.
+    final position = _gridController.position;
+    final width = math.max(1.0, MediaQuery.sizeOf(context).width - 8);
+    final tileWidth = (width - 12) / 3;
+    final tileHeight = tileWidth / 0.69;
+    final top = MediaQuery.paddingOf(context).top + 6;
+    final rowTop = top + (index ~/ 3) * (tileHeight + 6);
+    final offset = position.pixels;
+    final isVisible = rowTop >= offset && rowTop + tileHeight <=
+        offset + position.viewportDimension;
+    if (isVisible) {
+      final existing = _mountedCards[entry.id]?.coverRect;
+      if (existing != null && !existing.isEmpty) {
+        return CoverReturnTarget(coverPath: entry.imagePath, rect: existing);
+      }
+    } else {
+      final centerOffset = rowTop + tileHeight / 2 -
+          position.viewportDimension / 2;
+      _gridController.jumpTo(centerOffset.clamp(
+        position.minScrollExtent, position.maxScrollExtent,
+      ).toDouble());
+    }
+
+    // Wait only if the card needs mounting/layout. The actual RenderBox,
+    // not a guessed grid rectangle, supplies the shrink destination.
+    WidgetsBinding.instance.scheduleFrame();
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return CoverReturnTarget(
+      coverPath: entry.imagePath, rect: null,
+    );
+    final rect = _mountedCards[entry.id]?.coverRect;
+    return CoverReturnTarget(
+      coverPath: entry.imagePath,
+      rect: rect == null || rect.isEmpty ? null : rect,
+    );
   }
 
   void _refreshEntries() {
@@ -604,6 +654,12 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
                   return KuroStyleBookCard(
                     entry: entry,
                     progressRevision: _cardProgressRevision,
+                    onMounted: (state) => _mountedCards[entry.id] = state,
+                    onUnmounted: (state) {
+                      if (identical(_mountedCards[entry.id], state)) {
+                        _mountedCards.remove(entry.id);
+                      }
+                    },
                     onEntryTapped: (coverRect) async {
                       if (entry.type == EntryType.folder) {
                         var folder = isar!.folders
@@ -660,17 +716,21 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
                       if (isArchive && (entry.downloaded || streamable)) {
                         final firstPageReady = ValueNotifier<bool>(false);
                         final skipReturnFade = ValueNotifier<bool>(false);
+                        final returnTarget = ValueNotifier<CoverReturnTarget?>(null);
                         await _pushWithPausedCovers(
                           CoverOpeningRoute(
                             sourceRect: coverRect,
                             coverPath: entry.imagePath,
                             pageReady: firstPageReady,
                             skipReturnFade: skipReturnFade,
+                            returnTarget: returnTarget,
                             builder: (context) => _VolumeReaderSession(
                               initialEntry: entry,
                               orderedEntries: List<Entry>.of(_unfilteredEntries),
                               openingReady: firstPageReady,
                               skipReturnFade: skipReturnFade,
+                              returnTarget: returnTarget,
+                              resolveReturnCover: _resolveReturnCover,
                             ),
                           ),
                         );
@@ -809,12 +869,16 @@ class _VolumeReaderSession extends StatefulWidget {
     required this.orderedEntries,
     required this.openingReady,
     required this.skipReturnFade,
+    required this.returnTarget,
+    required this.resolveReturnCover,
   });
 
   final Entry initialEntry;
   final List<Entry> orderedEntries;
   final ValueNotifier<bool> openingReady;
   final ValueNotifier<bool> skipReturnFade;
+  final ValueNotifier<CoverReturnTarget?> returnTarget;
+  final Future<CoverReturnTarget> Function(Entry) resolveReturnCover;
 
   @override
   State<_VolumeReaderSession> createState() => _VolumeReaderSessionState();
@@ -858,6 +922,20 @@ class _VolumeReaderSessionState extends State<_VolumeReaderSession> {
     _index = widget.orderedEntries.indexWhere(
       (entry) => entry.id == widget.initialEntry.id,
     );
+  }
+
+  Future<void> _prepareCoverReturn() async {
+    final entry = _index >= 0
+        ? widget.orderedEntries[_index] : widget.initialEntry;
+    try {
+      widget.returnTarget.value = await widget.resolveReturnCover(entry);
+    } catch (_) {
+      // Never fall back to the originally tapped cover after a failed lookup.
+      widget.returnTarget.value = CoverReturnTarget(
+        coverPath: entry.imagePath, rect: null,
+      );
+      rethrow;
+    }
   }
 
   Entry? _adjacent(int delta) {
@@ -941,7 +1019,7 @@ class _VolumeReaderSessionState extends State<_VolumeReaderSession> {
       onNextVolume: () => _openAdjacent(1),
       previousVolumeTitle: _adjacent(-1)?.title,
       onPreviousVolume: () => _openAdjacent(-1),
-      returnWithoutCover: _changedVolume,
+      onPrepareCoverReturn: _changedVolume ? _prepareCoverReturn : null,
       // Returning to the initially tapped volume can still be a reload;
       // failure must recover the previous working reader in that case too.
       continuingVolume: _rollbackIndex != null,
@@ -957,12 +1035,16 @@ class KuroStyleBookCard extends StatefulWidget {
   final Entry entry;
   final ValueListenable<int>? progressRevision;
   final ValueChanged<Rect> onEntryTapped;
+  final ValueChanged<KuroStyleBookCardState>? onMounted;
+  final ValueChanged<KuroStyleBookCardState>? onUnmounted;
   final VoidCallback? onEntryLongPressed; // new
 
   const KuroStyleBookCard({
     required this.entry,
     this.progressRevision,
     required this.onEntryTapped,
+    this.onMounted,
+    this.onUnmounted,
     this.onEntryLongPressed, // new
   });
 
@@ -973,13 +1055,35 @@ class KuroStyleBookCard extends StatefulWidget {
 class KuroStyleBookCardState extends State<KuroStyleBookCard> {
   final GlobalKey _coverKey = GlobalKey();
 
-  void _openFromCover() {
+  Rect? get coverRect {
     final box = _coverKey.currentContext?.findRenderObject();
-    if (box is RenderBox && box.hasSize) {
-      widget.onEntryTapped(box.localToGlobal(Offset.zero) & box.size);
-    } else {
-      widget.onEntryTapped(Rect.zero);
+    return box is RenderBox && box.hasSize
+        ? box.localToGlobal(Offset.zero) & box.size : null;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    widget.onMounted?.call(this);
+  }
+
+  @override
+  void didUpdateWidget(KuroStyleBookCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.entry.id != widget.entry.id) {
+      oldWidget.onUnmounted?.call(this);
+      widget.onMounted?.call(this);
     }
+  }
+
+  @override
+  void dispose() {
+    widget.onUnmounted?.call(this);
+    super.dispose();
+  }
+
+  void _openFromCover() {
+    widget.onEntryTapped(coverRect ?? Rect.zero);
   }
 
   // One radius for both the card and the cover image

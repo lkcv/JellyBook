@@ -35,8 +35,8 @@ class CbzReader extends StatefulWidget {
   final Future<String?> Function()? onNextVolume;
   final String? previousVolumeTitle;
   final Future<String?> Function()? onPreviousVolume;
-  /// After changing volumes, Back skips a mismatched cover shrink.
-  final bool returnWithoutCover;
+  /// Prepare the active volume's cover position before popping this route.
+  final Future<void> Function()? onPrepareCoverReturn;
   final bool continuingVolume;
   final bool restoreSystemUiOnDispose;
   final VoidCallback? onContinuationLoadFailed;
@@ -52,7 +52,7 @@ class CbzReader extends StatefulWidget {
     this.onNextVolume,
     this.previousVolumeTitle,
     this.onPreviousVolume,
-    this.returnWithoutCover = false,
+    this.onPrepareCoverReturn,
     this.continuingVolume = false,
     this.restoreSystemUiOnDispose = true,
     this.onContinuationLoadFailed,
@@ -74,6 +74,7 @@ class _CbzReaderState extends State<CbzReader>
   late String direction;
   bool _loading = true;
   bool _showOverlay = false;
+  bool _exiting = false;
   int _currentPage = 0;
   int? _pendingLocalPage;
   bool _savingLocalProgress = false;
@@ -1323,14 +1324,20 @@ class _CbzReaderState extends State<CbzReader>
   }
 
   void _exit() {
-    // Both the toolbar Back arrow and Android Back go through this method.
-    widget.skipReturnFade?.value = _currentPage == 0;
-    if (widget.returnWithoutCover && widget.openedDirectly) {
-      // The opening cover belongs to the originally tapped volume. Remove
-      // this route directly instead of shrinking the wrong volume into it.
-      Navigator.of(context).removeRoute(ModalRoute.of(context)!);
-      return;
+    if (_exiting) return;
+    _exiting = true;
+    unawaited(_finishExit());
+  }
+
+  Future<void> _finishExit() async {
+    // Both toolbar Back and Android Back use the same active-volume target.
+    try {
+      await widget.onPrepareCoverReturn?.call();
+    } catch (error) {
+      logger.w('CbzReader: could not prepare return cover: $error');
     }
+    if (!mounted) return;
+    widget.skipReturnFade?.value = _currentPage == 0;
     Navigator.pop(context);
     if (!widget.openedDirectly) {
       Navigator.pop(context);

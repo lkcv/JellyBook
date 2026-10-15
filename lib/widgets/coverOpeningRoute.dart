@@ -5,9 +5,20 @@ import 'package:flutter/material.dart';
 import 'package:jellybook/widgets/jellybookImageCache.dart';
 import 'package:jellybook/widgets/roundedImageWithShadow.dart';
 
+/// The card to land on when returning from another volume in the same
+/// reading session. A null rect means the active volume is hidden by a
+/// Library filter, so the reader simply fades away instead of targeting a
+/// different volume's card.
+class CoverReturnTarget {
+  const CoverReturnTarget({required this.coverPath, required this.rect});
+
+  final String coverPath;
+  final Rect? rect;
+}
+
 /// Animates a tapped cover into the center of the destination screen.
 /// [pageReady] is optional: readers can keep the cover onscreen until the
-/// first page is decoded. The route owns and disposes the notifier.
+/// first page is decoded. The route owns and disposes the notifiers.
 class CoverOpeningRoute<T> extends PageRouteBuilder<T> {
   CoverOpeningRoute({
     required WidgetBuilder builder,
@@ -16,8 +27,10 @@ class CoverOpeningRoute<T> extends PageRouteBuilder<T> {
     ValueNotifier<bool>? pageReady,
     // Set by the reader before popping: page index zero needs no cover fade.
     ValueNotifier<bool>? skipReturnFade,
+    ValueNotifier<CoverReturnTarget?>? returnTarget,
   }) : pageReady = pageReady,
        skipReturnFade = skipReturnFade,
+       returnTarget = returnTarget,
        super(
           transitionDuration: const Duration(milliseconds: 300),
           // For other pages: keep the 200ms fade, then shrink for 300ms.
@@ -37,12 +50,14 @@ class CoverOpeningRoute<T> extends PageRouteBuilder<T> {
             coverPath: coverPath,
             pageReady: pageReady,
             skipReturnFade: skipReturnFade,
+            returnTarget: returnTarget,
             child: child,
           ),
         );
 
   final ValueNotifier<bool>? pageReady;
   final ValueNotifier<bool>? skipReturnFade;
+  final ValueNotifier<CoverReturnTarget?>? returnTarget;
 
   @override
   bool didPop(T? result) {
@@ -50,15 +65,19 @@ class CoverOpeningRoute<T> extends PageRouteBuilder<T> {
     // its current page. The route's controller is created on push, before
     // skipReturnFade has a meaningful value.
     if (pageReady != null) {
-      controller?.reverseDuration = (skipReturnFade?.value ?? false)
-          ? const Duration(milliseconds: 300)
-          : const Duration(milliseconds: 500);
+      controller?.reverseDuration = returnTarget?.value?.rect == null &&
+              returnTarget?.value != null
+          ? const Duration(milliseconds: 180)
+          : (skipReturnFade?.value ?? false)
+              ? const Duration(milliseconds: 300)
+              : const Duration(milliseconds: 500);
     }
     return super.didPop(result);
   }
 
   @override
   void dispose() {
+    returnTarget?.dispose();
     skipReturnFade?.dispose();
     pageReady?.dispose();
     super.dispose();
@@ -72,6 +91,7 @@ class _CoverOpeningTransition extends StatelessWidget {
     required this.coverPath,
     required this.pageReady,
     required this.skipReturnFade,
+    required this.returnTarget,
     required this.child,
   });
 
@@ -80,6 +100,7 @@ class _CoverOpeningTransition extends StatelessWidget {
   final String coverPath;
   final ValueNotifier<bool>? pageReady;
   final ValueNotifier<bool>? skipReturnFade;
+  final ValueNotifier<CoverReturnTarget?>? returnTarget;
   final Widget child;
 
   @override
@@ -89,6 +110,7 @@ class _CoverOpeningTransition extends StatelessWidget {
         animation,
         if (pageReady != null) pageReady!,
         if (skipReturnFade != null) skipReturnFade!,
+        if (returnTarget != null) returnTarget!,
       ]),
       child: child,
       builder: (context, destination) {
@@ -123,6 +145,14 @@ class _CoverOpeningTransition extends StatelessWidget {
 
         if (pageReady != null &&
             animation.status == AnimationStatus.reverse) {
+          final landing = returnTarget?.value;
+          // Filtered Collections may not contain the current volume's card.
+          // Fade to the Collection rather than shrink to an unrelated card.
+          if (landing != null && landing.rect == null) {
+            return Opacity(opacity: animation.value, child: destination!);
+          }
+          final returnRect = landing?.rect ?? begin;
+          final returnCoverPath = landing?.coverPath ?? coverPath;
           // On Back, first replace the current reader page with the cover.
           // Only after that fade completes do we move the cover to its card.
           final elapsed = 1.0 - animation.value.clamp(0.0, 1.0);
@@ -141,7 +171,7 @@ class _CoverOpeningTransition extends StatelessWidget {
                     .clamp(0.0, 1.0)
                     .toDouble(),
           );
-          final returningRect = Rect.lerp(target, begin, shrink)!;
+          final returningRect = Rect.lerp(target, returnRect, shrink)!;
 
           // A card's grid thumbnail may be cropped, while the reader cover
           // uses BoxFit.contain. Fade out the moving cover just as it reaches
@@ -169,7 +199,7 @@ class _CoverOpeningTransition extends StatelessWidget {
                         opacity: coverFade * landingFade,
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(10 * shrink),
-                          child: _ReaderOpeningCover(coverPath: coverPath),
+                          child: _ReaderOpeningCover(coverPath: returnCoverPath),
                         ),
                       ),
                     ),
