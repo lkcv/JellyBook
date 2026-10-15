@@ -36,6 +36,7 @@ class collectionScreen extends StatefulWidget {
   final String image;
   final List<String> bookIds;
   final bool downloadedOnly;
+  final bool readingOnly;
 
   collectionScreen({
     required this.folderId,
@@ -43,12 +44,13 @@ class collectionScreen extends StatefulWidget {
     required this.image,
     required this.bookIds,
     this.downloadedOnly = false,
+    this.readingOnly = false,
   });
 
   @override
   _collectionScreenState createState() => _collectionScreenState(
       folderId: folderId, name: name, image: image, bookIds: bookIds,
-      downloadedOnly: downloadedOnly);
+      downloadedOnly: downloadedOnly, readingOnly: readingOnly);
 }
 
 class _collectionScreenState extends State<collectionScreen> with WidgetsBindingObserver {
@@ -59,6 +61,7 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
   final String image;
   final List<String> bookIds;
   final bool downloadedOnly;
+  final bool readingOnly;
 
   _collectionScreenState({
     required this.folderId,
@@ -66,6 +69,7 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
     required this.image,
     required this.bookIds,
     this.downloadedOnly = false,
+    this.readingOnly = false,
   });
 
   final ScrollController _gridController = ScrollController();
@@ -76,6 +80,7 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
   // Notifies just the visible badge/progress widgets, never the cover images.
   final ValueNotifier<int> _cardProgressRevision = ValueNotifier<int>(0);
   int _progressReadGeneration = 0;
+  bool _emptyFilteredPopPending = false;
   bool _warmScheduled = false;
   bool _warming = false;
   bool _warmAgain = false;
@@ -120,6 +125,19 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
       if (!mounted || generation != _progressReadGeneration ||
           !identical(displayed, _latestEntries)) return;
       final byId = {for (final entry in refreshed) entry.id: entry};
+      if (readingOnly &&
+          (displayed.length != refreshed.length ||
+              displayed.any((entry) => !byId.containsKey(entry.id)))) {
+        // Progress changed membership: rebuild the filtered grid rather than
+        // leaving a FINISHED/UNREAD volume visible under Continue Reading.
+        setState(() => _entriesFuture = Future.value(refreshed));
+        if (refreshed.isEmpty) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _leaveEmptyFilteredCollection();
+          });
+        }
+        return;
+      }
       var changed = false;
       for (final entry in displayed) {
         final newest = byId[entry.id];
@@ -136,14 +154,23 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
     }
   }
 
+  // Only pop once if overlapping reader and server progress callbacks both
+  // discover that this filtered Collection no longer contains any volumes.
+  void _leaveEmptyFilteredCollection() {
+    if (!mounted || _emptyFilteredPopPending ||
+        !(ModalRoute.of(context)?.isCurrent ?? false)) return;
+    _emptyFilteredPopPending = true;
+    unawaited(Navigator.of(context).maybePop());
+  }
+
   void _refreshEntries() {
     if (!mounted) return;
     final refreshed = getEntries();
     setState(() => _entriesFuture = refreshed);
-    if (downloadedOnly) {
-      // Removing the final download leaves this filtered series empty.
-      unawaited(refreshed.then((entries) async {
-        if (mounted && entries.isEmpty) await Navigator.of(context).maybePop();
+    if (downloadedOnly || readingOnly) {
+      // Removing the last matching volume leaves this filtered series empty.
+      unawaited(refreshed.then((entries) {
+        if (entries.isEmpty) _leaveEmptyFilteredCollection();
       }));
     }
   }
@@ -455,8 +482,10 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
         .filter()
         .anyOf(bookIds, (q, String id) => q.idEqualTo(id))
         .findAll();
-    entryList = LibraryFilter(downloadedOnly: downloadedOnly)
-        .filterEntries(entryList);
+    entryList = LibraryFilter(
+      downloadedOnly: downloadedOnly,
+      readingOnly: readingOnly,
+    ).filterEntries(entryList);
     entryList.forEach((element) {
       if (element.type == EntryType.folder) {
         logger.f(element.title);
@@ -583,6 +612,8 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
                               name: folder.name,
                               image: folder.image,
                               bookIds: folder.bookIds,
+                              downloadedOnly: downloadedOnly,
+                              readingOnly: readingOnly,
                             ),
                           ),
                         );
@@ -836,10 +867,10 @@ class KuroStyleBookCardState extends State<KuroStyleBookCard> {
                           valueListenable:
                               widget.progressRevision ?? serverProgressRevision,
                           builder: (context, _, __) {
-                            final progressPercent = widget.entry.progress;
-                            final isUnread = widget.entry.pageNum == 0 &&
-                                progressPercent <= 0;
-                            final isFinished = progressPercent >= 100;
+                            final isUnread =
+                                LibraryFilter.isUnread(widget.entry);
+                            final isFinished =
+                                LibraryFilter.isFinished(widget.entry);
                             return Container(
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 6, vertical: 2),

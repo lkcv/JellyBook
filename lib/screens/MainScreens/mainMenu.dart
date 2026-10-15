@@ -92,41 +92,60 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
 
   bool _errorModalShowing = false;
   List<Folder>? _lastFolders;
-  // Separate PageStorage keys retain both filter modes' scroll positions.
+  // Each filter combination retains its own scroll position.
   final ScrollController _allScrollController = ScrollController();
   final ScrollController _downloadedScrollController = ScrollController();
-  ScrollController get _libraryScrollController =>
-      _filter.downloadedOnly ? _downloadedScrollController : _allScrollController;
+  final ScrollController _readingScrollController = ScrollController();
+  final ScrollController _downloadedReadingScrollController = ScrollController();
+  ScrollController get _libraryScrollController {
+    if (_filter.downloadedOnly && _filter.readingOnly) {
+      return _downloadedReadingScrollController;
+    }
+    if (_filter.downloadedOnly) return _downloadedScrollController;
+    if (_filter.readingOnly) return _readingScrollController;
+    return _allScrollController;
+  }
+  String get _libraryPageKey {
+    if (_filter.downloadedOnly && _filter.readingOnly) {
+      return 'library-downloaded-reading';
+    }
+    if (_filter.downloadedOnly) return 'library-downloaded';
+    if (_filter.readingOnly) return 'library-reading';
+    return 'library-all';
+  }
   LibraryFilter _filter = const LibraryFilter();
-  bool _hadDownloadsWhenLeaving = false;
+  Set<String>? _readingIdsCache;
+  bool _hadMatchesWhenLeaving = false;
 
   @override
   void didUpdateWidget(covariant MainMenu oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.isActive && !widget.isActive) {
-      // Remember whether this was a populated filter before leaving Library.
-      // An intentionally empty Downloaded view must stay empty on return.
-      _hadDownloadsWhenLeaving =
-          _filter.downloadedOnly && _downloadedIds().isNotEmpty;
+      // An intentionally empty filtered view stays empty across tab changes.
+      _hadMatchesWhenLeaving = _filter.isActive && _lastFolders != null &&
+          _visibleFolders(_lastFolders!).isNotEmpty;
     } else if (!oldWidget.isActive && widget.isActive) {
-      if (_hadDownloadsWhenLeaving && _filter.downloadedOnly &&
-          _downloadedIds().isEmpty) {
-        // Settings removed the final download while Library was mounted but
-        // inactive. Restore All and its independent scroll position.
-        _filter = _filter.copyWith(downloadedOnly: false);
+      // Settings may have changed eligibility; discard cached Reading IDs.
+      _readingIdsCache = null;
+      if (_hadMatchesWhenLeaving && _filter.isActive &&
+          _lastFolders != null && _visibleFolders(_lastFolders!).isEmpty) {
+        // The last matching volume vanished while Library was offstage.
+        _filter = const LibraryFilter();
         _coverSignature = null;
         _scheduleCoverWarming();
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('No downloads remaining — showing all series'),
+              content: Text(
+                'No matching volumes remaining — showing all series',
+              ),
               duration: Duration(seconds: 2),
             ),
           );
         });
       }
-      _hadDownloadsWhenLeaving = false;
+      _hadMatchesWhenLeaving = false;
       // The IndexedStack preserves this tab (and its decoded-image pins).
       // Recheck the current window in case Android reclaimed other images.
       _scrollWindowKey = null;
@@ -137,11 +156,35 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
     }
   }
 
-  Set<String> _downloadedIds() =>
-      _filter.matchingEntryIds(Isar.getInstance());
+  Set<String> _matchingIds() {
+    if (!_filter.isActive) return const <String>{};
+    final isar = Isar.getInstance();
+    // Keep Downloaded eligibility live, as before Phase 3. Only the Reading
+    // scan needs caching; otherwise every fling would scan the full catalog.
+    if (!_filter.readingOnly) return _filter.matchingEntryIds(isar);
+    final readingIds = _readingIdsCache ??=
+        const LibraryFilter(readingOnly: true).matchingEntryIds(isar);
+    if (!_filter.downloadedOnly) return readingIds;
+    return const LibraryFilter(downloadedOnly: true)
+        .matchingEntryIds(isar)
+        .where(readingIds.contains)
+        .toSet();
+  }
 
   List<Folder> _visibleFolders(List<Folder> all) =>
-      _filter.filterFolders(all, _downloadedIds());
+      _filter.filterFolders(all, _matchingIds());
+
+  void _selectFilter(LibraryFilter next) {
+    setState(() {
+      _filter = next;
+      _readingIdsCache = null;
+    });
+    _coverSignature = null;
+    _scrollWindowKey = null;
+    _scrollVelocity = 0;
+    _lastScrollSource = null;
+    _scheduleCoverWarming();
+  }
 
   bool _inForeground = true;
   bool _startupSyncScheduled = false;
@@ -179,6 +222,8 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _allScrollController.addListener(_onLibraryScroll);
     _downloadedScrollController.addListener(_onLibraryScroll);
+    _readingScrollController.addListener(_onLibraryScroll);
+    _downloadedReadingScrollController.addListener(_onLibraryScroll);
   }
 
   // A warm launch reads Isar first. Schedule the remote revalidation after
@@ -246,7 +291,10 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
 
   Future<void> _performReloadCategories(bool background) async {
     final future = getServerCategories(force: true);
-    if (!background) setState(() => _categoriesFuture = future);
+    if (!background) {
+      _readingIdsCache = null;
+      setState(() => _categoriesFuture = future);
+    }
     try {
       final result = await future;
       _lastSuccessfulServerRefreshAt = DateTime.now();
@@ -254,6 +302,7 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
         // Silent revalidation must never replace a cached first frame with
         // a loading spinner, or show an error dialog if Jellyfin is down.
         if (background) {
+          _readingIdsCache = null;
           setState(() => _categoriesFuture = Future.value(result));
         }
         // Server progress is now in Isar. Cards read progress from there.
@@ -612,8 +661,9 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
     final fast = _scrollVelocity > 2200;
     final ahead = math.min(fast ? 36 : 28, span * (fast ? 4 : 3));
     final behind = math.min(16, span);
-    final key = '$_scrollCatalogVersion:${_filter.downloadedOnly}:${range.first}:'
-        '${range.end}:${_scrollDirection}:$fast';
+    final key = '$_scrollCatalogVersion:${_filter.downloadedOnly}:'
+        '${_filter.readingOnly}:${range.first}:${range.end}:'
+        '${_scrollDirection}:$fast';
     if (key == _scrollWindowKey) return;
     _scrollWindowKey = key;
 
@@ -654,6 +704,7 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
     // Don't prewarm again on progress-notifier rebuilds or tab switches.
     final signature = folders.map((f) => '${f.id}\u0000${f.image}').join('\u0001');
     if (signature == _coverSignature) return;
+    _readingIdsCache = null;
     _coverSignature = signature;
     _scrollCatalogVersion++;
     _scrollCoverFailures.clear();
@@ -721,11 +772,10 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
   }
 
   Widget _buildGrid(List<Folder> allFolders) {
-    final downloaded = _filter.downloadedOnly ? _downloadedIds() : <String>{};
-    final folders = _filter.filterFolders(allFolders, downloaded);
+    final matchingIds = _matchingIds();
+    final folders = _filter.filterFolders(allFolders, matchingIds);
     return CustomScrollView(
-      key: PageStorageKey<String>(
-          _filter.downloadedOnly ? 'library-downloaded' : 'library-all'),
+      key: PageStorageKey<String>(_libraryPageKey),
       physics: const AlwaysScrollableScrollPhysics(),
       controller: _libraryScrollController,
       slivers: <Widget>[
@@ -735,16 +785,25 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
             height: _headerHeight(context) + _gridTopGap,
           ),
         ),
-        if (_filter.downloadedOnly && folders.isEmpty)
-          const SliverFillRemaining(
+        if (_filter.isActive && folders.isEmpty)
+          SliverFillRemaining(
             hasScrollBody: false,
             child: Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.download_for_offline_outlined, size: 48),
-                  SizedBox(height: 12),
-                  Text('No downloaded volumes'),
+                  Icon(
+                    _filter.readingOnly
+                        ? Icons.chrome_reader_mode_outlined
+                        : Icons.download_for_offline_outlined,
+                    size: 48,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(_filter.readingOnly
+                      ? (_filter.downloadedOnly
+                          ? 'No downloaded volumes being read'
+                          : 'No volumes currently being read')
+                      : 'No downloaded volumes'),
                 ],
               ),
             ),
@@ -765,8 +824,8 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
                   valueListenable: _progressRevision,
                   builder: (context, _, __) => SeriesCard(
                     folder: folder,
-                    downloadedCount:
-                        _filter.matchingVolumeCount(folder, downloaded),
+                    matchingCount:
+                        _filter.matchingVolumeCount(folder, matchingIds),
                     filter: _filter,
                     onTap: () async {
                       final collectionRoute = MaterialPageRoute<void>(
@@ -776,6 +835,7 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
                           image: folder.image,
                           bookIds: folder.bookIds,
                           downloadedOnly: _filter.downloadedOnly,
+                          readingOnly: _filter.readingOnly,
                         ),
                       );
                       await Navigator.of(context).push<void>(collectionRoute);
@@ -784,13 +844,14 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
                       await collectionRoute.completed;
                       // Read saved progress from Isar, not from the server.
                       if (mounted) {
-                        // Leaving a filtered Collection after deleting the
-                        // very last download should restore normal browsing.
-                        // Other series with downloads keep the filter active.
-                        final showAll =
-                            _filter.downloadedOnly && _downloadedIds().isEmpty;
+                        // Returning from a filtered Collection may have
+                        // changed Reading progress or download eligibility.
+                        _readingIdsCache = null;
+                        final showAll = _filter.isActive &&
+                            _lastFolders != null &&
+                            _visibleFolders(_lastFolders!).isEmpty;
                         setState(() {
-                          if (showAll) _filter = _filter.copyWith(downloadedOnly: false);
+                          if (showAll) _filter = const LibraryFilter();
                         });
                         _progressRevision.value++;
                         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -813,7 +874,7 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text(
-                                'No downloads remaining — showing all series',
+                                'No matching volumes remaining — showing all series',
                               ),
                               duration: Duration(seconds: 2),
                             ),
@@ -848,8 +909,12 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
     _releaseScrollCoverPins();
     _allScrollController.removeListener(_onLibraryScroll);
     _downloadedScrollController.removeListener(_onLibraryScroll);
+    _readingScrollController.removeListener(_onLibraryScroll);
+    _downloadedReadingScrollController.removeListener(_onLibraryScroll);
     _allScrollController.dispose();
     _downloadedScrollController.dispose();
+    _readingScrollController.dispose();
+    _downloadedReadingScrollController.dispose();
     _connectionManager?.removeListener(_onConnectionChanged);
     _progressRevision.dispose();
     _pagingController.dispose();
@@ -966,13 +1031,11 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
                           : headerForeground,
                     ),
                     tooltip: _filter.downloadedOnly
-                        ? 'Show all series'
+                        ? 'Disable Downloaded filter'
                         : 'Show downloaded series',
                     onPressed: () {
-                      setState(() => _filter = _filter.copyWith(
+                      _selectFilter(_filter.copyWith(
                           downloadedOnly: !_filter.downloadedOnly));
-                      _coverSignature = null;
-                      _scheduleCoverWarming();
                     },
                   ),
                 ),
@@ -1041,7 +1104,7 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
                     },
                   ),
                 ),
-                // Connection status sits inside the future right filter.
+                // Keep transient connection status inside the right filter.
                 Positioned(
                   right: 52,
                   child: Consumer<ConnectionManager>(
@@ -1072,6 +1135,23 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
 
                       return const SizedBox.shrink();
                     },
+                  ),
+                ),
+                // Symmetric with Downloaded on the far left. Filters combine.
+                Positioned(
+                  right: 4,
+                  child: IconButton(
+                    icon: Icon(
+                      Icons.chrome_reader_mode_outlined,
+                      color: _filter.readingOnly
+                          ? Theme.of(context).colorScheme.primary
+                          : headerForeground,
+                    ),
+                    tooltip: _filter.readingOnly
+                        ? 'Disable Continue Reading filter'
+                        : 'Show series being read',
+                    onPressed: () => _selectFilter(_filter.copyWith(
+                        readingOnly: !_filter.readingOnly)),
                   ),
                 ),
               ],
@@ -1169,12 +1249,12 @@ class _LibraryHeaderCornersPainter extends CustomPainter {
 
 class SeriesCard extends StatefulWidget {
   final Folder folder;
-  final int? downloadedCount;
+  final int? matchingCount;
   final LibraryFilter filter;
   final VoidCallback onTap;
 
   const SeriesCard({super.key, required this.folder, required this.onTap,
-      this.downloadedCount, this.filter = const LibraryFilter()});
+      this.matchingCount, this.filter = const LibraryFilter()});
 
   @override
   State<SeriesCard> createState() => _SeriesCardState();
@@ -1259,7 +1339,7 @@ class _SeriesCardState extends State<SeriesCard> {
                           border: Border.all(color: scheme.outlineVariant),
                         ),
                         child: Text(
-                          '${widget.downloadedCount ?? folder.bookIds.length} ${(widget.downloadedCount ?? folder.bookIds.length) == 1 ? 'Book' : 'Books'}',
+                          '${widget.matchingCount ?? folder.bookIds.length} ${(widget.matchingCount ?? folder.bookIds.length) == 1 ? 'Book' : 'Books'}',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 12,
