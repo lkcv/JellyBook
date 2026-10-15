@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:auto_size_text/auto_size_text.dart';
 
 /// A selectable action in the shared series/volume bottom sheet.
 ///
@@ -73,11 +74,14 @@ class _ItemActionSheet<T> extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Text(
+                  AutoSizeText(
                     title,
+                    textAlign: TextAlign.center,
                     maxLines: 2,
+                    minFontSize: 12,
+                    stepGranularity: 0.5,
                     overflow: TextOverflow.ellipsis,
                     style: textTheme.titleMedium,
                   ),
@@ -85,6 +89,7 @@ class _ItemActionSheet<T> extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       subtitle!,
+                      textAlign: TextAlign.center,
                       style: textTheme.bodySmall?.copyWith(
                         color: scheme.onSurfaceVariant,
                       ),
