@@ -9,7 +9,6 @@ import 'package:jellybook/providers/deleteComic.dart';
 import 'package:jellybook/providers/fixRichText.dart';
 import 'package:jellybook/providers/downloadQueue.dart';
 import 'package:jellybook/providers/supportedFormats.dart';
-import 'package:jellybook/screens/EditScreen.dart';
 import 'package:jellybook/screens/readingScreen.dart';
 import 'package:jellybook/widgets/roundedImageWithShadow.dart';
 import 'package:like_button/like_button.dart';
@@ -552,20 +551,6 @@ class _InfoScreenState extends State<InfoScreen> {
                     setState(() => entry.downloaded = false);
                     Navigator.pop(context, entry);
                   }
-                  if (value == "edit") {
-                    logger.d("editing comic");
-                    final result = await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) =>
-                            EditScreen(entry: entry, offline: offline),
-                      ),
-                    );
-                    setState(() {
-                      if (result != null) entry = result;
-                    });
-                    // }
-                  }
                 },
                 child: const Icon(Icons.more_vert, color: Colors.white),
                 itemBuilder: (context) {
@@ -579,16 +564,6 @@ class _InfoScreenState extends State<InfoScreen> {
                           Text(
                             AppLocalizations.of(context)?.delete ?? "Delete",
                           ),
-                        ],
-                      ),
-                    ),
-                    PopupMenuItem(
-                      value: "edit",
-                      child: Row(
-                        children: [
-                          const Icon(Icons.edit),
-                          const SizedBox(width: 10),
-                          Text(AppLocalizations.of(context)?.edit ?? "Edit"),
                         ],
                       ),
                     ),
