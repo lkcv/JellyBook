@@ -113,7 +113,6 @@ Future<void> getComics(String comicsId) async {
       type: isRealFolder ? EntryType.folder : EntryType.book,
       tags: element.tags != null ? element.tags!.toList() : [],
       parentId: element.parentId ?? '',
-      isFavorited: element.userData?.isFavorite ?? false,
       downloaded: false,
     );
     List<String> bookFileTypes = ['epub', 'mobi', 'azw3', 'kpf'];

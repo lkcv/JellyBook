@@ -736,7 +736,6 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
                         ),
                       );
                       if (result != null) {
-                        entry.isFavorited = result.isFavorited;
                         entry.downloaded = result.downloaded;
                         await isar?.writeTxn(() async {
                           await isar?.entrys.put(entry);
@@ -1103,23 +1102,6 @@ class KuroStyleBookCardState extends State<KuroStyleBookCard> {
                           },
                         ),
                       ),
-                      if (widget.entry.isFavorited == true)
-                        Positioned(
-                          top: 4,
-                          right: 4,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.6),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            padding: const EdgeInsets.all(4),
-                            child: const Icon(
-                              Icons.favorite,
-                              color: Colors.red,
-                              size: 16,
-                            ),
-                          ),
-                        ),
                     ],
                   ),
                 ),

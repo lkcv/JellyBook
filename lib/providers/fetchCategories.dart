@@ -91,13 +91,7 @@ Future<(List<Entry>, List<Folder>)> getServerCategories({
   final List<Folder> foldersTemp = await isar!.folders.where().findAll();
   QueryBuilder<Entry, Entry, QAfterFilterCondition> typeNotBook =
       await isar.entrys.filter().not().typeEqualTo(EntryType.folder);
-  List<Entry> booksTemp =
-      await typeNotBook.and().isFavoritedEqualTo(true).sortByTitle().findAll();
-  booksTemp.addAll(await typeNotBook
-      .and()
-      .isFavoritedEqualTo(false)
-      .sortByTitle()
-      .findAll());
+  List<Entry> booksTemp = await typeNotBook.sortByTitle().findAll();
   final hasCachedBooks = booksTemp.isNotEmpty;
   booksTemp = booksTemp.where(isSupportedEntry).toList();
   if (foldersTemp.isNotEmpty && hasCachedBooks && !force) {
@@ -168,23 +162,6 @@ Future<(List<Entry>, List<Folder>)> getServerCategories({
 
     prefs.setStringList('comicsIds', comicsIds);
 
-    List<Entry> likedComics = [];
-    List<Entry> unlikedComics = [];
-    logger.d(comics.length.toString());
-    for (int i = 0; i < comics.length; i++) {
-      if (comics[i].isFavorited) {
-        likedComics.add(comics[i]);
-      } else {
-        unlikedComics.add(comics[i]);
-      }
-    }
-
-    likedComics.sort((a, b) => a.title.compareTo(b.title));
-    unlikedComics.sort((a, b) => a.title.compareTo(b.title));
-
-    logger.d("likedComics: " + likedComics.length.toString());
-    logger.d("unlikedComics: " + unlikedComics.length.toString());
-    comics = likedComics + unlikedComics;
     logger.d("comics: " + comics.length.toString());
 
     // final isar = Isar.getInstance();
@@ -204,16 +181,9 @@ Future<(List<Entry>, List<Folder>)> getServerCategories({
 
 Future<(int, List<Entry>)> fetchEntries(int offset, int limit) async {
   final isar = Isar.getInstance();
-  // group the favorites and list them first
   QueryBuilder<Entry, Entry, QAfterFilterCondition> typeNotBook =
       isar!.entrys.filter().not().typeEqualTo(EntryType.folder);
-  List<Entry> entries =
-      await typeNotBook.and().isFavoritedEqualTo(true).sortByTitle().findAll();
-  entries.addAll(await typeNotBook
-      .and()
-      .isFavoritedEqualTo(false)
-      .sortByTitle()
-      .findAll());
+  List<Entry> entries = await typeNotBook.sortByTitle().findAll();
   entries = entries.where(isSupportedEntry).skip(offset).take(limit).toList();
   int length = entries.length;
   logger.f("entries: " + entries.length.toString());

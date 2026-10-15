@@ -11,8 +11,6 @@ import 'package:jellybook/providers/downloadQueue.dart';
 import 'package:jellybook/providers/supportedFormats.dart';
 import 'package:jellybook/screens/readingScreen.dart';
 import 'package:jellybook/widgets/roundedImageWithShadow.dart';
-import 'package:like_button/like_button.dart';
-import 'package:jellybook/providers/updateLike.dart';
 import 'package:isar/isar.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:markdown/markdown.dart' as md;
@@ -52,19 +50,6 @@ class _InfoScreenState extends State<InfoScreen> {
   });
   double imageWidth = 0;
   bool updatedImageWidth = false;
-
-// check if it is liked or not by checking the database
-  Future<bool> checkLiked(String id) async {
-    final isar = Isar.getInstance();
-    final entries = await isar?.entrys.where().idEqualTo(id).findFirst();
-    return entries?.isFavorited ?? false;
-  }
-
-  Future<bool> onLikeButtonTapped(bool isLiked) async {
-    await updateLike(entry.id);
-    return !isLiked;
-  }
-
   Future<void> setRead() async {
     if (entry.progress < 100) {
       entry.progress = 100;
@@ -261,8 +246,6 @@ class _InfoScreenState extends State<InfoScreen> {
     const _client = "JellyBook";
     const _device = "Unknown Device";
     const _deviceId = "Unknown Device id";
-
-    // final url = server + '/Users/' + userId + '/FavoriteItems/' + id;
     final headers = {
       'Accept': 'application/json',
       'Accept-Language': 'en-US,en;q=0.5',
@@ -288,10 +271,6 @@ class _InfoScreenState extends State<InfoScreen> {
   @override
   void initState() {
     super.initState();
-    checkLiked(entry.id).then((value) {
-      entry.isFavorited = value;
-    });
-    
     // Get offline status from ConnectionManager if not explicitly passed
     if (!widget.offline) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -447,50 +426,6 @@ class _InfoScreenState extends State<InfoScreen> {
           Expanded(
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.grey[800],
-                foregroundColor: Colors.white,
-                shape: const CircleBorder(),
-                padding: EdgeInsets.zero,
-                fixedSize: const Size(40, 40),
-              ),
-              onPressed: () async {
-                await updateLike(entry.id);
-                setState(() {
-                  entry.isFavorited = !entry.isFavorited;
-                });
-              },
-              child: LikeButton(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                isLiked: entry.isFavorited,
-                likeCountPadding: EdgeInsets.zero,
-                padding: EdgeInsets.zero,
-                circleColor: const CircleColor(
-                  start: Colors.red,
-                  end: Colors.redAccent,
-                ),
-                bubblesColor: const BubblesColor(
-                  dotPrimaryColor: Colors.green,
-                  dotSecondaryColor: Colors.red,
-                ),
-                likeBuilder: (bool isLiked) {
-                  return Icon(
-                    Icons.favorite,
-                    color: isLiked
-                        ? Colors.red
-                        : Theme.of(context).iconTheme.color ?? Colors.white,
-                  );
-                },
-                onTap: (bool isLiked) async {
-                  updateLike(entry.id);
-                  return !isLiked;
-                },
-              ),
-            ),
-          ),
-          Expanded(
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
                 shape: const CircleBorder(),
                 backgroundColor: // grey
                     Colors.grey[800],
@@ -595,9 +530,7 @@ class _InfoScreenState extends State<InfoScreen> {
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () async {
-            // update the page so that the liked comics are at the top
-            bool isLiked = await checkLiked(entry.id);
+          onPressed: () {
             Navigator.pop(context, (entry));
           },
         ),

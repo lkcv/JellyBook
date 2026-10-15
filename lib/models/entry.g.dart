@@ -77,84 +77,79 @@ const EntrySchema = CollectionSchema(
       name: r'inker',
       type: IsarType.string,
     ),
-    r'isFavorited': PropertySchema(
-      id: 12,
-      name: r'isFavorited',
-      type: IsarType.bool,
-    ),
     r'letterer': PropertySchema(
-      id: 13,
+      id: 12,
       name: r'letterer',
       type: IsarType.string,
     ),
     r'pageNum': PropertySchema(
-      id: 14,
+      id: 13,
       name: r'pageNum',
       type: IsarType.long,
     ),
     r'parentId': PropertySchema(
-      id: 15,
+      id: 14,
       name: r'parentId',
       type: IsarType.string,
     ),
     r'path': PropertySchema(
-      id: 16,
+      id: 15,
       name: r'path',
       type: IsarType.string,
     ),
     r'penciller': PropertySchema(
-      id: 17,
+      id: 16,
       name: r'penciller',
       type: IsarType.string,
     ),
     r'progress': PropertySchema(
-      id: 18,
+      id: 17,
       name: r'progress',
       type: IsarType.double,
     ),
     r'publisher': PropertySchema(
-      id: 19,
+      id: 18,
       name: r'publisher',
       type: IsarType.string,
     ),
     r'rating': PropertySchema(
-      id: 20,
+      id: 19,
       name: r'rating',
       type: IsarType.double,
     ),
     r'releaseDate': PropertySchema(
-      id: 21,
+      id: 20,
       name: r'releaseDate',
       type: IsarType.string,
     ),
     r'tags': PropertySchema(
-      id: 22,
+      id: 21,
       name: r'tags',
       type: IsarType.stringList,
     ),
     r'title': PropertySchema(
-      id: 23,
+      id: 22,
       name: r'title',
       type: IsarType.string,
     ),
     r'translator': PropertySchema(
-      id: 24,
+      id: 23,
       name: r'translator',
       type: IsarType.string,
     ),
     r'type': PropertySchema(
-      id: 25,
+      id: 24,
       name: r'type',
       type: IsarType.byte,
       enumMap: _EntrytypeEnumValueMap,
     ),
     r'url': PropertySchema(
-      id: 26,
+      id: 25,
       name: r'url',
       type: IsarType.string,
     ),
     r'writer': PropertySchema(
-      id: 27,
+      id: 26,
       name: r'writer',
       type: IsarType.string,
     )
@@ -292,22 +287,21 @@ void _entrySerialize(
   writer.writeString(offsets[9], object.imagePath);
   writer.writeString(offsets[10], object.imprint);
   writer.writeString(offsets[11], object.inker);
-  writer.writeBool(offsets[12], object.isFavorited);
-  writer.writeString(offsets[13], object.letterer);
-  writer.writeLong(offsets[14], object.pageNum);
-  writer.writeString(offsets[15], object.parentId);
-  writer.writeString(offsets[16], object.path);
-  writer.writeString(offsets[17], object.penciller);
-  writer.writeDouble(offsets[18], object.progress);
-  writer.writeString(offsets[19], object.publisher);
-  writer.writeDouble(offsets[20], object.rating);
-  writer.writeString(offsets[21], object.releaseDate);
-  writer.writeStringList(offsets[22], object.tags);
-  writer.writeString(offsets[23], object.title);
-  writer.writeString(offsets[24], object.translator);
-  writer.writeByte(offsets[25], object.type.index);
-  writer.writeString(offsets[26], object.url);
-  writer.writeString(offsets[27], object.writer);
+  writer.writeString(offsets[12], object.letterer);
+  writer.writeLong(offsets[13], object.pageNum);
+  writer.writeString(offsets[14], object.parentId);
+  writer.writeString(offsets[15], object.path);
+  writer.writeString(offsets[16], object.penciller);
+  writer.writeDouble(offsets[17], object.progress);
+  writer.writeString(offsets[18], object.publisher);
+  writer.writeDouble(offsets[19], object.rating);
+  writer.writeString(offsets[20], object.releaseDate);
+  writer.writeStringList(offsets[21], object.tags);
+  writer.writeString(offsets[22], object.title);
+  writer.writeString(offsets[23], object.translator);
+  writer.writeByte(offsets[24], object.type.index);
+  writer.writeString(offsets[25], object.url);
+  writer.writeString(offsets[26], object.writer);
 }
 
 Entry _entryDeserialize(
@@ -329,24 +323,23 @@ Entry _entryDeserialize(
     imagePath: reader.readString(offsets[9]),
     imprint: reader.readStringOrNull(offsets[10]),
     inker: reader.readStringOrNull(offsets[11]),
-    isFavorited: reader.readBoolOrNull(offsets[12]) ?? false,
     isarId: id,
-    letterer: reader.readStringOrNull(offsets[13]),
-    pageNum: reader.readLongOrNull(offsets[14]) ?? 0,
-    parentId: reader.readStringOrNull(offsets[15]) ?? '',
-    path: reader.readString(offsets[16]),
-    penciller: reader.readStringOrNull(offsets[17]),
-    progress: reader.readDoubleOrNull(offsets[18]) ?? 0.0,
-    publisher: reader.readStringOrNull(offsets[19]),
-    rating: reader.readDouble(offsets[20]),
-    releaseDate: reader.readString(offsets[21]),
-    tags: reader.readStringList(offsets[22]) ?? [],
-    title: reader.readString(offsets[23]),
-    translator: reader.readStringOrNull(offsets[24]),
-    type: _EntrytypeValueEnumMap[reader.readByteOrNull(offsets[25])] ??
+    letterer: reader.readStringOrNull(offsets[12]),
+    pageNum: reader.readLongOrNull(offsets[13]) ?? 0,
+    parentId: reader.readStringOrNull(offsets[14]) ?? '',
+    path: reader.readString(offsets[15]),
+    penciller: reader.readStringOrNull(offsets[16]),
+    progress: reader.readDoubleOrNull(offsets[17]) ?? 0.0,
+    publisher: reader.readStringOrNull(offsets[18]),
+    rating: reader.readDouble(offsets[19]),
+    releaseDate: reader.readString(offsets[20]),
+    tags: reader.readStringList(offsets[21]) ?? [],
+    title: reader.readString(offsets[22]),
+    translator: reader.readStringOrNull(offsets[23]),
+    type: _EntrytypeValueEnumMap[reader.readByteOrNull(offsets[24])] ??
         EntryType.book,
-    url: reader.readString(offsets[26]),
-    writer: reader.readStringOrNull(offsets[27]),
+    url: reader.readString(offsets[25]),
+    writer: reader.readStringOrNull(offsets[26]),
   );
   return object;
 }
@@ -383,37 +376,35 @@ P _entryDeserializeProp<P>(
     case 11:
       return (reader.readStringOrNull(offset)) as P;
     case 12:
-      return (reader.readBoolOrNull(offset) ?? false) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 13:
-      return (reader.readStringOrNull(offset)) as P;
-    case 14:
       return (reader.readLongOrNull(offset) ?? 0) as P;
-    case 15:
+    case 14:
       return (reader.readStringOrNull(offset) ?? '') as P;
+    case 15:
+      return (reader.readString(offset)) as P;
     case 16:
-      return (reader.readString(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 17:
-      return (reader.readStringOrNull(offset)) as P;
-    case 18:
       return (reader.readDoubleOrNull(offset) ?? 0.0) as P;
+    case 18:
+      return (reader.readStringOrNull(offset)) as P;
     case 19:
-      return (reader.readStringOrNull(offset)) as P;
-    case 20:
       return (reader.readDouble(offset)) as P;
+    case 20:
+      return (reader.readString(offset)) as P;
     case 21:
-      return (reader.readString(offset)) as P;
-    case 22:
       return (reader.readStringList(offset) ?? []) as P;
-    case 23:
+    case 22:
       return (reader.readString(offset)) as P;
-    case 24:
+    case 23:
       return (reader.readStringOrNull(offset)) as P;
-    case 25:
+    case 24:
       return (_EntrytypeValueEnumMap[reader.readByteOrNull(offset)] ??
           EntryType.book) as P;
-    case 26:
+    case 25:
       return (reader.readString(offset)) as P;
-    case 27:
+    case 26:
       return (reader.readStringOrNull(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -2075,16 +2066,6 @@ extension EntryQueryFilter on QueryBuilder<Entry, Entry, QFilterCondition> {
       return query.addFilterCondition(FilterCondition.greaterThan(
         property: r'inker',
         value: '',
-      ));
-    });
-  }
-
-  QueryBuilder<Entry, Entry, QAfterFilterCondition> isFavoritedEqualTo(
-      bool value) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'isFavorited',
-        value: value,
       ));
     });
   }
@@ -4107,18 +4088,6 @@ extension EntryQuerySortBy on QueryBuilder<Entry, Entry, QSortBy> {
     });
   }
 
-  QueryBuilder<Entry, Entry, QAfterSortBy> sortByIsFavorited() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'isFavorited', Sort.asc);
-    });
-  }
-
-  QueryBuilder<Entry, Entry, QAfterSortBy> sortByIsFavoritedDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'isFavorited', Sort.desc);
-    });
-  }
-
   QueryBuilder<Entry, Entry, QAfterSortBy> sortByLetterer() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'letterer', Sort.asc);
@@ -4433,18 +4402,6 @@ extension EntryQuerySortThenBy on QueryBuilder<Entry, Entry, QSortThenBy> {
     });
   }
 
-  QueryBuilder<Entry, Entry, QAfterSortBy> thenByIsFavorited() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'isFavorited', Sort.asc);
-    });
-  }
-
-  QueryBuilder<Entry, Entry, QAfterSortBy> thenByIsFavoritedDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'isFavorited', Sort.desc);
-    });
-  }
-
   QueryBuilder<Entry, Entry, QAfterSortBy> thenByIsarId() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'isarId', Sort.asc);
@@ -4710,12 +4667,6 @@ extension EntryQueryWhereDistinct on QueryBuilder<Entry, Entry, QDistinct> {
     });
   }
 
-  QueryBuilder<Entry, Entry, QDistinct> distinctByIsFavorited() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'isFavorited');
-    });
-  }
-
   QueryBuilder<Entry, Entry, QDistinct> distinctByLetterer(
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
@@ -4893,12 +4844,6 @@ extension EntryQueryProperty on QueryBuilder<Entry, Entry, QQueryProperty> {
   QueryBuilder<Entry, String?, QQueryOperations> inkerProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'inker');
-    });
-  }
-
-  QueryBuilder<Entry, bool, QQueryOperations> isFavoritedProperty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'isFavorited');
     });
   }
 
