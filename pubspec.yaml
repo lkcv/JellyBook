@@ -78,7 +78,6 @@ dependencies:
   xml: ^6.3.0
   flutter_html: ^3.0.0-beta.2
   flutter_markdown_plus: ^1.0.12
-  image_picker: ^1.2.3
   infinite_scroll_pagination: ^5.1.1
 
   # Logging
