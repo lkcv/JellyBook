@@ -561,36 +561,45 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
       appBar: JellyBookHeader(
         topInset: MediaQuery.paddingOf(context).top,
         children: [
-                Row(
-                  children: [
-                    SizedBox(
-                      width: kToolbarHeight,
-                      child: IconButton(
-                        tooltip: 'Back',
-                        icon: Icon(Icons.arrow_back, color: headerForeground),
-                        onPressed: () => Navigator.of(context).maybePop(),
-                      ),
-                    ),
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.only(left: 16, right: 16),
-                        child: AutoSizeText(
-                          name,
-                          maxLines: 2,
-                          minFontSize: 10,
-                          maxFontSize: 20,
-                          stepGranularity: 0.5,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: headerForeground,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+          // Match the Reader's 18sp centered title and 56dp side margins.
+          // Keep the Collection title inside its compact 36dp header; longer
+          // two-line titles can shrink rather than overflow the grid.
+          Positioned.fill(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: kToolbarHeight),
+              child: Center(
+                child: AutoSizeText(
+                  name,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  minFontSize: 10,
+                  maxFontSize: 18,
+                  stepGranularity: 0.5,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: headerForeground,
+                  ),
                 ),
-          ],
+              ),
+            ),
+          ),
+          // Paint the button above the centered title so its hit target wins.
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            child: SizedBox(
+              width: kToolbarHeight,
+              child: IconButton(
+                tooltip: 'Back',
+                icon: Icon(Icons.arrow_back, color: headerForeground),
+                onPressed: () => Navigator.of(context).maybePop(),
+              ),
+            ),
+          ),
+        ],
       ),
       body: FutureBuilder<List<Entry>>(
         future: _entriesFuture,
