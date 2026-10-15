@@ -724,7 +724,12 @@ class _CbzReaderState extends State<CbzReader>
           final entry = await isar.entrys.where().idEqualTo(comicId).findFirst();
           if (entry == null) return;
           entry.pageNum = page;
-          entry.progress = (page / (pageNums > 0 ? pageNums : 1)) * 100;
+          // Page indices are zero-based: the final page is pageNums - 1.
+          // Reaching it must complete the volume, without changing the
+          // existing percentage calculation for earlier pages.
+          entry.progress = pageNums > 0 && page >= pageNums - 1
+              ? 100.0
+              : (page / (pageNums > 0 ? pageNums : 1)) * 100;
           await isar.writeTxn(() async => isar.entrys.put(entry));
           logger.d('saved progress: page $page / $pageNums');
         } catch (error) {
