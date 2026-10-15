@@ -9,6 +9,9 @@ import 'package:jellybook/models/folder.dart';
 import 'package:jellybook/providers/fetchCategories.dart';
 import 'package:jellybook/providers/libraryFilter.dart';
 import 'package:jellybook/providers/downloadQueue.dart';
+import 'package:jellybook/providers/deleteComic.dart';
+import 'package:jellybook/providers/supportedFormats.dart';
+import 'package:jellybook/widgets/itemActionSheet.dart';
 import 'package:jellybook/widgets/downloadQueueSheet.dart';
 import 'package:jellybook/providers/serverProgressRevision.dart';
 import 'package:jellybook/screens/collectionScreen.dart';
@@ -25,6 +28,8 @@ import 'package:jellybook/widgets/jellybookImageCache.dart';
 import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
 import 'package:provider/provider.dart';
 import 'package:jellybook/providers/connectionManager.dart';
+
+enum _SeriesAction { downloadRemaining, deleteDownloaded }
 
 class LibraryScreen extends StatefulWidget {
   // Library stays mounted in HomeScreen's IndexedStack across tab changes.
@@ -770,6 +775,144 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
     }
   }
 
+  // Series actions always use the entire series, never the active Library
+  // filter. Keep disk deletion and queue mutations out of the sheet widget.
+  Future<void> _showSeriesActions(Folder folder) async {
+    final isar = Isar.getInstance();
+    if (isar == null) return;
+    final queue = DownloadQueue.instance;
+    // Include recovered jobs before deciding which volumes are still missing.
+    await queue.restoreQueue();
+    if (!mounted) return;
+
+    Future<List<Entry>> seriesEntries() => isar.entrys
+        .where()
+        .filter()
+        .anyOf(folder.bookIds, (q, String id) => q.idEqualTo(id))
+        .findAll();
+
+    bool isVolume(Entry entry) =>
+        entry.type == EntryType.book || entry.type == EntryType.comic;
+    final entries = (await seriesEntries()).where(isVolume).toList();
+    if (!mounted) return;
+    final queuedIds = queue.jobs.map((job) => job.id).toSet();
+    final missing = entries.where((entry) =>
+        isSupportedEntry(entry) && !entry.downloaded &&
+        !queuedIds.contains(entry.id)).toList();
+    final downloaded = entries.where((entry) => entry.downloaded).toList();
+    if (missing.isEmpty && downloaded.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('No new downloads available for this series'),
+      ));
+      return;
+    }
+
+    final selected = await showItemActionSheet<_SeriesAction>(
+      context,
+      title: folder.name,
+      subtitle: '${entries.length} volumes · ${downloaded.length} downloaded',
+      actions: [
+        if (missing.isNotEmpty)
+          ItemSheetAction(
+            value: _SeriesAction.downloadRemaining,
+            icon: Icons.download_rounded,
+            label: 'Download remaining ${missing.length} '
+                '${missing.length == 1 ? 'volume' : 'volumes'}',
+            subtitle: 'Add missing volumes to the download queue',
+          ),
+        if (downloaded.isNotEmpty)
+          ItemSheetAction(
+            value: _SeriesAction.deleteDownloaded,
+            icon: Icons.delete_outline_rounded,
+            label: 'Delete ${downloaded.length} downloaded '
+                '${downloaded.length == 1 ? 'volume' : 'volumes'}',
+            subtitle: 'Keep reading progress and cached pages',
+            destructive: true,
+          ),
+      ],
+    );
+    if (!mounted || selected == null) return;
+
+    if (selected == _SeriesAction.downloadRemaining) {
+      // Another request may have enqueued a volume while the sheet was open.
+      // The queue itself also deduplicates in case of a concurrent enqueue.
+      final latest = await seriesEntries();
+      if (!mounted) return;
+      final knownJobs = queue.jobs.map((job) => job.id).toSet();
+      var added = 0;
+      for (final entry in latest.where(isVolume)) {
+        if (entry.downloaded || !isSupportedEntry(entry) ||
+            !knownJobs.add(entry.id)) continue;
+        queue.enqueue(entry);
+        added++;
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(added == 0
+            ? 'All remaining volumes are already queued or downloaded'
+            : 'Queued $added ${added == 1 ? 'volume' : 'volumes'}'),
+      ));
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete downloaded volumes?'),
+        content: Text('Remove local copies of all downloaded volumes in '
+            '"${folder.name}"? Reading progress and cached pages will be kept.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    ) ?? false;
+    if (!confirmed || !mounted) return;
+
+    // Re-read Isar after confirmation. Only completed local downloads are
+    // removed; do not cancel pending jobs or race an active transfer.
+    final latest = await seriesEntries();
+    final inQueue = queue.jobs.map((job) => job.id).toSet();
+    var removed = 0;
+    var failed = 0;
+    for (final entry in latest.where(
+        (item) => isVolume(item) && item.downloaded)) {
+      if (inQueue.contains(entry.id)) {
+        failed++;
+        continue;
+      }
+      try {
+        if (await removeDownloadedVolume(entry.id)) removed++;
+      } catch (error) {
+        failed++;
+        logger.w('Could not remove series download ${entry.id}: $error');
+      }
+    }
+    if (!mounted) return;
+    // Reevaluate downloaded/reading filter membership from Isar. Cover pins
+    // and scroll controllers are left intact; there is no navigation here.
+    if (removed > 0) {
+      _readingIdsCache = null;
+    }
+    if (removed > 0 && _filter.isActive && _lastFolders != null &&
+        _visibleFolders(_lastFolders!).isEmpty) {
+      _selectFilter(const LibraryFilter());
+    } else if (removed > 0) {
+      setState(() {});
+    }
+    if (removed > 0) _progressRevision.value++;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('Removed $removed ${removed == 1 ? 'volume' : 'volumes'}'
+          '${failed == 0 ? '' : '; $failed could not be removed'}'),
+    ));
+  }
+
   Widget _buildGrid(List<Folder> allFolders) {
     final matchingIds = _matchingIds();
     final folders = _filter.filterFolders(allFolders, matchingIds);
@@ -823,6 +966,7 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
                   valueListenable: _progressRevision,
                   builder: (context, _, __) => SeriesCard(
                     folder: folder,
+                    onLongPress: () => _showSeriesActions(folder),
                     matchingCount:
                         _filter.matchingVolumeCount(folder, matchingIds),
                     filter: _filter,
@@ -1186,8 +1330,10 @@ class SeriesCard extends StatefulWidget {
   final int? matchingCount;
   final LibraryFilter filter;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
 
   const SeriesCard({super.key, required this.folder, required this.onTap,
+      this.onLongPress,
       this.matchingCount, this.filter = const LibraryFilter()});
 
   @override
@@ -1222,6 +1368,7 @@ class _SeriesCardState extends State<SeriesCard> {
 
     return GestureDetector(
       onTap: widget.onTap,
+      onLongPress: widget.onLongPress,
       child: Container(
         padding: const EdgeInsets.all(4),
         decoration: BoxDecoration(
