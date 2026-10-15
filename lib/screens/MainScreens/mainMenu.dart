@@ -988,7 +988,7 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
                 // Only this header control observes the download queue;
                 // progress ticks never rebuild Library cards or cover images.
                 Positioned(
-                  right: 48,
+                  left: 52,
                   child: ValueListenableBuilder<int>(
                     valueListenable: DownloadManager.instance.headerChanges,
                     builder: (context, _, __) {
@@ -1050,9 +1050,9 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
                     },
                   ),
                 ),
-                // Connection status icon (right)
+                // Connection status sits inside the future right filter.
                 Positioned(
-                  right: 4,
+                  right: 52,
                   child: Consumer<ConnectionManager>(
                     builder: (context, connectionManager, _) {
                       final status = connectionManager.status;
