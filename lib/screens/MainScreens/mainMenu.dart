@@ -1119,7 +1119,7 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
                             connectionManager.retry();
                           },
                         );
-                      } else if (status == ConnectionStatus.validating) {
+                      } else if (status == ConnectionStatus.validating && _wasOffline) {
                         return Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16.0),
                           child: SizedBox(
