@@ -17,6 +17,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_star/flutter_star.dart';
 import 'package:jellybook/models/folder.dart';
 import 'package:jellybook/screens/infoScreen.dart';
+import 'package:jellybook/providers/deleteComic.dart';
+import 'package:jellybook/providers/downloadQueue.dart';
+import 'package:jellybook/widgets/itemActionSheet.dart';
 import 'package:jellybook/providers/fixRichText.dart';
 import 'package:jellybook/l10n/app_localizations.dart';
 import 'package:jellybook/themes/themeConstants.dart';
@@ -31,6 +34,8 @@ import 'package:jellybook/screens/readingScreens/cbzReader.dart';
 import 'package:jellybook/widgets/coverOpeningRoute.dart';
 import 'package:provider/provider.dart';
 import 'package:jellybook/providers/connectionManager.dart';
+
+enum _VolumeAction { download, deleteDownload, markFinished, markUnread }
 
 class collectionScreen extends StatefulWidget {
   final String folderId;
@@ -215,6 +220,178 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
       coverPath: entry.imagePath,
       rect: rect == null || rect.isEmpty ? null : rect,
     );
+  }
+
+  // Long-press manages one volume; the sheet never owns queue or disk work.
+  Future<void> _showVolumeActions(Entry entry) async {
+    final database = Isar.getInstance();
+    if (database == null) return;
+    final queue = DownloadQueue.instance;
+    await queue.restoreQueue();
+    if (!mounted) return;
+    final current = await database.entrys.where().idEqualTo(entry.id).findFirst();
+    if (!mounted || current == null || !isSupportedEntry(current)) return;
+
+    DownloadJob? pending;
+    for (final job in queue.jobs) {
+      if (job.id == current.id) {
+        pending = job;
+        break;
+      }
+    }
+    final alreadyQueued = pending != null &&
+        pending.state != DownloadJobState.failed &&
+        pending.state != DownloadJobState.canceled &&
+        pending.state != DownloadJobState.completed;
+    final unread = LibraryFilter.isUnread(current);
+    final finished = LibraryFilter.isFinished(current);
+    final status = unread ? 'UNREAD' : finished ? 'FINISHED' : 'READING';
+    final downloadStatus = current.downloaded
+        ? 'Downloaded'
+        : alreadyQueued ? 'Download queued' : 'Not downloaded';
+    final selected = await showItemActionSheet<_VolumeAction>(
+      context,
+      title: current.title,
+      subtitle: '$status · $downloadStatus',
+      actions: [
+        if (current.downloaded)
+          const ItemSheetAction<_VolumeAction>(
+            value: _VolumeAction.deleteDownload,
+            label: 'Delete downloaded volume',
+            subtitle: 'Keep reading progress and cached pages',
+            icon: Icons.delete_outline_rounded,
+            destructive: true,
+          )
+        else if (!alreadyQueued)
+          ItemSheetAction<_VolumeAction>(
+            value: _VolumeAction.download,
+            label: pending?.state == DownloadJobState.failed
+                ? 'Retry download' : 'Download volume',
+            icon: Icons.download_rounded,
+          ),
+        if (!finished)
+          const ItemSheetAction<_VolumeAction>(
+            value: _VolumeAction.markFinished,
+            label: 'Mark as FINISHED',
+            icon: Icons.check_circle_outline_rounded,
+          ),
+        if (!unread)
+          const ItemSheetAction<_VolumeAction>(
+            value: _VolumeAction.markUnread,
+            label: 'Mark as UNREAD',
+            icon: Icons.restart_alt_rounded,
+          ),
+      ],
+    );
+    if (!mounted || selected == null) return;
+
+    if (selected == _VolumeAction.download) {
+      final latest = await database.entrys.where().idEqualTo(entry.id).findFirst();
+      if (!mounted || latest == null) return;
+      if (!latest.downloaded && isSupportedEntry(latest)) {
+        // enqueue() deduplicates concurrent and failed jobs for this volume.
+        final job = queue.enqueue(latest);
+        // Refresh on completion only, never on transfer progress ticks.
+        // A reader opened meanwhile will refresh Collection on its own exit.
+        unawaited(job.result.then((downloaded) {
+          if (downloaded != null && mounted &&
+              (ModalRoute.of(context)?.isCurrent ?? false)) {
+            _refreshEntries();
+          }
+        }));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Volume added to download queue'),
+        ));
+      }
+      return;
+    }
+
+    if (selected == _VolumeAction.deleteDownload) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Delete downloaded volume?'),
+          content: Text('Remove the local copy of "${current.title}"? '
+              'Reading progress and cached pages will be kept.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Delete'),
+            ),
+          ],
+        ),
+      ) ?? false;
+      if (!confirmed || !mounted) return;
+      // Never remove a local directory while a queued transfer may use it.
+      if (queue.jobs.any((job) => job.id == entry.id)) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Cancel the queued download before deleting'),
+        ));
+        return;
+      }
+      try {
+        final removed = await removeDownloadedVolume(entry.id);
+        if (!mounted) return;
+        if (removed) _refreshEntries();
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(removed ? 'Downloaded volume deleted'
+              : 'This volume is no longer downloaded'),
+        ));
+      } catch (error) {
+        if (!mounted) return;
+        logger.w('Could not remove volume download ${entry.id}: $error');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not delete downloaded volume')),
+        );
+      }
+      return;
+    }
+
+    final markFinished = selected == _VolumeAction.markFinished;
+    try {
+      // Update both fields for UNREAD. A zero percentage with a saved page
+      // above zero still counts as READING according to LibraryFilter.
+      await database.writeTxn(() async {
+        final latest = await database.entrys.where().idEqualTo(entry.id).findFirst();
+        if (latest == null) return;
+        latest.progress = markFinished ? 100.0 : 0.0;
+        if (!markFinished) latest.pageNum = 0;
+        await database.entrys.put(latest);
+      });
+      if (!markFinished) {
+        // Keep the disk page snapshots, but don't reopen an UNREAD volume at
+        // an old cached resume position (which is stored separately from Isar).
+        try {
+          await ReaderPageCache.restoreServerPage(entry.id, 0);
+        } catch (error) {
+          logger.w('Could not reset cached resume position ${entry.id}: $error');
+        }
+      }
+      if (!mounted) return;
+      entry.progress = markFinished ? 100.0 : 0.0;
+      if (!markFinished) entry.pageNum = 0;
+      if (readingOnly) {
+        // A status change can remove the volume from this filtered grid.
+        _refreshEntries();
+      } else {
+        // Redraw just the badge and progress bar, not the cover image grid.
+        _cardProgressRevision.value++;
+      }
+      serverProgressRevision.value++;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(markFinished ? 'Marked as FINISHED' : 'Marked as UNREAD'),
+      ));
+    } catch (error) {
+      if (!mounted) return;
+      logger.w('Could not update reading status ${entry.id}: $error');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not update reading status')),
+      );
+    }
   }
 
   void _refreshEntries() {
@@ -743,16 +920,7 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
                         _refreshEntries();
                       }
                     },
-                    onEntryLongPressed: () async {
-                      var result = await _pushWithPausedCovers(
-                        MaterialPageRoute(
-                          builder: (context) => InfoScreen(entry: entry),
-                        ),
-                      );
-                      if (result != null) {
-                        _refreshEntries();
-                      }
-                    },
+                    onEntryLongPressed: () => _showVolumeActions(entry),
                   );
                 },
               ),
