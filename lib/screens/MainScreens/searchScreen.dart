@@ -1,4 +1,5 @@
 // The purpose of this screen is to allow the user to search for a specific book/comic
+import 'dart:async';
 import 'dart:ffi';
 import 'dart:math';
 import 'dart:ui' as ui;
@@ -8,12 +9,12 @@ import 'package:isar/isar.dart';
 import 'package:isar_flutter_libs/isar_flutter_libs.dart';
 import 'package:jellybook/models/entry.dart';
 import 'package:jellybook/providers/supportedFormats.dart';
-import 'package:jellybook/screens/infoScreen.dart';
 import 'package:jellybook/screens/readingScreen.dart';
 import 'package:jellybook/screens/readingScreens/cbzReader.dart';
 import 'package:jellybook/providers/readerPageCache.dart';
 import 'package:jellybook/providers/connectionManager.dart';
 import 'package:jellybook/widgets/coverOpeningRoute.dart';
+import 'package:jellybook/widgets/volumeActions.dart';
 import 'package:provider/provider.dart';
 import 'package:string_similarity/string_similarity.dart';
 import 'package:jellybook/l10n/app_localizations.dart';
@@ -213,21 +214,22 @@ class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver
       await Navigator.of(context).push<void>(route);
       await route.completed;
     } else {
-      await _openInfo(entry);
+      await _openVolumeActions(entry);
       return;
     }
 
     if (mounted) await _refreshCatalog();
   }
 
-  Future<void> _openInfo(Entry entry) async {
-    final route = MaterialPageRoute<dynamic>(
-      builder: (context) => InfoScreen(entry: entry),
-    );
-    await Navigator.of(context).push<dynamic>(route);
-    await route.completed;
-    if (mounted) await _refreshCatalog();
-  }
+  // Search uses the same volume actions as Collection, without losing its
+  // query, grid position, or the direct Reader opening animation.
+  Future<void> _openVolumeActions(Entry entry) => showVolumeActions(
+        context,
+        entry,
+        onChanged: (_) {
+          if (mounted) unawaited(_refreshCatalog());
+        },
+      );
 
   List<Entry> searchResults = [];
   // List<Map<String, dynamic>> searchResults = [];
@@ -424,7 +426,7 @@ class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver
                         entry: entry,
                         onEntryTapped: (coverRect) =>
                             _openResult(entry, coverRect),
-                        onEntryLongPressed: () => _openInfo(entry),
+                        onEntryLongPressed: () => _openVolumeActions(entry),
                       ),
                     ),
                     const SizedBox(height: 4),
