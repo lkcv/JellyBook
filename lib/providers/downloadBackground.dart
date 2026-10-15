@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
-/// Keep the existing DownloadManager's Flutter process in foreground-service
+/// Keep the existing DownloadQueue's Flutter process in foreground-service
 /// priority while its FIFO queue drains. No second Dart isolate or worker.
 /// Android may still terminate the process or deny service starts; Phase 2a
 /// handles recovery on the next app launch.

@@ -12,7 +12,7 @@ import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 
-/** Foreground process priority and wake locks while DownloadManager is active.
+/** Foreground process priority and wake locks while DownloadQueue is active.
  *  The actual download continues in the existing Flutter isolate.
  */
 class DownloadForegroundService : Service() {

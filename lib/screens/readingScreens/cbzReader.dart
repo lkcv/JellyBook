@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:jellybook/providers/updatePagenum.dart';
-import 'package:jellybook/providers/downloadManager.dart';
+import 'package:jellybook/providers/downloadQueue.dart';
 import 'package:jellybook/providers/fileNameFromTitle.dart';
 import 'package:isar/isar.dart';
 import 'package:isar_flutter_libs/isar_flutter_libs.dart';
@@ -600,7 +600,7 @@ class _CbzReaderState extends State<CbzReader>
     final entry = await isar!.entrys.where().idEqualTo(comicId).findFirst();
     if (entry == null || !mounted) return;
 
-    final manager = DownloadManager.instance;
+    final manager = DownloadQueue.instance;
     final job = manager.enqueue(entry);
     void updateProgress() {
       if (!mounted) return;

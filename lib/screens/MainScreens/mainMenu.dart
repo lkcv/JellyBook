@@ -8,7 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:jellybook/models/folder.dart';
 import 'package:jellybook/providers/fetchCategories.dart';
 import 'package:jellybook/providers/libraryFilter.dart';
-import 'package:jellybook/providers/downloadManager.dart';
+import 'package:jellybook/providers/downloadQueue.dart';
 import 'package:jellybook/widgets/downloadQueueSheet.dart';
 import 'package:jellybook/providers/serverProgressRevision.dart';
 import 'package:jellybook/screens/collectionScreen.dart';
@@ -470,7 +470,7 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
           _releaseStartupCoverPins();
           // Recover pending downloads only after startup covers have painted,
           // so resumed transfers don't compete with the first Library frame.
-          unawaited(DownloadManager.instance.restoreQueue());
+          unawaited(DownloadQueue.instance.restoreQueue());
           // The grid has painted; retry any startup sync waiting on covers.
           _tryPendingSync();
         });
@@ -1044,9 +1044,9 @@ class _MainMenuState extends State<MainMenu> with WidgetsBindingObserver {
                 Positioned(
                   left: 52,
                   child: ValueListenableBuilder<int>(
-                    valueListenable: DownloadManager.instance.headerChanges,
+                    valueListenable: DownloadQueue.instance.headerChanges,
                     builder: (context, _, __) {
-                      final manager = DownloadManager.instance;
+                      final manager = DownloadQueue.instance;
                       final pending = manager.pendingCount;
                       final failed = manager.failedCount;
                       if (pending == 0 && failed == 0) {

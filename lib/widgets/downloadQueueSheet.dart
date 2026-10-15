@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:jellybook/providers/downloadManager.dart';
+import 'package:jellybook/providers/downloadQueue.dart';
 
 /// Queue state only; never creates a new cover image provider.
 class DownloadQueueSheet extends StatelessWidget {
@@ -7,7 +7,7 @@ class DownloadQueueSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final manager = DownloadManager.instance;
+    final manager = DownloadQueue.instance;
     return SafeArea(
       top: false,
       child: AnimatedBuilder(
@@ -29,7 +29,7 @@ class DownloadQueueSheet extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Downloads', style: Theme.of(context).textTheme.titleLarge),
+                Text('Download Queue', style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 4),
                 Text('${manager.pendingCount} pending · ${manager.failedCount} failed',
                     style: Theme.of(context).textTheme.bodySmall),

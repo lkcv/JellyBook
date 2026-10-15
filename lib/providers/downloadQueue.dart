@@ -49,8 +49,8 @@ class DownloadJob {
   Future<Entry?> get result => _completion.future;
 }
 
-class DownloadManager extends ChangeNotifier {
-  DownloadManager._();
+class DownloadQueue extends ChangeNotifier {
+  DownloadQueue._();
 
   /// Use the same authenticated server status as the Library header.
   /// Binding is performed once from the app's ConnectionManager provider.
@@ -93,7 +93,7 @@ class DownloadManager extends ChangeNotifier {
     if (_nextRunnableJob() != null) unawaited(_drain());
   }
 
-  static final DownloadManager instance = DownloadManager._();
+  static final DownloadQueue instance = DownloadQueue._();
 
   final List<DownloadJob> _jobs = [];
   final ValueNotifier<int> _headerChanges = ValueNotifier<int>(0);
@@ -152,7 +152,7 @@ class DownloadManager extends ChangeNotifier {
       final shift = (_consecutiveInterruptions++).clamp(0, 4).toInt();
       seconds = (5 * (1 << shift)).clamp(5, 60).toInt();
     }
-    debugPrint('DownloadManager: retrying waiting download in ${seconds}s'
+    debugPrint('DownloadQueue: retrying waiting download in ${seconds}s'
         '${quickReconnect ? ' (reconnect grace)' : ''}');
     _retryTimer = Timer(Duration(seconds: seconds), _wakeWaitingJobs);
   }
@@ -224,7 +224,7 @@ class DownloadManager extends ChangeNotifier {
       } on FormatException catch (error) {
         // An unreadable journal cannot be recovered, but new downloads must
         // still work. Do not fail the entire manager initialization.
-        debugPrint('DownloadManager: invalid saved queue: $error');
+        debugPrint('DownloadQueue: invalid saved queue: $error');
       }
       if (saved is List) {
         final recovered = <DownloadJob>[];
@@ -273,7 +273,7 @@ class DownloadManager extends ChangeNotifier {
     } catch (error) {
       // If storage or Isar is temporarily unavailable, don't erase a queue
       // we haven't managed to read. A later restore attempt may succeed.
-      debugPrint('DownloadManager: queue recovery deferred: $error');
+      debugPrint('DownloadQueue: queue recovery deferred: $error');
       _restoreFuture = null;
       return;
     }
@@ -297,10 +297,10 @@ class DownloadManager extends ChangeNotifier {
     _persistenceTail = _persistenceTail.then((_) async {
       final prefs = await SharedPreferences.getInstance();
       if (!await prefs.setString(_queueStorageKey, snapshot)) {
-        debugPrint('DownloadManager: could not persist download queue');
+        debugPrint('DownloadQueue: could not persist download queue');
       }
     }).catchError((Object error) {
-      debugPrint('DownloadManager: could not persist queue: $error');
+      debugPrint('DownloadQueue: could not persist queue: $error');
     });
     return _persistenceTail;
   }
@@ -392,7 +392,7 @@ class DownloadManager extends ChangeNotifier {
         if (await file.exists()) await file.delete();
       }
     } catch (error) {
-      debugPrint('DownloadManager: could not clean canceled download: $error');
+      debugPrint('DownloadQueue: could not clean canceled download: $error');
     } finally {
       job.state = DownloadJobState.canceled;
       if (!job._completion.isCompleted) job._completion.complete(null);
@@ -493,7 +493,7 @@ class DownloadManager extends ChangeNotifier {
           job.error = error;
           if (_recoverable(error)) {
             job.state = await _waitingState();
-            debugPrint('DownloadManager: ${job.id} interrupted ($error), '
+            debugPrint('DownloadQueue: ${job.id} interrupted ($error), '
                 'waiting as ${job.state.name}');
             // Preserve the existing completion Future and .part bytes.
             // No immediate requeue: only a connectivity event or timer wakes it.

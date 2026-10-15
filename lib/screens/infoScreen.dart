@@ -7,7 +7,7 @@ import 'package:flutter_star/flutter_star.dart';
 import 'package:jellybook/models/login.dart';
 import 'package:jellybook/providers/deleteComic.dart';
 import 'package:jellybook/providers/fixRichText.dart';
-import 'package:jellybook/providers/downloadManager.dart';
+import 'package:jellybook/providers/downloadQueue.dart';
 import 'package:jellybook/providers/supportedFormats.dart';
 import 'package:jellybook/screens/EditScreen.dart';
 import 'package:jellybook/screens/readingScreen.dart';
@@ -347,7 +347,7 @@ class _InfoScreenState extends State<InfoScreen> {
       return;
     }
 
-    final manager = DownloadManager.instance;
+    final manager = DownloadQueue.instance;
     final alreadyQueued = manager.jobs.any((job) =>
         job.id == entry.id &&
         job.state != DownloadJobState.failed &&
