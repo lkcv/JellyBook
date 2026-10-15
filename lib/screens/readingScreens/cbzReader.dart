@@ -1364,51 +1364,62 @@ class _CbzReaderState extends State<CbzReader>
         child: SizedBox(
           height: 76,
           child: Stack(
-            alignment: Alignment.center,
             children: [
+              // Use the Collection header's 36dp band and 56dp side margins.
+              // The Reader overlay remains 76dp tall, so page layout and the
+              // existing overlay animation are otherwise unchanged.
               Positioned(
-                left: 0,
-                child: IconButton(
-                  icon: const Icon(Icons.arrow_back, color: Colors.white),
-                  onPressed: _exit,
+                top: 0,
+                left: kToolbarHeight,
+                right: kToolbarHeight,
+                height: 36,
+                child: Center(
+                  child: AutoSizeText(
+                    title,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    minFontSize: 10,
+                    maxFontSize: 18,
+                    stepGranularity: 0.5,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 56),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    SizedBox(
-                      height: chapter == null ? 62 : 45,
-                      child: Center(
-                        child: AutoSizeText(
-                          title,
-                          textAlign: TextAlign.center,
-                          maxLines: 2,
-                          minFontSize: 10,
-                          maxFontSize: 18,
-                          stepGranularity: 0.5,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+              if (chapter != null)
+                Positioned(
+                  top: 36,
+                  left: kToolbarHeight,
+                  right: kToolbarHeight,
+                  height: 18,
+                  child: Center(
+                    child: Text(
+                      chapter,
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
                       ),
                     ),
-                    if (chapter != null)
-                      Text(
-                        chapter,
-                        textAlign: TextAlign.center,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12,
-                        ),
-                      ),
-                  ],
+                  ),
+                ),
+              // Keep the back button over the title, just like Collection.
+              Positioned(
+                top: 0,
+                left: 0,
+                height: 36,
+                child: SizedBox(
+                  width: kToolbarHeight,
+                  child: IconButton(
+                    icon: const Icon(Icons.arrow_back, color: Colors.white),
+                    onPressed: _exit,
+                  ),
                 ),
               ),
             ],
