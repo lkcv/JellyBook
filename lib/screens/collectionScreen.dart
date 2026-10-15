@@ -13,6 +13,7 @@ import 'package:jellybook/providers/supportedFormats.dart';
 import 'package:jellybook/providers/libraryFilter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_star/flutter_star.dart';
 import 'package:jellybook/models/folder.dart';
 import 'package:jellybook/screens/infoScreen.dart';
@@ -77,6 +78,9 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
   // fresh Future in build() briefly replaces the grid with a spinner.
   late Future<List<Entry>> _entriesFuture;
   List<Entry>? _latestEntries;
+  // Keep the complete Collection order for reader continuation. Library
+  // filters affect what is displayed, never the sequence of volumes to read.
+  List<Entry> _unfilteredEntries = const [];
   // Notifies just the visible badge/progress widgets, never the cover images.
   final ValueNotifier<int> _cardProgressRevision = ValueNotifier<int>(0);
   int _progressReadGeneration = 0;
@@ -482,6 +486,8 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
         .filter()
         .anyOf(bookIds, (q, String id) => q.idEqualTo(id))
         .findAll();
+    _unfilteredEntries = entryList.where((entry) =>
+        entry.type != EntryType.folder && isSupportedEntry(entry)).toList();
     entryList = LibraryFilter(
       downloadedOnly: downloadedOnly,
       readingOnly: readingOnly,
@@ -660,10 +666,9 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
                             coverPath: entry.imagePath,
                             pageReady: firstPageReady,
                             skipReturnFade: skipReturnFade,
-                            builder: (context) => CbzReader(
-                              title: entry.title,
-                              comicId: entry.id,
-                              openedDirectly: true,
+                            builder: (context) => _VolumeReaderSession(
+                              initialEntry: entry,
+                              orderedEntries: List<Entry>.of(_unfilteredEntries),
                               openingReady: firstPageReady,
                               skipReturnFade: skipReturnFade,
                             ),
@@ -793,6 +798,158 @@ class _CollectionHeaderCornersPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _CollectionHeaderCornersPainter oldDelegate) =>
       oldDelegate.color != color;
+}
+
+// A single reader route for the entire reading session. Replacing the keyed
+// child disposes its page/zoom controllers and streaming resources; successive
+// volumes never accumulate Navigator routes or inherit Collection filters.
+class _VolumeReaderSession extends StatefulWidget {
+  const _VolumeReaderSession({
+    required this.initialEntry,
+    required this.orderedEntries,
+    required this.openingReady,
+    required this.skipReturnFade,
+  });
+
+  final Entry initialEntry;
+  final List<Entry> orderedEntries;
+  final ValueNotifier<bool> openingReady;
+  final ValueNotifier<bool> skipReturnFade;
+
+  @override
+  State<_VolumeReaderSession> createState() => _VolumeReaderSessionState();
+}
+
+class _VolumeReaderSessionState extends State<_VolumeReaderSession> {
+  late int _index;
+  bool _changedVolume = false;
+  bool _openingVolume = false;
+  int? _rollbackIndex;
+
+  @override
+  void dispose() {
+    // Only the session owns System UI restoration. Individual readers may
+    // be replaced without showing the Android bars between volumes.
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    super.dispose();
+  }
+
+  void _recoverFailedContinuation() {
+    if (!mounted || _rollbackIndex == null) return;
+    final previous = _rollbackIndex!;
+    _rollbackIndex = null;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Could not open adjacent volume'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+    setState(() {
+      _index = previous;
+      _changedVolume = _index != widget.orderedEntries.indexWhere(
+        (entry) => entry.id == widget.initialEntry.id,
+      );
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _index = widget.orderedEntries.indexWhere(
+      (entry) => entry.id == widget.initialEntry.id,
+    );
+  }
+
+  Entry? _adjacent(int delta) {
+    final target = _index + delta;
+    return _index >= 0 && target >= 0 &&
+            target < widget.orderedEntries.length
+        ? widget.orderedEntries[target]
+        : null;
+  }
+
+  Future<String?> _openAdjacent(int delta) async {
+    if (_openingVolume) return 'Already opening a volume';
+    final candidate = _adjacent(delta);
+    if (candidate == null) {
+      return delta > 0 ? 'End of series' : 'Beginning of series';
+    }
+    _openingVolume = true;
+    try {
+      // Refresh the downloaded state without changing the Collection order.
+      final isar = Isar.getInstance();
+      final entry = await isar?.entrys.where().idEqualTo(candidate.id).findFirst();
+      if (!mounted) return 'Reader closed';
+      if (entry == null || !isSupportedEntry(entry)) {
+        return 'Volume is no longer available';
+      }
+      final extension = entryFileExtension(entry.path);
+      if (extension != 'cbz' && !(extension == 'zip' && entry.downloaded)) {
+        return 'Volume cannot open in this reader';
+      }
+      if (entry.downloaded) {
+        if (!await Directory(entry.folderPath).exists()) {
+          return 'Downloaded pages are unavailable';
+        }
+      } else {
+        final connection = Provider.of<ConnectionManager>(
+          context, listen: false,
+        ).status;
+        if (connection != ConnectionStatus.online) {
+          final count = await ReaderPageCache.getPageCount(entry.id);
+          final savedIndex = (await ReaderPageCache.getCurrentPage(entry.id)) ??
+              entry.pageNum;
+          final cached = count != null && count > 0 &&
+              (await ReaderPageCache.getPage(
+                entry.id, savedIndex.clamp(0, count - 1).toInt(),
+              )) != null;
+          if (!cached) return 'Volume unavailable offline';
+        }
+      }
+      if (!mounted) return 'Reader closed';
+      setState(() {
+        _rollbackIndex = _index;
+        _index += delta;
+        _changedVolume = _index != widget.orderedEntries.indexWhere(
+          (entry) => entry.id == widget.initialEntry.id,
+        );
+      });
+      // The keyed reader owns the target volume. If its load fails, recover
+      // the previous reader instead of popping the whole session.
+      return null;
+    } catch (error) {
+      logger.w('Could not switch volumes: $error');
+      return 'Could not open volume';
+    } finally {
+      _openingVolume = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final entry = _index >= 0
+        ? widget.orderedEntries[_index]
+        : widget.initialEntry;
+    return CbzReader(
+      key: ValueKey(entry.id),
+      title: entry.title,
+      comicId: entry.id,
+      openedDirectly: true,
+      openingReady: widget.openingReady,
+      skipReturnFade: widget.skipReturnFade,
+      nextVolumeTitle: _adjacent(1)?.title,
+      onNextVolume: () => _openAdjacent(1),
+      previousVolumeTitle: _adjacent(-1)?.title,
+      onPreviousVolume: () => _openAdjacent(-1),
+      returnWithoutCover: _changedVolume,
+      // Returning to the initially tapped volume can still be a reload;
+      // failure must recover the previous working reader in that case too.
+      continuingVolume: _rollbackIndex != null,
+      restoreSystemUiOnDispose: false,
+      onContinuationLoadFailed: _rollbackIndex != null
+          ? _recoverFailedContinuation : null,
+    );
+  }
 }
 
 // Kuro Reader-inspired book card widget

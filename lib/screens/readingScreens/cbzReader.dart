@@ -30,6 +30,16 @@ class CbzReader extends StatefulWidget {
   final ValueNotifier<bool>? openingReady;
   /// Shared with the opening route to skip the reverse fade on page zero.
   final ValueNotifier<bool>? skipReturnFade;
+  /// Available only when reading directly from an ordered Collection session.
+  final String? nextVolumeTitle;
+  final Future<String?> Function()? onNextVolume;
+  final String? previousVolumeTitle;
+  final Future<String?> Function()? onPreviousVolume;
+  /// After changing volumes, Back skips a mismatched cover shrink.
+  final bool returnWithoutCover;
+  final bool continuingVolume;
+  final bool restoreSystemUiOnDispose;
+  final VoidCallback? onContinuationLoadFailed;
 
   const CbzReader({
     Key? key,
@@ -38,6 +48,14 @@ class CbzReader extends StatefulWidget {
     this.openedDirectly = false,
     this.openingReady,
     this.skipReturnFade,
+    this.nextVolumeTitle,
+    this.onNextVolume,
+    this.previousVolumeTitle,
+    this.onPreviousVolume,
+    this.returnWithoutCover = false,
+    this.continuingVolume = false,
+    this.restoreSystemUiOnDispose = true,
+    this.onContinuationLoadFailed,
   }) : super(key: key);
 
   @override
@@ -70,6 +88,15 @@ class _CbzReaderState extends State<CbzReader>
   int? _firstTouchPage;
   int? _activeZoomPage;
   bool _gestureHadMultitouch = false;
+  // Only a new swipe starting at the first/last page boundary may switch
+  // volumes. 1 means next, -1 means previous; zero means no armed gesture.
+  // Pointer observation leaves PageView, vertical scrolling and zoom intact.
+  bool _canSwipeNext = false;
+  bool _canSwipePrevious = false;
+  int _volumeSwipeDelta = 0;
+  bool _volumeSwipePending = false;
+  String? _volumeSwipeMessage;
+  Timer? _volumeSwipeMessageTimer;
   // A zoomed page owns the first drag. Only a fresh swipe that STARTS at an
   // image boundary is allowed to turn exactly one page.
   Offset? _singleFingerStart;
@@ -112,9 +139,12 @@ class _CbzReaderState extends State<CbzReader>
 
   @override
   void dispose() {
+    _volumeSwipeMessageTimer?.cancel();
     _pageController?.dispose();
     _verticalScrollController.dispose();
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    if (widget.restoreSystemUiOnDispose) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    }
     _tapTicker.dispose();
     _clearStreamAfterPageWork(_stream);
     super.dispose();
@@ -169,10 +199,14 @@ class _CbzReaderState extends State<CbzReader>
       PaintingBinding.instance.imageCache.maximumSizeBytes = 300 << 20;
       final prefs = await SharedPreferences.getInstance();
       direction = (prefs.getString('readingDirection') ?? 'ltr').toLowerCase();
+      if (!mounted) return;
 
       await getData();
+      if (!mounted) return;
       await getChapters();
+      if (!mounted) return;
       await getProgress(comicId);
+      if (!mounted) return;
 
       if (_isStreaming) {
         // Restore a saved page before waiting for the server to enumerate
@@ -249,18 +283,24 @@ class _CbzReaderState extends State<CbzReader>
     } catch (e, s) {
       logger.e('CbzReader: load failed: $e\n$s');
       if (mounted) {
-        final messenger = ScaffoldMessenger.of(context);
-        final nav = Navigator.of(context);
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text('Could not open this volume: $e'),
-            duration: const Duration(seconds: 15),
-            showCloseIcon: true,
-          ),
-        );
-        nav.pop();
-        if (!widget.openedDirectly) {
-          nav.pop(); // The legacy route still has ReadingScreen underneath.
+        if (widget.continuingVolume &&
+            widget.onContinuationLoadFailed != null) {
+          // Recover the previous volume without leaving the reading session.
+          widget.onContinuationLoadFailed!();
+        } else {
+          final messenger = ScaffoldMessenger.of(context);
+          final nav = Navigator.of(context);
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text('Could not open this volume: $e'),
+              duration: const Duration(seconds: 15),
+              showCloseIcon: true,
+            ),
+          );
+          nav.pop();
+          if (!widget.openedDirectly) {
+            nav.pop(); // The legacy route has ReadingScreen underneath.
+          }
         }
       }
     }
@@ -330,6 +370,7 @@ class _CbzReaderState extends State<CbzReader>
         .idEqualTo(comicId)
         .findFirst()
         .then((value) {
+      if (!mounted) return;
       setState(() {
         pageNum = value!.pageNum;
         progress = value.progress;
@@ -870,13 +911,37 @@ class _CbzReaderState extends State<CbzReader>
   void _readerPointerDown(PointerDownEvent event) {
     if (_readerTouches.isEmpty) {
       _gestureHadMultitouch = false;
+      // A page-turn gesture that arrives at a boundary is not allowed to
+      // change volumes. Sample both boundaries at the *start* of this touch.
+      final vertical = direction == 'vertical';
+      final controller = _pageController;
+      final atStart = vertical
+          ? (_verticalScrollController.hasClients &&
+              _verticalScrollController.position.extentBefore <= 1)
+          : (controller != null && controller.hasClients &&
+              _currentPage == 0 &&
+              (controller.page ?? _currentPage.toDouble()).abs() < 0.02);
+      final atEnd = vertical
+          ? (_verticalScrollController.hasClients &&
+              _verticalScrollController.position.extentAfter <= 1)
+          : (controller != null && controller.hasClients &&
+              _currentPage == pageNums - 1 &&
+              ((controller.page ?? _currentPage.toDouble()) -
+                      (pageNums - 1))
+                  .abs() < 0.02);
+      final eligible = !_volumeSwipePending && pageNums > 0 &&
+          !_zoomScrollLocked &&
+          !(_zoomState(_activeZoomPage)?.isZoomed ?? false);
+      _canSwipeNext = eligible && atEnd && widget.onNextVolume != null;
+      _canSwipePrevious = eligible && atStart &&
+          widget.onPreviousVolume != null;
+      _volumeSwipeDelta = 0;
       _edgeTurnConsumed = false;
       _firstTouchPage = _activeZoomPage ?? _pageAt(event.position);
       // Take a snapshot of the boundaries BEFORE any movement. Reaching an
       // edge during this gesture must not trigger an unexpected page turn.
       _singleFingerStart = event.position;
       final zoom = _zoomState(_activeZoomPage);
-      final vertical = direction == 'vertical';
       _edgePositiveAtStart = !_edgePageTurnPending &&
           (zoom?.atPanBoundary(vertical: vertical, positive: true) ?? false);
       _edgeNegativeAtStart = !_edgePageTurnPending &&
@@ -885,6 +950,11 @@ class _CbzReaderState extends State<CbzReader>
     _readerTouches[event.pointer] = event.position;
     if (_readerTouches.length == 2) {
       _gestureHadMultitouch = true;
+      _canSwipeNext = false;
+      _canSwipePrevious = false;
+      if (_volumeSwipeDelta != 0) {
+        setState(() => _volumeSwipeDelta = 0);
+      }
       _edgePositiveAtStart = false;
       _edgeNegativeAtStart = false;
       var index = _firstTouchPage ?? _currentPage;
@@ -907,6 +977,31 @@ class _CbzReaderState extends State<CbzReader>
     final previous = _readerTouches[event.pointer];
     if (previous == null) return;
     _readerTouches[event.pointer] = event.position;
+
+    // Observe only an extra swipe that begins at either volume boundary.
+    // Suppress the fleeting early "Next:" preview: show only the release pill
+    // once the swipe is long enough to actually open a neighboring volume.
+    if ((_canSwipeNext || _canSwipePrevious) &&
+        _readerTouches.length == 1 && !_gestureHadMultitouch &&
+        !_edgePageTurnPending) {
+      final start = _singleFingerStart;
+      if (start != null) {
+        final travel = event.position - start;
+        final vertical = direction == 'vertical';
+        final forward = vertical ? -travel.dy :
+            (direction == 'rtl' ? travel.dx : -travel.dx);
+        final cross = vertical ? travel.dx.abs() : travel.dy.abs();
+        final directionDelta = forward > 0 ? 1 : -1;
+        final available = directionDelta == 1
+            ? _canSwipeNext : _canSwipePrevious;
+        final armed = available && forward.abs() >= 72 &&
+            forward.abs() > cross * 1.3;
+        final nextDelta = armed ? directionDelta : 0;
+        if (_volumeSwipeDelta != nextDelta) {
+          setState(() => _volumeSwipeDelta = nextDelta);
+        }
+      }
+    }
 
     final state = _zoomState(_activeZoomPage);
     if (state == null) return;
@@ -996,7 +1091,7 @@ class _CbzReaderState extends State<CbzReader>
     _precacheAround(target);
   }
 
-  void _readerPointerEnd(int pointer) {
+  void _readerPointerEnd(int pointer, {bool cancelled = false}) {
     if (_readerTouches.remove(pointer) == null) return;
     if (_readerTouches.length >= 2) {
       // A third finger can replace a lifted pointer without scale jumping.
@@ -1005,6 +1100,16 @@ class _CbzReaderState extends State<CbzReader>
       return;
     }
     if (_readerTouches.isNotEmpty) return;
+
+    final volumeDelta = !cancelled && !_gestureHadMultitouch &&
+        !_zoomScrollLocked && !_edgePageTurnPending &&
+        !_volumeSwipePending ? _volumeSwipeDelta : 0;
+    _canSwipeNext = false;
+    _canSwipePrevious = false;
+    if (_volumeSwipeDelta != 0) {
+      setState(() => _volumeSwipeDelta = 0);
+    }
+    if (volumeDelta != 0) unawaited(_openAdjacentVolume(volumeDelta));
 
     // Do NOT unlock when the second finger is lifted: the original finger
     // may still be moving, which must not turn the page at 1x.
@@ -1021,6 +1126,93 @@ class _CbzReaderState extends State<CbzReader>
     }
     // Keep _gestureHadMultitouch set until the NEXT pointer down, so a tap
     // callback from the just-finished gesture cannot queue a page turn.
+  }
+
+  void _showVolumeMessage(String message) {
+    _volumeSwipeMessageTimer?.cancel();
+    if (!mounted) return;
+    setState(() {
+      _volumeSwipePending = false;
+      _volumeSwipeDelta = 0;
+      _volumeSwipeMessage = message;
+    });
+    _volumeSwipeMessageTimer = Timer(const Duration(milliseconds: 1600), () {
+      if (mounted) setState(() => _volumeSwipeMessage = null);
+    });
+  }
+
+  Future<void> _openAdjacentVolume(int delta) async {
+    if (_volumeSwipePending) return;
+    final next = delta > 0;
+    final title = next ? widget.nextVolumeTitle : widget.previousVolumeTitle;
+    final action = next ? widget.onNextVolume : widget.onPreviousVolume;
+    if (title == null || action == null) {
+      _showVolumeMessage(next ? 'End of series' : 'Beginning of series');
+      return;
+    }
+    _volumeSwipeMessageTimer?.cancel();
+    setState(() {
+      _volumeSwipePending = true;
+      _volumeSwipeMessage = null;
+      _volumeSwipeDelta = 0; // The pull indicator ends on release.
+    });
+    // Vertical reading has no per-page onPageChanged callback. Reaching the
+    // bottom and deliberately advancing completes this volume as well.
+    if (next && direction == 'vertical' && pageNums > 0) {
+      saveProgress(pageNums - 1);
+    }
+    try {
+      final error = await action();
+      // Success replaces this keyed reader; do not flash a message on success.
+      if (mounted && error != null) _showVolumeMessage(error);
+    } catch (error) {
+      logger.w('CbzReader: adjacent volume unavailable: $error');
+      _showVolumeMessage('Could not open ${next ? 'next' : 'previous'} volume');
+    }
+  }
+
+  Widget _volumeSwipePill() {
+    final next = _volumeSwipeDelta >= 0;
+    final title = next ? widget.nextVolumeTitle : widget.previousVolumeTitle;
+    final message = _volumeSwipeMessage ??
+        (title == null
+            ? (next ? 'End of series' : 'Beginning of series')
+            : 'Release to open $title');
+    return Center(
+      child: IgnorePointer(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.sizeOf(context).width * 0.82,
+          ),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: const Color(0xED252525),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: Colors.white24),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.menu_book_rounded, color: Colors.white,
+                      size: 19),
+                  const SizedBox(width: 10),
+                  Flexible(
+                    child: Text(message,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.white,
+                          fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _zoomablePage(int index, File file) {
@@ -1133,6 +1325,12 @@ class _CbzReaderState extends State<CbzReader>
   void _exit() {
     // Both the toolbar Back arrow and Android Back go through this method.
     widget.skipReturnFade?.value = _currentPage == 0;
+    if (widget.returnWithoutCover && widget.openedDirectly) {
+      // The opening cover belongs to the originally tapped volume. Remove
+      // this route directly instead of shrinking the wrong volume into it.
+      Navigator.of(context).removeRoute(ModalRoute.of(context)!);
+      return;
+    }
     Navigator.pop(context);
     if (!widget.openedDirectly) {
       Navigator.pop(context);
@@ -1284,6 +1482,18 @@ class _CbzReaderState extends State<CbzReader>
     if (_loading) {
       // The reader overlay is the only title bar. Avoid showing a temporary
       // Material AppBar with a different font size during initialization.
+      if (widget.continuingVolume) {
+        return PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, result) {
+            if (!didPop) _exit();
+          },
+          child: const Scaffold(
+            backgroundColor: Colors.black,
+            body: Center(child: CircularProgressIndicator()),
+          ),
+        );
+      }
       return const Scaffold(
         backgroundColor: Colors.black,
         body: Center(child: CircularProgressIndicator()),
@@ -1309,7 +1519,8 @@ class _CbzReaderState extends State<CbzReader>
                 onPointerDown: _readerPointerDown,
                 onPointerMove: _readerPointerMove,
                 onPointerUp: (event) => _readerPointerEnd(event.pointer),
-                onPointerCancel: (event) => _readerPointerEnd(event.pointer),
+                onPointerCancel: (event) =>
+                    _readerPointerEnd(event.pointer, cancelled: true),
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTapUp: isVertical ? (_) => _toggleOverlay() : _handleTap,
@@ -1330,6 +1541,8 @@ class _CbzReaderState extends State<CbzReader>
                 right: 0,
                 child: _fade(_buildBottomBar(scheme, isRtl)),
               ),
+            if (_volumeSwipeDelta != 0 || _volumeSwipeMessage != null)
+              Positioned.fill(child: _volumeSwipePill()),
           ],
         ),
       ),
