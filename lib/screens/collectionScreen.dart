@@ -354,6 +354,7 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
       if (!_canWarmCovers(_coverWarmGeneration)) return;
       unawaited(_precacheCollectionCovers(_latestEntries!));
     });
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   bool _canWarmCovers(int generation) =>
