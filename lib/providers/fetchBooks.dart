@@ -10,7 +10,7 @@ import 'package:jellybook/models/entry.dart';
 import 'package:jellybook/models/folder.dart';
 import 'package:jellybook/providers/supportedFormats.dart';
 import 'package:jellybook/providers/updatePagenum.dart';
-import 'package:jellybook/providers/readerPageCache.dart';
+import 'package:jellybook/cache/readerPageCache.dart';
 import 'package:isar/isar.dart';
 import 'package:jellybook/variables.dart';
 

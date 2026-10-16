@@ -17,7 +17,7 @@ import 'package:provider/provider.dart';
 import 'package:jellybook/l10n/app_localizations.dart';
 import 'package:jellybook/providers/languageProvider.dart';
 import 'package:jellybook/widgets/SettingsItem.dart';
-import 'package:jellybook/widgets/jellybookImageCache.dart';
+import 'package:jellybook/cache/imageCache.dart';
 import 'package:jellybook/widgets/readerCacheSettings.dart';
 import 'package:jellybook/themes/themeConstants.dart';
 import 'package:jellybook/widgets/jellybookHeader.dart';

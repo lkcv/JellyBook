@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:jellybook/screens/downloadedVolumesScreen.dart';
-import 'package:jellybook/providers/readerPageCache.dart';
-import 'package:jellybook/widgets/jellybookImageCache.dart';
+import 'package:jellybook/cache/readerPageCache.dart';
+import 'package:jellybook/cache/imageCache.dart';
 
 /// Storage controls for the durable, seven-page snapshots retained by the
 /// reader. This intentionally does not count or delete downloaded volumes.

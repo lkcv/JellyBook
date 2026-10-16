@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:jellybook/widgets/jellybookImageCache.dart';
+import 'package:jellybook/cache/imageCache.dart';
 import 'package:jellybook/widgets/roundedImageWithShadow.dart';
 
 enum ReaderOpeningState { preparing, loadingPage, ready }

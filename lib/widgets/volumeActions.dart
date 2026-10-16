@@ -6,7 +6,7 @@ import 'package:jellybook/models/entry.dart';
 import 'package:jellybook/providers/deleteComic.dart';
 import 'package:jellybook/providers/downloadQueue.dart';
 import 'package:jellybook/providers/libraryFilter.dart';
-import 'package:jellybook/providers/readerPageCache.dart';
+import 'package:jellybook/cache/readerPageCache.dart';
 import 'package:jellybook/providers/serverProgressRevision.dart';
 import 'package:jellybook/providers/supportedFormats.dart';
 import 'package:jellybook/variables.dart';

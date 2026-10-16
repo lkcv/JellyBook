@@ -12,7 +12,7 @@ import 'package:jellybook/models/entry.dart';
 import 'package:jellybook/providers/supportedFormats.dart';
 import 'package:jellybook/screens/readingScreen.dart';
 import 'package:jellybook/screens/readingScreens/cbzReader.dart';
-import 'package:jellybook/providers/readerPageCache.dart';
+import 'package:jellybook/cache/readerPageCache.dart';
 import 'package:jellybook/providers/connectionManager.dart';
 import 'package:jellybook/widgets/coverOpeningRoute.dart';
 import 'package:jellybook/widgets/volumeActions.dart';

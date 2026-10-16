@@ -18,7 +18,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:provider/provider.dart';
 import 'package:jellybook/providers/connectionManager.dart';
 import 'package:jellybook/providers/cbzStream.dart';
-import 'package:jellybook/providers/readerPageCache.dart';
+import 'package:jellybook/cache/readerPageCache.dart';
 import 'package:jellybook/widgets/readerPinchZoom.dart';
 import 'package:jellybook/widgets/coverOpeningRoute.dart';
 
