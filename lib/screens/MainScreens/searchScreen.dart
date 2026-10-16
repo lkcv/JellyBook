@@ -5,6 +5,7 @@ import 'dart:math';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:isar/isar.dart';
 import 'package:isar_flutter_libs/isar_flutter_libs.dart';
 import 'package:jellybook/models/entry.dart';
@@ -70,15 +71,14 @@ class SearchScreen extends StatefulWidget {
 }
 
 // _SearchScreenState
-class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver {
+class _SearchScreenState extends State<SearchScreen> {
   static const double _headerCornerRadius = 17.5;
 
   final _searchController = TextEditingController();
   final _searchFocusNode = FocusNode();
-  bool _keyboardWasVisible = false;
-  // A tap outside, a scroll, or Enter should hide the IME without leaving Search.
-  bool _keepSearchOnKeyboardClose = false;
-  bool _leavingSearch = false;
+  // Show the saved query while Enter temporarily clears EditableText's value.
+  // This notifier rebuilds only the search field, not the results grid.
+  final _enterVisibleQuery = ValueNotifier<String?>(null);
   final _resultsScrollController = ScrollController();
   final isar = Isar.getInstance();
   List<Entry> _catalog = [];
@@ -88,52 +88,7 @@ class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     _refreshCatalog();
-  }
-
-  @override
-  void didChangeMetrics() {
-    if (!mounted) return;
-
-    // Android Back can hide the IME without unfocusing the TextField.
-    // Only unfocus once the keyboard is fully hidden, so we do not
-    // interfere with its dismissal animation.
-    final keyboardVisible = View.of(context).viewInsets.bottom > 0;
-    if (keyboardVisible) {
-      // Only reset when a *new* keyboard session starts, not on every inset
-      // update during its closing animation.
-      if (!_keyboardWasVisible) _keepSearchOnKeyboardClose = false;
-      _keyboardWasVisible = true;
-    } else if (_keyboardWasVisible) {
-      _keyboardWasVisible = false;
-      final stay = _keepSearchOnKeyboardClose;
-      _keepSearchOnKeyboardClose = false;
-      _searchFocusNode.unfocus();
-
-      // Android normally consumes Back to hide its keyboard. For an abandoned
-      // empty search, use that completed dismissal as the signal to go back.
-      // A deliberately dismissed keyboard (tap, scroll, Enter) stays here.
-      if (!stay &&
-          _searchController.text.trim().isEmpty &&
-          Theme.of(context).platform == TargetPlatform.android) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted ||
-              _leavingSearch ||
-              _keyboardWasVisible ||
-              _searchFocusNode.hasFocus ||
-              _searchController.text.trim().isNotEmpty ||
-              !(ModalRoute.of(context)?.isCurrent ?? false)) {
-            return;
-          }
-          final lifecycle = WidgetsBinding.instance.lifecycleState;
-          if (lifecycle != null && lifecycle != AppLifecycleState.resumed) {
-            return;
-          }
-          _handleBack();
-        });
-      }
-    }
   }
 
   Future<void> _refreshCatalog() async {
@@ -147,12 +102,12 @@ class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver
     if (!mounted || version != _catalogVersion) return;
     _catalog = books.where(isSupportedEntry).toList();
     _catalogReady = true;
-    getSearchResults(_searchController.text);
+    getSearchResults(_enterVisibleQuery.value ?? _searchController.text);
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
+    _enterVisibleQuery.dispose();
     _searchFocusNode.dispose();
     _searchController.dispose();
     _resultsScrollController.dispose();
@@ -235,28 +190,60 @@ class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver
   // List<Map<String, dynamic>> searchResults = [];
 
   void _onQueryChanged(String query) {
+    // A real edit takes priority over any pending Enter restoration.
+    if (_enterVisibleQuery.value != null) _enterVisibleQuery.value = null;
     if (_resultsScrollController.hasClients) {
       _resultsScrollController.jumpTo(0);
     }
     getSearchResults(query);
   }
 
-  void _dismissKeyboardAndStay() {
-    if (_keyboardWasVisible || _searchFocusNode.hasFocus) {
-      _keepSearchOnKeyboardClose = true;
+  // Match Android Back: hide the IME without unfocusing the text field.
+  // Unfocus on a body tap made later keyboard animations progressively janky.
+  void _hideKeyboardFromBodyTap() {
+    if (View.of(context).viewInsets.bottom <= 0) return;
+    unawaited(SystemChannels.textInput.invokeMethod<void>('TextInput.hide'));
+  }
+
+  // On Android, Enter + unfocus with a nonempty editing value caused a
+  // ~60 Hz IME closing animation instead of the smooth ~120 Hz path, and
+  // subsequent openings could remain janky until the query was edited.
+  //
+  // Clearing the editing value BEFORE unfocus avoids the closing jank. It
+  // must stay empty beyond the ~290 ms IME animation: restoring next frame
+  // or as soon as the keyboard inset reaches zero brought the lag back.
+  // The 450 ms interval is empirically tested, not an OS animation contract.
+  // Display the saved text as a normal-looking hint during that interval;
+  // searchResults are left untouched. Restoring only text, with an invalid
+  // selection and empty composing region, prevents the follow-on jank that
+  // occurred when restoring the original TextEditingValue verbatim.
+  Future<void> _dismissKeyboardOnEnter() async {
+    final query = _searchController.text;
+    if (query.isEmpty) {
       _searchFocusNode.unfocus();
+      return;
     }
+
+    _enterVisibleQuery.value = query;
+    _searchController.value = TextEditingValue.empty;
+    _searchFocusNode.unfocus();
+    await Future<void>.delayed(const Duration(milliseconds: 450));
+    if (!mounted || _enterVisibleQuery.value != query) return;
+    if (_searchController.text.isEmpty) {
+      _searchController.value = TextEditingValue(
+        text: query,
+        selection: const TextSelection.collapsed(offset: -1),
+        composing: TextRange.empty,
+      );
+    }
+    _enterVisibleQuery.value = null;
   }
 
   void _handleBack() {
-    if (_leavingSearch) return;
-    _leavingSearch = true;
     if (widget.onBack != null) {
       widget.onBack!();
     } else {
-      Navigator.of(context).maybePop().then((popped) {
-        if (mounted && !popped) _leavingSearch = false;
-      });
+      Navigator.of(context).maybePop();
     }
   }
 
@@ -272,16 +259,10 @@ class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (bool didPop, dynamic result) {
-        if (!didPop) {
-          // Some Android configurations deliver Back to PopScope even with
-          // the IME open; preserve the normal first-Back behavior for text.
-          if (_keyboardWasVisible &&
-              _searchController.text.trim().isNotEmpty) {
-            _dismissKeyboardAndStay();
-          } else {
-            _handleBack();
-          }
-        }
+        // Android consumes Back to hide the IME without changing field focus.
+        // Do not navigate away when that keyboard dismissal completes,
+        // including when the search query is empty.
+        if (!didPop) _handleBack();
       },
       child: Scaffold(
       // Let results scroll behind the 90%-opaque header; the grid below
@@ -325,28 +306,34 @@ class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver
                         color: Theme.of(context).primaryColor.withOpacity(0.90),
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      child: TextField(
-                        autofocus: true,
-                        focusNode: _searchFocusNode,
-                        controller: _searchController,
-                        textAlignVertical: TextAlignVertical.center,
-                        decoration: InputDecoration(
-                          isDense: true,
-                          contentPadding: EdgeInsets.zero,
-                          prefixIcon: const Icon(Icons.search),
-                          prefixIconConstraints: const BoxConstraints(
-                            minWidth: 40,
-                            minHeight: 36,
+                      child: ValueListenableBuilder<String?>(
+                        valueListenable: _enterVisibleQuery,
+                        builder: (context, visibleQuery, _) => TextField(
+                          autofocus: true,
+                          focusNode: _searchFocusNode,
+                          controller: _searchController,
+                          textAlignVertical: TextAlignVertical.center,
+                          decoration: InputDecoration(
+                            isDense: true,
+                            contentPadding: EdgeInsets.zero,
+                            prefixIcon: const Icon(Icons.search),
+                            prefixIconConstraints: const BoxConstraints(
+                              minWidth: 40,
+                              minHeight: 36,
+                            ),
+                            hintText: visibleQuery ??
+                                '${AppLocalizations.of(context)?.search ?? 'Search'}...',
+                            // Match the input's normal text style while the
+                            // real controller value is temporarily empty.
+                            hintStyle: visibleQuery == null
+                                ? null
+                                : Theme.of(context).textTheme.titleMedium,
+                            border: InputBorder.none,
                           ),
-                          hintText: (AppLocalizations.of(context)?.search ??
-                                  'Search') +
-                              '...',
-                          border: InputBorder.none,
+                          onChanged: _onQueryChanged,
+                          onEditingComplete: () =>
+                              unawaited(_dismissKeyboardOnEnter()),
                         ),
-                        onChanged: _onQueryChanged,
-                        // Enter/Done is a deliberate keyboard dismissal, not
-                        // an attempt to exit an empty search.
-                        onEditingComplete: _dismissKeyboardAndStay,
                       ),
                     ),
                   ),
@@ -374,9 +361,9 @@ class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver
       // listener here would also intercept the start of Android's edge Back.
       body: GestureDetector(
         behavior: HitTestBehavior.translucent,
-        onTap: _dismissKeyboardAndStay,
+        onTap: _hideKeyboardFromBodyTap,
         child: searchResults.isEmpty
-          ? _searchController.text.trim().isEmpty
+          ? (_enterVisibleQuery.value ?? _searchController.text).trim().isEmpty
               ? Center(
                   child: Text(
                       AppLocalizations.of(context)?.searchBook ??
@@ -393,15 +380,7 @@ class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver
                               'No results found',
                           style: const TextStyle(fontSize: 20)),
                     )
-          : NotificationListener<ScrollStartNotification>(
-              onNotification: (notification) {
-                if (notification.dragDetails != null) {
-                  _dismissKeyboardAndStay();
-                }
-                return false;
-              },
-              child: GridView.builder(
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          : GridView.builder(
               controller: _resultsScrollController,
               padding: EdgeInsets.fromLTRB(
                 10,
@@ -443,7 +422,6 @@ class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver
                 );
               },
               ),
-            ),
       ),
     ),  // Scaffold
     );  // PopScope
