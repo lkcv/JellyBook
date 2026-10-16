@@ -2,14 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:jellybook/providers/downloadQueue.dart';
-import 'package:jellybook/cache/imageCache.dart';
+import 'package:jellybook/cache/coverCache.dart';
 
 /// A single low-priority disk-only cover fetcher shared by Library/Collection.
 /// It deliberately never resolves an ImageProvider or pins decoded images.
 /// Only one request can be active, including during changes of screen owner.
-class SpeculativeCoverDiskCache {
-  SpeculativeCoverDiskCache._();
-  static final instance = SpeculativeCoverDiskCache._();
+class SpeculativeCoverPrefetcher {
+  SpeculativeCoverPrefetcher._();
+  static final instance = SpeculativeCoverPrefetcher._();
 
   static const idleDelay = Duration(milliseconds: 450);
   Object? _owner;
@@ -89,7 +89,7 @@ class SpeculativeCoverDiskCache {
       final urls = await _urls!();
       if (!_valid(generation)) return;
       debugPrint('Speculative [$label]: ${urls.length} covers to check');
-      final cache = JellyBookCacheManager.instance;
+      final cache = CoverCacheManager.instance;
       for (final url in urls.toSet()) {
         if (!_valid(generation)) break;
         if (_foregroundBusy) {

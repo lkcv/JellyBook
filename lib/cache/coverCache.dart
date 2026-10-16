@@ -5,7 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 
 /// One shared disk cache for all covers.
-class JellyBookCacheManager {
+class CoverCacheManager {
   static final CacheManager instance = CacheManager(
     Config(
       'jellybook_image_cache',
@@ -53,7 +53,7 @@ Future<void> precacheCover(BuildContext context, String url) {
   return precacheImage(
     CachedNetworkImageProvider(
       coverUrl(url),
-      cacheManager: JellyBookCacheManager.instance,
+      cacheManager: CoverCacheManager.instance,
     ),
     context,
   );

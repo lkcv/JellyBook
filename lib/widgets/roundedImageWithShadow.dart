@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:jellybook/cache/imageCache.dart';
+import 'package:jellybook/cache/coverCache.dart';
 
 class RoundedImageWithShadow extends StatefulWidget {
   final String imageUrl;
@@ -80,7 +80,7 @@ class _RoundedImageWithShadowState extends State<RoundedImageWithShadow> {
               if (url.contains('http')) {
                 return CachedNetworkImage(
                   imageUrl: coverUrl(url),
-                  cacheManager: JellyBookCacheManager.instance,
+                  cacheManager: CoverCacheManager.instance,
                   fit: BoxFit.cover,
                   fadeInDuration: Duration.zero,
                   fadeOutDuration: Duration.zero,

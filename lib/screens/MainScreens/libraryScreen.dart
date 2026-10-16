@@ -23,8 +23,8 @@ import 'package:jellybook/l10n/app_localizations.dart';
 import 'package:jellybook/themes/themeConstants.dart';
 import 'package:jellybook/widgets/jellybookHeader.dart';
 import 'package:jellybook/variables.dart';
-import 'package:jellybook/cache/imageCache.dart';
-import 'package:jellybook/cache/speculativeCoverDiskCache.dart';
+import 'package:jellybook/cache/coverCache.dart';
+import 'package:jellybook/cache/speculativeCoverPrefetcher.dart';
 import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
 import 'package:provider/provider.dart';
 import 'package:jellybook/providers/connectionManager.dart';
@@ -370,7 +370,7 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
 
   // An inexpensive scroll signal. Work is coalesced into a post-frame pass,
   // where the new viewport is sampled; no setState or image resolution here.
-  void _stopSpeculative() => SpeculativeCoverDiskCache.instance.stop(this);
+  void _stopSpeculative() => SpeculativeCoverPrefetcher.instance.stop(this);
 
   bool get _mayPrefetchLibrary => mounted && _inForeground &&
       widget.isActive && _initialCoversReady && _lastFolders != null &&
@@ -388,7 +388,7 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
       _stopSpeculative();
       return;
     }
-    SpeculativeCoverDiskCache.instance.schedule(
+    SpeculativeCoverPrefetcher.instance.schedule(
       owner: this,
       label: 'Library',
       allowed: () => _mayPrefetchLibrary,
@@ -1566,7 +1566,7 @@ ImageProvider? _libraryCoverProvider(String path, BuildContext context) {
   if (path.contains('http')) {
     source = CachedNetworkImageProvider(
       coverUrl(path),
-      cacheManager: JellyBookCacheManager.instance,
+      cacheManager: CoverCacheManager.instance,
     );
   } else {
     source = FileImage(File(path));

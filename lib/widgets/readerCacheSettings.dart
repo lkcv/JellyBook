@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:jellybook/screens/downloadedVolumesScreen.dart';
 import 'package:jellybook/cache/readerPageCache.dart';
-import 'package:jellybook/cache/imageCache.dart';
+import 'package:jellybook/cache/coverCache.dart';
 
 /// Storage controls for the durable, seven-page snapshots retained by the
 /// reader. This intentionally does not count or delete downloaded volumes.
@@ -31,7 +31,7 @@ class _ReaderCacheSettingsState extends State<ReaderCacheSettings> {
     try {
       final limit = await ReaderPageCache.getLimitMb();
       final usage = await ReaderPageCache.getUsageBytes();
-      final coverUsage = await JellyBookCacheManager.getUsageBytes();
+      final coverUsage = await CoverCacheManager.getUsageBytes();
       if (!mounted) return;
       setState(() {
         _limitMb = limit;
@@ -119,7 +119,7 @@ class _ReaderCacheSettingsState extends State<ReaderCacheSettings> {
     if (!mounted) return;
     setState(() => _busy = true);
     try {
-      await JellyBookCacheManager.instance.emptyCache();
+      await CoverCacheManager.instance.emptyCache();
       await _refresh();
       _notify('Cover cache cleared');
     } catch (error) {

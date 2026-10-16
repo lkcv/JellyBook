@@ -17,7 +17,7 @@ import 'package:provider/provider.dart';
 import 'package:jellybook/l10n/app_localizations.dart';
 import 'package:jellybook/providers/languageProvider.dart';
 import 'package:jellybook/widgets/SettingsItem.dart';
-import 'package:jellybook/cache/imageCache.dart';
+import 'package:jellybook/cache/coverCache.dart';
 import 'package:jellybook/widgets/readerCacheSettings.dart';
 import 'package:jellybook/themes/themeConstants.dart';
 import 'package:jellybook/widgets/jellybookHeader.dart';
@@ -407,7 +407,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final cacheKey = 'user_profile_$userId';
     try {
       final cached =
-          await JellyBookCacheManager.instance.getFileFromCache(cacheKey);
+          await CoverCacheManager.instance.getFileFromCache(cacheKey);
       if (cached != null && await cached.file.exists()) {
         return FileImage(cached.file);
       }
@@ -444,7 +444,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
     if (image.isNotEmpty) {
       try {
-        await JellyBookCacheManager.instance.putFile(
+        await CoverCacheManager.instance.putFile(
           cacheKey,
           image,
           fileExtension: 'jpg',

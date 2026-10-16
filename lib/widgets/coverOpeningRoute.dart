@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:jellybook/cache/imageCache.dart';
+import 'package:jellybook/cache/coverCache.dart';
 import 'package:jellybook/widgets/roundedImageWithShadow.dart';
 
 enum ReaderOpeningState { preparing, loadingPage, ready }
@@ -284,7 +284,7 @@ class _ReaderOpeningCover extends StatelessWidget {
         coverPath.startsWith('https://')) {
       return CachedNetworkImage(
         imageUrl: coverUrl(coverPath),
-        cacheManager: JellyBookCacheManager.instance,
+        cacheManager: CoverCacheManager.instance,
         fit: BoxFit.contain,
         fadeInDuration: Duration.zero,
         fadeOutDuration: Duration.zero,

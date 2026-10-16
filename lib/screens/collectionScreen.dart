@@ -21,8 +21,8 @@ import 'package:jellybook/l10n/app_localizations.dart';
 import 'package:jellybook/themes/themeConstants.dart';
 import 'package:jellybook/widgets/jellybookHeader.dart';
 import 'package:jellybook/variables.dart';
-import 'package:jellybook/cache/imageCache.dart';
-import 'package:jellybook/cache/speculativeCoverDiskCache.dart';
+import 'package:jellybook/cache/coverCache.dart';
+import 'package:jellybook/cache/speculativeCoverPrefetcher.dart';
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:jellybook/screens/readingScreen.dart';
 import 'package:jellybook/providers/serverProgressRevision.dart';
@@ -265,7 +265,7 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
     }
   }
 
-  void _stopSpeculative() => SpeculativeCoverDiskCache.instance.stop(this);
+  void _stopSpeculative() => SpeculativeCoverPrefetcher.instance.stop(this);
 
   bool get _mayPrefetchCollection => mounted && _inForeground &&
       !_coverWarmingPaused && _initialCoversReady &&
@@ -281,7 +281,7 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
       _stopSpeculative();
       return;
     }
-    SpeculativeCoverDiskCache.instance.schedule(
+    SpeculativeCoverPrefetcher.instance.schedule(
       owner: this,
       label: 'Collection',
       allowed: () => _mayPrefetchCollection,
@@ -494,7 +494,7 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
     if (path.contains('http')) {
       provider = CachedNetworkImageProvider(
         coverUrl(path),
-        cacheManager: JellyBookCacheManager.instance,
+        cacheManager: CoverCacheManager.instance,
       );
     } else {
       provider = FileImage(File(path));
@@ -1225,7 +1225,7 @@ class _CollectionCoverImage extends StatelessWidget {
     if (path.contains('http')) {
       provider = CachedNetworkImageProvider(
         coverUrl(path),
-        cacheManager: JellyBookCacheManager.instance,
+        cacheManager: CoverCacheManager.instance,
       );
     } else {
       provider = FileImage(File(path));
