@@ -125,7 +125,9 @@ class ConnectionManager extends ChangeNotifier with WidgetsBindingObserver {
       return;
     }
     _checking = true;
-    _setStatus(ConnectionStatus.validating);
+    if (_status != ConnectionStatus.offline) {
+      _setStatus(ConnectionStatus.validating);
+    }
 
     try {
       final prefs = await SharedPreferences.getInstance();
