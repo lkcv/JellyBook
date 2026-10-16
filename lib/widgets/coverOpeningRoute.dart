@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:jellybook/widgets/jellybookImageCache.dart';
 import 'package:jellybook/widgets/roundedImageWithShadow.dart';
 
+enum ReaderOpeningState { preparing, loadingPage, ready }
+
 /// The card to land on when returning from another volume in the same
 /// reading session. A null rect means the active volume is hidden by a
 /// Library filter, so the reader simply fades away instead of targeting a
@@ -25,10 +27,12 @@ class CoverOpeningRoute<T> extends PageRouteBuilder<T> {
     required Rect sourceRect,
     required String coverPath,
     ValueNotifier<bool>? pageReady,
+    ValueNotifier<ReaderOpeningState>? openingState,
     // Set by the reader before popping: page index zero needs no cover fade.
     ValueNotifier<bool>? skipReturnFade,
     ValueNotifier<CoverReturnTarget?>? returnTarget,
   }) : pageReady = pageReady,
+       openingState = openingState,
        skipReturnFade = skipReturnFade,
        returnTarget = returnTarget,
        super(
@@ -49,6 +53,7 @@ class CoverOpeningRoute<T> extends PageRouteBuilder<T> {
             sourceRect: sourceRect,
             coverPath: coverPath,
             pageReady: pageReady,
+            openingState: openingState,
             skipReturnFade: skipReturnFade,
             returnTarget: returnTarget,
             child: child,
@@ -56,6 +61,7 @@ class CoverOpeningRoute<T> extends PageRouteBuilder<T> {
         );
 
   final ValueNotifier<bool>? pageReady;
+  final ValueNotifier<ReaderOpeningState>? openingState;
   final ValueNotifier<bool>? skipReturnFade;
   final ValueNotifier<CoverReturnTarget?>? returnTarget;
 
@@ -79,6 +85,7 @@ class CoverOpeningRoute<T> extends PageRouteBuilder<T> {
   void dispose() {
     returnTarget?.dispose();
     skipReturnFade?.dispose();
+    openingState?.dispose();
     pageReady?.dispose();
     super.dispose();
   }
@@ -90,6 +97,7 @@ class _CoverOpeningTransition extends StatelessWidget {
     required this.sourceRect,
     required this.coverPath,
     required this.pageReady,
+    required this.openingState,
     required this.skipReturnFade,
     required this.returnTarget,
     required this.child,
@@ -99,6 +107,7 @@ class _CoverOpeningTransition extends StatelessWidget {
   final Rect sourceRect;
   final String coverPath;
   final ValueNotifier<bool>? pageReady;
+  final ValueNotifier<ReaderOpeningState>? openingState;
   final ValueNotifier<bool>? skipReturnFade;
   final ValueNotifier<CoverReturnTarget?>? returnTarget;
   final Widget child;
@@ -109,6 +118,7 @@ class _CoverOpeningTransition extends StatelessWidget {
       animation: Listenable.merge([
         animation,
         if (pageReady != null) pageReady!,
+        if (openingState != null) openingState!,
         if (skipReturnFade != null) skipReturnFade!,
         if (returnTarget != null) returnTarget!,
       ]),
@@ -236,7 +246,9 @@ class _CoverOpeningTransition extends StatelessWidget {
                               child: _ReaderOpeningCover(coverPath: coverPath),
                             ),
                     ),
-                    if (arrived && !ready)
+                    if (arrived && !ready &&
+                        (openingState?.value ?? ReaderOpeningState.loadingPage) ==
+                            ReaderOpeningState.loadingPage)
                       Positioned(
                         bottom: MediaQuery.paddingOf(context).bottom + 24,
                         left: 0,

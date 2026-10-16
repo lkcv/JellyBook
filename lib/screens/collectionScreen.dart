@@ -778,6 +778,9 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
                       final streamable = extension == 'cbz';
                       if (isArchive && (entry.downloaded || streamable)) {
                         final firstPageReady = ValueNotifier<bool>(false);
+                        final openingState = ValueNotifier<ReaderOpeningState>(
+                          ReaderOpeningState.preparing,
+                        );
                         final skipReturnFade = ValueNotifier<bool>(false);
                         final returnTarget = ValueNotifier<CoverReturnTarget?>(null);
                         await _pushWithPausedCovers(
@@ -785,12 +788,14 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
                             sourceRect: coverRect,
                             coverPath: entry.imagePath,
                             pageReady: firstPageReady,
+                            openingState: openingState,
                             skipReturnFade: skipReturnFade,
                             returnTarget: returnTarget,
                             builder: (context) => _VolumeReaderSession(
                               initialEntry: entry,
                               orderedEntries: List<Entry>.of(_unfilteredEntries),
                               openingReady: firstPageReady,
+                              openingState: openingState,
                               skipReturnFade: skipReturnFade,
                               returnTarget: returnTarget,
                               resolveReturnCover: _resolveReturnCover,
@@ -875,6 +880,7 @@ class _VolumeReaderSession extends StatefulWidget {
     required this.initialEntry,
     required this.orderedEntries,
     required this.openingReady,
+    required this.openingState,
     required this.skipReturnFade,
     required this.returnTarget,
     required this.resolveReturnCover,
@@ -883,6 +889,7 @@ class _VolumeReaderSession extends StatefulWidget {
   final Entry initialEntry;
   final List<Entry> orderedEntries;
   final ValueNotifier<bool> openingReady;
+  final ValueNotifier<ReaderOpeningState> openingState;
   final ValueNotifier<bool> skipReturnFade;
   final ValueNotifier<CoverReturnTarget?> returnTarget;
   final Future<CoverReturnTarget> Function(Entry) resolveReturnCover;
@@ -1021,6 +1028,7 @@ class _VolumeReaderSessionState extends State<_VolumeReaderSession> {
       comicId: entry.id,
       openedDirectly: true,
       openingReady: widget.openingReady,
+      openingState: widget.openingState,
       skipReturnFade: widget.skipReturnFade,
       nextVolumeTitle: _adjacent(1)?.title,
       onNextVolume: () => _openAdjacent(1),

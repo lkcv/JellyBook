@@ -20,6 +20,7 @@ import 'package:jellybook/providers/connectionManager.dart';
 import 'package:jellybook/providers/cbzStream.dart';
 import 'package:jellybook/providers/readerPageCache.dart';
 import 'package:jellybook/widgets/readerPinchZoom.dart';
+import 'package:jellybook/widgets/coverOpeningRoute.dart';
 
 class CbzReader extends StatefulWidget {
   final String title;
@@ -28,6 +29,7 @@ class CbzReader extends StatefulWidget {
   final bool openedDirectly;
   /// Signal the cover transition once the first page is decoded and painted.
   final ValueNotifier<bool>? openingReady;
+  final ValueNotifier<ReaderOpeningState>? openingState;
   /// Shared with the opening route to skip the reverse fade on page zero.
   final ValueNotifier<bool>? skipReturnFade;
   /// Available only when reading directly from an ordered Collection session.
@@ -47,6 +49,7 @@ class CbzReader extends StatefulWidget {
     required this.comicId,
     this.openedDirectly = false,
     this.openingReady,
+    this.openingState,
     this.skipReturnFade,
     this.nextVolumeTitle,
     this.onNextVolume,
@@ -257,6 +260,7 @@ class _CbzReaderState extends State<CbzReader>
             return;
           }
         }
+        _setOpeningState(ReaderOpeningState.loadingPage);
         await _ensureStreamInitialized();
       } else {
         await createPageList();
@@ -340,6 +344,12 @@ class _CbzReaderState extends State<CbzReader>
     return mounted && animation.status == AnimationStatus.completed;
   }
 
+  void _setOpeningState(ReaderOpeningState state) {
+    if (mounted && widget.openingReady?.value == false) {
+      widget.openingState?.value = state;
+    }
+  }
+
   /// Keep the cover visible until the page is decoded and painted.
   /// Without an opening route, preserve the existing loading behavior.
   Future<void> _finishOpening() async {
@@ -348,7 +358,12 @@ class _CbzReaderState extends State<CbzReader>
       try {
         final file = await _loadPageFile(_currentPage);
         if (!mounted) return;
-        await precacheImage(FileImage(file), context);
+        final provider = FileImage(file);
+        final status = PaintingBinding.instance.imageCache.statusForKey(provider);
+        if (!status.keepAlive && !(status.live && !status.pending)) {
+          _setOpeningState(ReaderOpeningState.loadingPage);
+        }
+        await precacheImage(provider, context);
       } catch (error) {
         logger.w('CbzReader: could not precache opening page: $error');
       }
@@ -359,7 +374,10 @@ class _CbzReaderState extends State<CbzReader>
     // frame to build with its now-decoded FileImage.
     if (widget.openingReady != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) widget.openingReady!.value = true;
+        if (mounted) {
+          _setOpeningState(ReaderOpeningState.ready);
+          widget.openingReady!.value = true;
+        }
       });
     }
   }
@@ -518,6 +536,7 @@ class _CbzReaderState extends State<CbzReader>
       if (await local.exists()) return _persistPage(index, local);
     }
     if (_isStreaming) {
+      _setOpeningState(ReaderOpeningState.loadingPage);
       await _ensureStreamInitialized();
       final temporary = await _stream!.getPage(index);
       // Do not let FutureBuilder render the page until its recovery copy has
