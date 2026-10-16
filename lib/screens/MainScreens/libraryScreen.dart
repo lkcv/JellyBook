@@ -24,6 +24,7 @@ import 'package:jellybook/themes/themeConstants.dart';
 import 'package:jellybook/widgets/jellybookHeader.dart';
 import 'package:jellybook/variables.dart';
 import 'package:jellybook/widgets/jellybookImageCache.dart';
+import 'package:jellybook/providers/speculativeCoverDiskCache.dart';
 import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
 import 'package:provider/provider.dart';
 import 'package:jellybook/providers/connectionManager.dart';
@@ -90,6 +91,8 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
   double _scrollVelocity = 0;
   int _scrollDirection = 1;
 
+  static const int _maxSpeculativeSeries = 8;
+
   ConnectionManager? _connectionManager;
   bool _wasOffline = false;
 
@@ -124,6 +127,7 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
   void didUpdateWidget(covariant LibraryScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.isActive && !widget.isActive) {
+      _stopSpeculative();
       // An intentionally empty filtered view stays empty across tab changes.
       _hadMatchesWhenLeaving = _filter.isActive && _lastFolders != null &&
           _visibleFolders(_lastFolders!).isNotEmpty;
@@ -153,6 +157,7 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
       // Recheck the current window in case Android reclaimed other images.
       _scrollWindowKey = null;
       _scheduleCoverWarming();
+      _scheduleSpeculative();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && widget.isActive) _refreshOnLibraryReturnIfStale();
       });
@@ -187,6 +192,7 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
     _scrollVelocity = 0;
     _lastScrollSource = null;
     _scheduleCoverWarming();
+    _scheduleSpeculative();
   }
 
   bool _inForeground = true;
@@ -342,6 +348,7 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
       }
       _scrollWindowKey = null;
       _scheduleCoverWarming();
+      _scheduleSpeculative();
       // Refresh immediately after an actual background/lock transition,
       // regardless of how briefly the app was away. This is a silent fetch.
       if (_wasBackgrounded) {
@@ -353,6 +360,7 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
     } else if (state == AppLifecycleState.hidden ||
         state == AppLifecycleState.paused) {
       _wasBackgrounded = true;
+      _stopSpeculative();
     }
   }
 
@@ -362,6 +370,71 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
 
   // An inexpensive scroll signal. Work is coalesced into a post-frame pass,
   // where the new viewport is sampled; no setState or image resolution here.
+  void _stopSpeculative() => SpeculativeCoverDiskCache.instance.stop(this);
+
+  bool get _mayPrefetchLibrary => mounted && _inForeground &&
+      widget.isActive && _initialCoversReady && _lastFolders != null &&
+      _connectionManager?.status == ConnectionStatus.online &&
+      (ModalRoute.of(context)?.isCurrent ?? false);
+
+  bool get _libraryPrefetchBusy => _warming || _warmScheduled ||
+      _activeRefresh != null || _scrollPumpScheduled ||
+      _scrollCoverLoading.isNotEmpty ||
+      (_libraryScrollController.hasClients &&
+          _libraryScrollController.position.isScrollingNotifier.value);
+
+  void _scheduleSpeculative() {
+    if (!_mayPrefetchLibrary) {
+      _stopSpeculative();
+      return;
+    }
+    SpeculativeCoverDiskCache.instance.schedule(
+      owner: this,
+      label: 'Library',
+      allowed: () => _mayPrefetchLibrary,
+      busy: () => _libraryPrefetchBusy,
+      urls: _visibleSeriesVolumeUrls,
+    );
+  }
+
+  Future<List<String>> _visibleSeriesVolumeUrls() async {
+    final all = _lastFolders;
+    final isar = Isar.getInstance();
+    if (all == null || isar == null) return const [];
+    final folders = _visibleFolders(all);
+    final range = _visibleCoverRange(folders.length);
+    final series = folders.skip(range.first)
+        .take(math.min(_maxSpeculativeSeries, range.end - range.first))
+        .toList();
+    if (series.isEmpty) return const [];
+    final ids = <String>{for (final folder in series) ...folder.bookIds};
+    if (ids.isEmpty) return const [];
+    final entries = await isar.entrys.filter()
+        .anyOf(ids.toList(), (q, String id) => q.idEqualTo(id))
+        .findAll();
+    final byId = {
+      for (final entry in entries)
+        if (entry.type != EntryType.folder && isSupportedEntry(entry))
+          entry.id: entry,
+    };
+    final urls = <String>[];
+    final seen = <String>{};
+    // One volume per visible series per rotation. Continue without a stage
+    // boundary until all their eligible covers are on disk.
+    final longest = series.fold<int>(0,
+        (maxCount, folder) => math.max(maxCount, folder.bookIds.length));
+    for (var index = 0; index < longest; index++) {
+      for (final folder in series) {
+        if (index >= folder.bookIds.length) continue;
+        final path = byId[folder.bookIds[index]]?.imagePath;
+        if (path == null || !path.contains('http')) continue;
+        final url = coverUrl(path);
+        if (seen.add(url)) urls.add(url);
+      }
+    }
+    return urls;
+  }
+
   void _onLibraryScroll() {
     if (!_initialCoversReady || !_canWarm) return;
     final controller = _libraryScrollController;
@@ -387,6 +460,7 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
     }
     _lastScrollOffset = offset;
     _lastScrollAt = now;
+    _scheduleSpeculative();
     _scheduleCoverWarming();
   }
 
@@ -473,7 +547,8 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
           _releaseStartupCoverPins();
           // Recover pending downloads only after startup covers have painted,
           // so resumed transfers don't compete with the first Library frame.
-          unawaited(DownloadQueue.instance.restoreQueue());
+          unawaited(DownloadQueue.instance.restoreQueue()
+              .whenComplete(_scheduleSpeculative));
           // The grid has painted; retry any startup sync waiting on covers.
           _tryPendingSync();
         });
@@ -710,6 +785,7 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
     _readingIdsCache = null;
     _coverSignature = signature;
     _scrollCatalogVersion++;
+    _scheduleSpeculative();
     _scrollCoverFailures.clear();
     _scrollWindowKey = null;
     // Do not discard every decoded pin on a catalogue refresh. Keep paths
@@ -755,8 +831,10 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
     final status = _connectionManager!.status;
 
     if (status == ConnectionStatus.offline) {
+      _stopSpeculative();
       _wasOffline = true;
     } else if (status == ConnectionStatus.online) {
+      _scheduleSpeculative();
       if (_wasOffline) {
         _scrollCoverFailures.clear();
         _scrollWindowKey = null;
@@ -970,6 +1048,7 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
                         _filter.matchingVolumeCount(folder, matchingIds),
                     filter: _filter,
                     onTap: () async {
+                      _stopSpeculative();
                       final collectionRoute = MaterialPageRoute<void>(
                         builder: (context) => collectionScreen(
                           folderId: folder.id,
@@ -984,6 +1063,7 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
                       // Navigator.push completes when pop begins. Wait for the
                       // reverse animation to finish before revalidating covers.
                       await collectionRoute.completed;
+                      _scheduleSpeculative();
                       // Read saved progress from Isar, not from the server.
                       if (mounted) {
                         // Returning from a filtered Collection may have
@@ -1045,6 +1125,7 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
 
   @override
   void dispose() {
+    _stopSpeculative();
     _inForeground = false;
     WidgetsBinding.instance.removeObserver(this);
     _releaseStartupCoverPins();

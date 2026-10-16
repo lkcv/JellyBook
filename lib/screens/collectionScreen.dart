@@ -22,6 +22,7 @@ import 'package:jellybook/themes/themeConstants.dart';
 import 'package:jellybook/widgets/jellybookHeader.dart';
 import 'package:jellybook/variables.dart';
 import 'package:jellybook/widgets/jellybookImageCache.dart';
+import 'package:jellybook/providers/speculativeCoverDiskCache.dart';
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:jellybook/screens/readingScreen.dart';
 import 'package:jellybook/providers/serverProgressRevision.dart';
@@ -92,6 +93,7 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
   bool _warmAgain = false;
   bool _inForeground = true;
   bool _coverWarmingPaused = false;
+  ConnectionManager? _prefetchConnection;
   int _coverWarmGeneration = 0;
 
   // Unlike precacheImage(), these listeners retain decoded covers until their
@@ -114,6 +116,25 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
     _gridController.addListener(_onGridScrolled);
     serverProgressRevision.addListener(_onServerProgressRefreshed);
     WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final manager = context.read<ConnectionManager>();
+    if (!identical(_prefetchConnection, manager)) {
+      _prefetchConnection?.removeListener(_onPrefetchConnectionChanged);
+      _prefetchConnection = manager;
+      manager.addListener(_onPrefetchConnectionChanged);
+    }
+  }
+
+  void _onPrefetchConnectionChanged() {
+    if (_prefetchConnection?.status == ConnectionStatus.online) {
+      _scheduleSpeculative();
+    } else {
+      _stopSpeculative();
+    }
   }
 
   // A server refresh already wrote to Isar; reread only the saved page and
@@ -244,6 +265,45 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
     }
   }
 
+  void _stopSpeculative() => SpeculativeCoverDiskCache.instance.stop(this);
+
+  bool get _mayPrefetchCollection => mounted && _inForeground &&
+      !_coverWarmingPaused && _initialCoversReady &&
+      _prefetchConnection?.status == ConnectionStatus.online &&
+      (ModalRoute.of(context)?.isCurrent ?? false);
+
+  bool get _collectionPrefetchBusy => _warming || _warmScheduled ||
+      (_gridController.hasClients &&
+          _gridController.position.isScrollingNotifier.value);
+
+  void _scheduleSpeculative() {
+    if (!_mayPrefetchCollection) {
+      _stopSpeculative();
+      return;
+    }
+    SpeculativeCoverDiskCache.instance.schedule(
+      owner: this,
+      label: 'Collection',
+      allowed: () => _mayPrefetchCollection,
+      busy: () => _collectionPrefetchBusy,
+      urls: _collectionVolumeUrls,
+    );
+  }
+
+  Future<List<String>> _collectionVolumeUrls() async {
+    // Always use the unfiltered series, even when Library opened a filtered
+    // Collection. The displayed list and decoded-image pins remain untouched.
+    final urls = <String>[];
+    final seen = <String>{};
+    for (final entry in _unfilteredEntries) {
+      final path = entry.imagePath;
+      if (path.isEmpty || !path.contains('http')) continue;
+      final url = coverUrl(path);
+      if (seen.add(url)) urls.add(url);
+    }
+    return urls;
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
@@ -253,13 +313,17 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
       _failedCovers.clear();
       _revalidateCovers.addAll(_pinnedCovers.keys);
       _scheduleCoverWarming();
+      _scheduleSpeculative();
     } else {
+      _stopSpeculative();
       _inForeground = false;
     }
   }
 
   @override
   void dispose() {
+    _stopSpeculative();
+    _prefetchConnection?.removeListener(_onPrefetchConnectionChanged);
     _inForeground = false;
     serverProgressRevision.removeListener(_onServerProgressRefreshed);
     _cardProgressRevision.dispose();
@@ -298,6 +362,7 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
       (ModalRoute.of(context)?.isCurrent ?? true);
 
   void _pauseCoverWarming() {
+    _stopSpeculative();
     _coverWarmingPaused = true;
     // Let already-started image loads finish and enter the cache, but prevent
     // their old queue from continuing if the user returns quickly.
@@ -316,6 +381,7 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
     _failedCovers.clear();
     _revalidateCovers.addAll(_pinnedCovers.keys);
     _scheduleCoverWarming();
+    _scheduleSpeculative();
   }
 
   Future<T?> _pushWithPausedCovers<T extends Object?>(
@@ -352,6 +418,7 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
       }
     }
     // Coalesced to one post-frame callback; scrolling never rebuilds the grid.
+    _scheduleSpeculative();
     _scheduleCoverWarming();
   }
 
@@ -536,6 +603,7 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
       logger.w('Collection cover warmup failed: $error');
     } finally {
       _warming = false;
+      if (_initialCoversReady) _scheduleSpeculative();
       if (_warmAgain && mounted && _inForeground && !_coverWarmingPaused) {
         _warmAgain = false;
         _scheduleCoverWarming();
