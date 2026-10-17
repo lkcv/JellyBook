@@ -171,7 +171,7 @@ class _CbzReaderState extends State<CbzReader>
               child: CircularProgressIndicator(
                 value: _downloadInProgress ? _downloadProgress / 100 : 0,
                 strokeWidth: 3,
-                backgroundColor: Colors.white.withOpacity(0.3),
+                backgroundColor: Colors.white.withValues(alpha: 0.3),
                 valueColor: AlwaysStoppedAnimation<Color>(scheme.primary),
               ),
             ),
@@ -1374,7 +1374,7 @@ class _CbzReaderState extends State<CbzReader>
   Widget _buildTopBar() {
     final chapter = _chapterLabels[_currentPage];
     return Container(
-      color: Colors.black.withOpacity(0.85),
+      color: Colors.black.withValues(alpha: 0.85),
       child: SafeArea(
         bottom: false,
         child: SizedBox(
@@ -1449,7 +1449,7 @@ class _CbzReaderState extends State<CbzReader>
     final int lastPage = pageNums > 1 ? pageNums - 1 : 1;
 
     return Container(
-      color: Colors.black.withOpacity(0.85),
+      color: Colors.black.withValues(alpha: 0.85),
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       child: SafeArea(
         top: false,
@@ -1462,9 +1462,9 @@ class _CbzReaderState extends State<CbzReader>
                 data: SliderTheme.of(context).copyWith(
                   trackHeight: 6,
                   activeTrackColor: scheme.primary,
-                  inactiveTrackColor: scheme.primary.withOpacity(0.25),
+                  inactiveTrackColor: scheme.primary.withValues(alpha: 0.25),
                   thumbColor: scheme.primary,
-                  overlayColor: scheme.primary.withOpacity(0.15),
+                  overlayColor: scheme.primary.withValues(alpha: 0.15),
                 ),
                 child: Slider(
                   value: _currentPage.toDouble(),

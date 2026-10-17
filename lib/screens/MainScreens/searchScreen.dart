@@ -300,7 +300,7 @@ class _SearchScreenState extends State<SearchScreen> {
                     child: Container(
                       height: 36,
                       decoration: BoxDecoration(
-                        color: Theme.of(context).primaryColor.withOpacity(0.90),
+                        color: Theme.of(context).primaryColor.withValues(alpha: 0.90),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: ValueListenableBuilder<String?>(

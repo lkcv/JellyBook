@@ -154,8 +154,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     tabBorderRadius: 15,
                     tabBackgroundGradient: LinearGradient(
                       colors: [
-                        const Color(0xFFAA5CC3).withOpacity(0.75),
-                        const Color(0xFF00A4DC).withOpacity(0.75),
+                        const Color(0xFFAA5CC3).withValues(alpha: 0.75),
+                        const Color(0xFF00A4DC).withValues(alpha: 0.75),
                       ],
                     ),
                     tabActiveBorder:

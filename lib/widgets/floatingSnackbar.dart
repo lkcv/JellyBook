@@ -13,8 +13,8 @@ SnackBarThemeData floatingSnackBarTheme(ThemeData theme) {
     contentTextStyle: (theme.textTheme.bodyMedium ?? const TextStyle())
         .copyWith(color: foreground),
     actionTextColor: theme.colorScheme.primary,
-    disabledActionTextColor: foreground.withOpacity(0.38),
-    closeIconColor: foreground.withOpacity(0.75),
+    disabledActionTextColor: foreground.withValues(alpha: 0.38),
+    closeIconColor: foreground.withValues(alpha: 0.75),
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(17)),
     insetPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
     elevation: 2,

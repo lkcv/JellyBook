@@ -60,7 +60,7 @@ class _RoundedImageWithShadowState extends State<RoundedImageWithShadow> {
         borderRadius: BorderRadius.circular(widget.radius),
         boxShadow: [
           BoxShadow(
-            color: widget.shadowColor.withOpacity(0.2),
+            color: widget.shadowColor.withValues(alpha: 0.2),
             spreadRadius: 2,
             blurRadius: 5,
             offset: const Offset(0, 3),

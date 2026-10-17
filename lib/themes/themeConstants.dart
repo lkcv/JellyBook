@@ -15,11 +15,11 @@ class FloatingSurfacePalette {
 
   static Color topBarBackground(Brightness brightness) =>
       (brightness == Brightness.dark ? Colors.black : lightBase)
-          .withOpacity(topBarOpacity);
+          .withValues(alpha: topBarOpacity);
 
   static Color snackBarBackground(Brightness brightness) =>
       (brightness == Brightness.dark ? darkSnackBarBase : lightBase)
-          .withOpacity(snackBarOpacity);
+          .withValues(alpha: snackBarOpacity);
 
   static Color foreground(Brightness brightness) =>
       brightness == Brightness.dark ? darkText : lightText;

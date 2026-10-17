@@ -196,7 +196,7 @@ class _CoverOpeningTransition extends StatelessWidget {
               // the cover shrinks. Keep it completely hidden while the reader
               // fades to black; otherwise the grid flashes through mid-fade.
               ColoredBox(
-                color: Colors.black.withOpacity(1.0 - shrink),
+                color: Colors.black.withValues(alpha: 1.0 - shrink),
               ),
               Opacity(opacity: 1.0 - coverFade, child: destination!),
               IgnorePointer(
@@ -231,7 +231,7 @@ class _CoverOpeningTransition extends StatelessWidget {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    ColoredBox(color: Colors.black.withOpacity(0.90)),
+                    ColoredBox(color: Colors.black.withValues(alpha: 0.90)),
                     Positioned.fromRect(
                       rect: rect,
                       child: pageReady == null

@@ -42,7 +42,7 @@ class _ToggleEditPreviewButtonState extends State<ToggleEditPreviewButton> {
                   : Colors.grey,
               backgroundColor: isEditing
                   ? Theme.of(context).colorScheme.primary
-                  : Colors.grey.withOpacity(0.2),
+                  : Colors.grey.withValues(alpha: 0.2),
             ),
             onPressed: () {
               if (!isEditing) {
@@ -67,7 +67,7 @@ class _ToggleEditPreviewButtonState extends State<ToggleEditPreviewButton> {
                   : Colors.grey,
               backgroundColor: !isEditing
                   ? Theme.of(context).colorScheme.primary
-                  : Colors.grey.withOpacity(0.2),
+                  : Colors.grey.withValues(alpha: 0.2),
             ),
             onPressed: () {
               if (isEditing) {

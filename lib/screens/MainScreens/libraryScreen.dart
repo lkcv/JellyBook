@@ -1493,7 +1493,7 @@ class _SeriesCardState extends State<SeriesCard> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 10, vertical: 5),
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.75),
+                          color: Colors.black.withValues(alpha: 0.75),
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(color: scheme.outlineVariant),
                         ),
@@ -1516,7 +1516,7 @@ class _SeriesCardState extends State<SeriesCard> {
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: Colors.black
-                              .withOpacity(0.75), // matches the pill
+                              .withValues(alpha: 0.75), // matches the pill
                           border: Border.all(color: scheme.outlineVariant),
                         ),
                         child: Stack(

@@ -50,14 +50,14 @@ class SimpleUserCard extends StatelessWidget {
               alignment: Alignment.bottomLeft,
               child: CircleAvatar(
                 radius: 100,
-                backgroundColor: backgroundMotifColor!.withOpacity(.1),
+                backgroundColor: backgroundMotifColor!.withValues(alpha: .1),
               ),
             ),
             Align(
               alignment: Alignment.center,
               child: CircleAvatar(
                 radius: 400,
-                backgroundColor: backgroundMotifColor!.withOpacity(.05),
+                backgroundColor: backgroundMotifColor!.withValues(alpha: .05),
               ),
             ),
             Container(
