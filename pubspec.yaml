@@ -73,9 +73,10 @@ dependencies:
   # Logging
   logger: ^2.7.0
 
-  built_collection: any
-  http: any
-  flutter_cache_manager: any
+  built_collection: ^5.1.2
+  http: ^1.6.0
+  flutter_cache_manager: ^3.4.5
+  vector_math: ^2.4.3
 dev_dependencies:
   # flutter_test:
   #   sdk: flutter
