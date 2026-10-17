@@ -42,114 +42,109 @@ const EntrySchema = CollectionSchema(
       name: r'editor',
       type: IsarType.string,
     ),
-    r'epubCfi': PropertySchema(
-      id: 5,
-      name: r'epubCfi',
-      type: IsarType.string,
-    ),
     r'filePath': PropertySchema(
-      id: 6,
+      id: 5,
       name: r'filePath',
       type: IsarType.string,
     ),
     r'folderPath': PropertySchema(
-      id: 7,
+      id: 6,
       name: r'folderPath',
       type: IsarType.string,
     ),
     r'id': PropertySchema(
-      id: 8,
+      id: 7,
       name: r'id',
       type: IsarType.string,
     ),
     r'imagePath': PropertySchema(
-      id: 9,
+      id: 8,
       name: r'imagePath',
       type: IsarType.string,
     ),
     r'imprint': PropertySchema(
-      id: 10,
+      id: 9,
       name: r'imprint',
       type: IsarType.string,
     ),
     r'inker': PropertySchema(
-      id: 11,
+      id: 10,
       name: r'inker',
       type: IsarType.string,
     ),
     r'letterer': PropertySchema(
-      id: 12,
+      id: 11,
       name: r'letterer',
       type: IsarType.string,
     ),
     r'pageNum': PropertySchema(
-      id: 13,
+      id: 12,
       name: r'pageNum',
       type: IsarType.long,
     ),
     r'parentId': PropertySchema(
-      id: 14,
+      id: 13,
       name: r'parentId',
       type: IsarType.string,
     ),
     r'path': PropertySchema(
-      id: 15,
+      id: 14,
       name: r'path',
       type: IsarType.string,
     ),
     r'penciller': PropertySchema(
-      id: 16,
+      id: 15,
       name: r'penciller',
       type: IsarType.string,
     ),
     r'progress': PropertySchema(
-      id: 17,
+      id: 16,
       name: r'progress',
       type: IsarType.double,
     ),
     r'publisher': PropertySchema(
-      id: 18,
+      id: 17,
       name: r'publisher',
       type: IsarType.string,
     ),
     r'rating': PropertySchema(
-      id: 19,
+      id: 18,
       name: r'rating',
       type: IsarType.double,
     ),
     r'releaseDate': PropertySchema(
-      id: 20,
+      id: 19,
       name: r'releaseDate',
       type: IsarType.string,
     ),
     r'tags': PropertySchema(
-      id: 21,
+      id: 20,
       name: r'tags',
       type: IsarType.stringList,
     ),
     r'title': PropertySchema(
-      id: 22,
+      id: 21,
       name: r'title',
       type: IsarType.string,
     ),
     r'translator': PropertySchema(
-      id: 23,
+      id: 22,
       name: r'translator',
       type: IsarType.string,
     ),
     r'type': PropertySchema(
-      id: 24,
+      id: 23,
       name: r'type',
       type: IsarType.byte,
       enumMap: _EntrytypeEnumValueMap,
     ),
     r'url': PropertySchema(
-      id: 25,
+      id: 24,
       name: r'url',
       type: IsarType.string,
     ),
     r'writer': PropertySchema(
-      id: 26,
+      id: 25,
       name: r'writer',
       type: IsarType.string,
     )
@@ -207,7 +202,6 @@ int _entryEstimateSize(
       bytesCount += 3 + value.length * 3;
     }
   }
-  bytesCount += 3 + object.epubCfi.length * 3;
   bytesCount += 3 + object.filePath.length * 3;
   bytesCount += 3 + object.folderPath.length * 3;
   bytesCount += 3 + object.id.length * 3;
@@ -280,28 +274,27 @@ void _entrySerialize(
   writer.writeString(offsets[2], object.description);
   writer.writeBool(offsets[3], object.downloaded);
   writer.writeString(offsets[4], object.editor);
-  writer.writeString(offsets[5], object.epubCfi);
-  writer.writeString(offsets[6], object.filePath);
-  writer.writeString(offsets[7], object.folderPath);
-  writer.writeString(offsets[8], object.id);
-  writer.writeString(offsets[9], object.imagePath);
-  writer.writeString(offsets[10], object.imprint);
-  writer.writeString(offsets[11], object.inker);
-  writer.writeString(offsets[12], object.letterer);
-  writer.writeLong(offsets[13], object.pageNum);
-  writer.writeString(offsets[14], object.parentId);
-  writer.writeString(offsets[15], object.path);
-  writer.writeString(offsets[16], object.penciller);
-  writer.writeDouble(offsets[17], object.progress);
-  writer.writeString(offsets[18], object.publisher);
-  writer.writeDouble(offsets[19], object.rating);
-  writer.writeString(offsets[20], object.releaseDate);
-  writer.writeStringList(offsets[21], object.tags);
-  writer.writeString(offsets[22], object.title);
-  writer.writeString(offsets[23], object.translator);
-  writer.writeByte(offsets[24], object.type.index);
-  writer.writeString(offsets[25], object.url);
-  writer.writeString(offsets[26], object.writer);
+  writer.writeString(offsets[5], object.filePath);
+  writer.writeString(offsets[6], object.folderPath);
+  writer.writeString(offsets[7], object.id);
+  writer.writeString(offsets[8], object.imagePath);
+  writer.writeString(offsets[9], object.imprint);
+  writer.writeString(offsets[10], object.inker);
+  writer.writeString(offsets[11], object.letterer);
+  writer.writeLong(offsets[12], object.pageNum);
+  writer.writeString(offsets[13], object.parentId);
+  writer.writeString(offsets[14], object.path);
+  writer.writeString(offsets[15], object.penciller);
+  writer.writeDouble(offsets[16], object.progress);
+  writer.writeString(offsets[17], object.publisher);
+  writer.writeDouble(offsets[18], object.rating);
+  writer.writeString(offsets[19], object.releaseDate);
+  writer.writeStringList(offsets[20], object.tags);
+  writer.writeString(offsets[21], object.title);
+  writer.writeString(offsets[22], object.translator);
+  writer.writeByte(offsets[23], object.type.index);
+  writer.writeString(offsets[24], object.url);
+  writer.writeString(offsets[25], object.writer);
 }
 
 Entry _entryDeserialize(
@@ -316,30 +309,29 @@ Entry _entryDeserialize(
     description: reader.readString(offsets[2]),
     downloaded: reader.readBoolOrNull(offsets[3]) ?? false,
     editor: reader.readStringOrNull(offsets[4]),
-    epubCfi: reader.readStringOrNull(offsets[5]) ?? '',
-    filePath: reader.readStringOrNull(offsets[6]) ?? '',
-    folderPath: reader.readStringOrNull(offsets[7]) ?? '',
-    id: reader.readString(offsets[8]),
-    imagePath: reader.readString(offsets[9]),
-    imprint: reader.readStringOrNull(offsets[10]),
-    inker: reader.readStringOrNull(offsets[11]),
+    filePath: reader.readStringOrNull(offsets[5]) ?? '',
+    folderPath: reader.readStringOrNull(offsets[6]) ?? '',
+    id: reader.readString(offsets[7]),
+    imagePath: reader.readString(offsets[8]),
+    imprint: reader.readStringOrNull(offsets[9]),
+    inker: reader.readStringOrNull(offsets[10]),
     isarId: id,
-    letterer: reader.readStringOrNull(offsets[12]),
-    pageNum: reader.readLongOrNull(offsets[13]) ?? 0,
-    parentId: reader.readStringOrNull(offsets[14]) ?? '',
-    path: reader.readString(offsets[15]),
-    penciller: reader.readStringOrNull(offsets[16]),
-    progress: reader.readDoubleOrNull(offsets[17]) ?? 0.0,
-    publisher: reader.readStringOrNull(offsets[18]),
-    rating: reader.readDouble(offsets[19]),
-    releaseDate: reader.readString(offsets[20]),
-    tags: reader.readStringList(offsets[21]) ?? [],
-    title: reader.readString(offsets[22]),
-    translator: reader.readStringOrNull(offsets[23]),
-    type: _EntrytypeValueEnumMap[reader.readByteOrNull(offsets[24])] ??
+    letterer: reader.readStringOrNull(offsets[11]),
+    pageNum: reader.readLongOrNull(offsets[12]) ?? 0,
+    parentId: reader.readStringOrNull(offsets[13]) ?? '',
+    path: reader.readString(offsets[14]),
+    penciller: reader.readStringOrNull(offsets[15]),
+    progress: reader.readDoubleOrNull(offsets[16]) ?? 0.0,
+    publisher: reader.readStringOrNull(offsets[17]),
+    rating: reader.readDouble(offsets[18]),
+    releaseDate: reader.readString(offsets[19]),
+    tags: reader.readStringList(offsets[20]) ?? [],
+    title: reader.readString(offsets[21]),
+    translator: reader.readStringOrNull(offsets[22]),
+    type: _EntrytypeValueEnumMap[reader.readByteOrNull(offsets[23])] ??
         EntryType.book,
-    url: reader.readString(offsets[25]),
-    writer: reader.readStringOrNull(offsets[26]),
+    url: reader.readString(offsets[24]),
+    writer: reader.readStringOrNull(offsets[25]),
   );
   return object;
 }
@@ -366,45 +358,43 @@ P _entryDeserializeProp<P>(
     case 6:
       return (reader.readStringOrNull(offset) ?? '') as P;
     case 7:
-      return (reader.readStringOrNull(offset) ?? '') as P;
+      return (reader.readString(offset)) as P;
     case 8:
       return (reader.readString(offset)) as P;
     case 9:
-      return (reader.readString(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 10:
       return (reader.readStringOrNull(offset)) as P;
     case 11:
       return (reader.readStringOrNull(offset)) as P;
     case 12:
-      return (reader.readStringOrNull(offset)) as P;
-    case 13:
       return (reader.readLongOrNull(offset) ?? 0) as P;
-    case 14:
+    case 13:
       return (reader.readStringOrNull(offset) ?? '') as P;
+    case 14:
+      return (reader.readString(offset)) as P;
     case 15:
-      return (reader.readString(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 16:
-      return (reader.readStringOrNull(offset)) as P;
-    case 17:
       return (reader.readDoubleOrNull(offset) ?? 0.0) as P;
+    case 17:
+      return (reader.readStringOrNull(offset)) as P;
     case 18:
-      return (reader.readStringOrNull(offset)) as P;
-    case 19:
       return (reader.readDouble(offset)) as P;
+    case 19:
+      return (reader.readString(offset)) as P;
     case 20:
-      return (reader.readString(offset)) as P;
-    case 21:
       return (reader.readStringList(offset) ?? []) as P;
-    case 22:
+    case 21:
       return (reader.readString(offset)) as P;
-    case 23:
+    case 22:
       return (reader.readStringOrNull(offset)) as P;
-    case 24:
+    case 23:
       return (_EntrytypeValueEnumMap[reader.readByteOrNull(offset)] ??
           EntryType.book) as P;
-    case 25:
+    case 24:
       return (reader.readString(offset)) as P;
-    case 26:
+    case 25:
       return (reader.readStringOrNull(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -1127,136 +1117,6 @@ extension EntryQueryFilter on QueryBuilder<Entry, Entry, QFilterCondition> {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         property: r'editor',
-        value: '',
-      ));
-    });
-  }
-
-  QueryBuilder<Entry, Entry, QAfterFilterCondition> epubCfiEqualTo(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'epubCfi',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<Entry, Entry, QAfterFilterCondition> epubCfiGreaterThan(
-    String value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        include: include,
-        property: r'epubCfi',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<Entry, Entry, QAfterFilterCondition> epubCfiLessThan(
-    String value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.lessThan(
-        include: include,
-        property: r'epubCfi',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<Entry, Entry, QAfterFilterCondition> epubCfiBetween(
-    String lower,
-    String upper, {
-    bool includeLower = true,
-    bool includeUpper = true,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.between(
-        property: r'epubCfi',
-        lower: lower,
-        includeLower: includeLower,
-        upper: upper,
-        includeUpper: includeUpper,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<Entry, Entry, QAfterFilterCondition> epubCfiStartsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'epubCfi',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<Entry, Entry, QAfterFilterCondition> epubCfiEndsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'epubCfi',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<Entry, Entry, QAfterFilterCondition> epubCfiContains(
-      String value,
-      {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.contains(
-        property: r'epubCfi',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<Entry, Entry, QAfterFilterCondition> epubCfiMatches(
-      String pattern,
-      {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.matches(
-        property: r'epubCfi',
-        wildcard: pattern,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<Entry, Entry, QAfterFilterCondition> epubCfiIsEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'epubCfi',
-        value: '',
-      ));
-    });
-  }
-
-  QueryBuilder<Entry, Entry, QAfterFilterCondition> epubCfiIsNotEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'epubCfi',
         value: '',
       ));
     });
@@ -4004,18 +3864,6 @@ extension EntryQuerySortBy on QueryBuilder<Entry, Entry, QSortBy> {
     });
   }
 
-  QueryBuilder<Entry, Entry, QAfterSortBy> sortByEpubCfi() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'epubCfi', Sort.asc);
-    });
-  }
-
-  QueryBuilder<Entry, Entry, QAfterSortBy> sortByEpubCfiDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'epubCfi', Sort.desc);
-    });
-  }
-
   QueryBuilder<Entry, Entry, QAfterSortBy> sortByFilePath() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'filePath', Sort.asc);
@@ -4318,18 +4166,6 @@ extension EntryQuerySortThenBy on QueryBuilder<Entry, Entry, QSortThenBy> {
     });
   }
 
-  QueryBuilder<Entry, Entry, QAfterSortBy> thenByEpubCfi() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'epubCfi', Sort.asc);
-    });
-  }
-
-  QueryBuilder<Entry, Entry, QAfterSortBy> thenByEpubCfiDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'epubCfi', Sort.desc);
-    });
-  }
-
   QueryBuilder<Entry, Entry, QAfterSortBy> thenByFilePath() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'filePath', Sort.asc);
@@ -4618,13 +4454,6 @@ extension EntryQueryWhereDistinct on QueryBuilder<Entry, Entry, QDistinct> {
     });
   }
 
-  QueryBuilder<Entry, Entry, QDistinct> distinctByEpubCfi(
-      {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'epubCfi', caseSensitive: caseSensitive);
-    });
-  }
-
   QueryBuilder<Entry, Entry, QDistinct> distinctByFilePath(
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
@@ -4802,12 +4631,6 @@ extension EntryQueryProperty on QueryBuilder<Entry, Entry, QQueryProperty> {
   QueryBuilder<Entry, String?, QQueryOperations> editorProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'editor');
-    });
-  }
-
-  QueryBuilder<Entry, String, QQueryOperations> epubCfiProperty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'epubCfi');
     });
   }
 

@@ -144,13 +144,6 @@ Future<void> _extractFile(
       await _extractZipOffUi(dir, comicFolder);
       entry.downloaded = true;
       entry.folderPath = comicFolder;
-    } else if (dir.contains('.epub')) {
-      var file = File('$dirLocation/$fileName');
-      await Directory(comicFolder).create(recursive: true);
-      file.renameSync('$comicFolder/$fileName');
-      entry.folderPath = comicFolder;
-      entry.filePath = '$comicFolder/$fileName';
-      entry.downloaded = true;
     } else if (_isAudioFile(dir)) {
       var file = File('$dirLocation/$fileName');
       await Directory(comicFolder).create(recursive: true);

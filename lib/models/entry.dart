@@ -36,7 +36,6 @@ class Entry {
   @enumerated
   EntryType type;
   String parentId = "";
-  String epubCfi = "";
 
   /// ComicInfoXML fields (for comics)
   String? writer;
@@ -67,7 +66,6 @@ class Entry {
     this.filePath = '',
     this.type = EntryType.book,
     this.parentId = '',
-    this.epubCfi = '',
     this.writer,
     this.penciller,
     this.inker,
@@ -103,7 +101,6 @@ class Entry {
           ? EntryType.values.firstWhere((e) => e.toString() == json['type'])
           : EntryType.book,
       parentId: json['parentId'] ?? '',
-      epubCfi: json['epubCfi'] ?? '',
       writer: json['writer'],
       penciller: json['penciller'],
       inker: json['inker'],
@@ -120,6 +117,6 @@ class Entry {
   // toString
   @override
   String toString() {
-    return 'Entry{\n\tid: $id,\n\ttitle: $title,\n\tdescription: $description,\n\timagePath: $imagePath,\n\treleaseDate: $releaseDate,\n\tdownloaded: $downloaded,\n\tpath: $path,\n\turl: $url,\n\ttags: $tags,\n\trating: $rating,\n\tprogress: $progress,\n\tpageNum: $pageNum,\n\tfolderPath: $folderPath,\n\tfilePath: $filePath,\n\ttype: $type,\n\tparentId: $parentId,\n\tepubCfi: $epubCfi,\n\twriter: $writer,\n\tpenciller: $penciller,\n\tinker: $inker,\n\tcolorist: $colorist,\n\tletterer: $letterer,\n\tcoverArtist: $coverArtist,\n\teditor: $editor,\n\ttranslator: $translator,\n\tpublisher: $publisher,\n\timprint: $imprint,\n}';
+    return 'Entry{\n\tid: $id,\n\ttitle: $title,\n\tdescription: $description,\n\timagePath: $imagePath,\n\treleaseDate: $releaseDate,\n\tdownloaded: $downloaded,\n\tpath: $path,\n\turl: $url,\n\ttags: $tags,\n\trating: $rating,\n\tprogress: $progress,\n\tpageNum: $pageNum,\n\tfolderPath: $folderPath,\n\tfilePath: $filePath,\n\ttype: $type,\n\tparentId: $parentId,\n\twriter: $writer,\n\tpenciller: $penciller,\n\tinker: $inker,\n\tcolorist: $colorist,\n\tletterer: $letterer,\n\tcoverArtist: $coverArtist,\n\teditor: $editor,\n\ttranslator: $translator,\n\tpublisher: $publisher,\n\timprint: $imprint,\n}';
   }
 }

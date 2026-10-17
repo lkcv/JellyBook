@@ -115,15 +115,12 @@ Future<void> getComics(String comicsId) async {
       parentId: element.parentId ?? '',
       downloaded: false,
     );
-    List<String> bookFileTypes = ['epub', 'mobi', 'azw3', 'kpf'];
     List<String> comicFileTypes = ['cbz', 'zip'];
 
     String entryPath = element.path.toString().toLowerCase();
     // Audio entries are excluded by the shared format policy.
     if (element.type.toString().toLowerCase() == 'folder') {
       entry.type = EntryType.folder;
-    } else if (bookFileTypes.contains(entryPath)) {
-      entry.type = EntryType.book;
     } else if (comicFileTypes.contains(entryPath)) {
       entry.type = EntryType.comic;
     }
@@ -139,7 +136,6 @@ Future<void> getComics(String comicsId) async {
         entry.progress = element1.progress;
         entry.folderPath = element1.folderPath;
         entry.filePath = element1.filePath;
-        entry.epubCfi = element1.epubCfi;
         entry.pageNum = element1.pageNum;
 
         return true;
