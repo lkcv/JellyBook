@@ -847,15 +847,25 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
                             openingState: openingState,
                             skipReturnFade: skipReturnFade,
                             returnTarget: returnTarget,
-                            builder: (context) => _VolumeReaderSession(
-                              initialEntry: entry,
-                              orderedEntries: List<Entry>.of(_unfilteredEntries),
-                              openingReady: firstPageReady,
-                              openingState: openingState,
-                              skipReturnFade: skipReturnFade,
-                              returnTarget: returnTarget,
-                              resolveReturnCover: _resolveReturnCover,
-                            ),
+                            builder: (readerContext) {
+                              final mediaQuery = MediaQuery.of(readerContext);
+                              return MediaQuery(
+                                data: mediaQuery.copyWith(
+                                  padding: mediaQuery.padding.copyWith(
+                                    top: MediaQuery.paddingOf(this.context).top,
+                                  ),
+                                ),
+                                child: _VolumeReaderSession(
+                                  initialEntry: entry,
+                                  orderedEntries: List<Entry>.of(_unfilteredEntries),
+                                  openingReady: firstPageReady,
+                                  openingState: openingState,
+                                  skipReturnFade: skipReturnFade,
+                                  returnTarget: returnTarget,
+                                  resolveReturnCover: _resolveReturnCover,
+                                ),
+                              );
+                            },
                           ),
                           inCollection: true,
                         );
