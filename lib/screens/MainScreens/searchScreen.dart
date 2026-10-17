@@ -1,13 +1,11 @@
 // The purpose of this screen is to allow the user to search for a specific book/comic
 import 'dart:async';
-import 'dart:ffi';
 import 'dart:math';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:isar/isar.dart';
-import 'package:isar_flutter_libs/isar_flutter_libs.dart';
 import 'package:jellybook/models/entry.dart';
 import 'package:jellybook/providers/supportedFormats.dart';
 import 'package:jellybook/screens/readingScreen.dart';
@@ -20,7 +18,6 @@ import 'package:provider/provider.dart';
 import 'package:string_similarity/string_similarity.dart';
 import 'package:jellybook/l10n/app_localizations.dart';
 import 'package:jellybook/themes/themeConstants.dart';
-import 'package:jellybook/variables.dart';
 import 'package:jellybook/screens/collectionScreen.dart' show KuroStyleBookCard;
 
 // Match the Library's two 17.5px concave header corners while leaving the

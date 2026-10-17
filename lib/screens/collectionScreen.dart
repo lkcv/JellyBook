@@ -5,14 +5,12 @@ import 'dart:math' as math;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:isar/isar.dart';
-import 'package:isar_flutter_libs/isar_flutter_libs.dart';
 import 'package:jellybook/models/entry.dart';
 import 'package:jellybook/providers/supportedFormats.dart';
 import 'package:jellybook/providers/libraryFilter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_star/flutter_star.dart';
 import 'package:jellybook/models/folder.dart';
 import 'package:jellybook/l10n/app_localizations.dart';
 import 'package:jellybook/themes/themeConstants.dart';

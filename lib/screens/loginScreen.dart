@@ -2,12 +2,9 @@
 import 'package:flutter/material.dart';
 import 'package:jellybook/providers/login.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:jellybook/providers/themeProvider.dart';
 import 'package:jellybook/screens/homeScreen.dart';
-import 'package:jellybook/providers/languageProvider.dart';
 
 import 'package:jellybook/l10n/app_localizations.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:jellybook/variables.dart';
 import 'package:isar/isar.dart';

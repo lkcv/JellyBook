@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart';
 import 'package:jellybook/screens/loginScreen.dart';
 import 'package:isar/isar.dart';
-import 'package:isar_flutter_libs/isar_flutter_libs.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:jellybook/models/entry.dart';
@@ -14,8 +12,6 @@ import 'package:jellybook/providers/connectionManager.dart';
 import 'package:jellybook/providers/downloadQueue.dart';
 import 'dart:io';
 
-import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:intl/intl.dart';
 import 'package:jellybook/l10n/app_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:jellybook/providers/languageProvider.dart';

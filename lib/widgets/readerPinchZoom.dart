@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:vector_math/vector_math_64.dart' show Matrix4;
 
 /// Paints a transformed reader page. Raw pointers are tracked by the reader,
 /// *above* PageView, so a second finger can be detected even if the first

@@ -1,6 +1,5 @@
 // The purpose of this file is to allow the user to change the settings of the app
 
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
