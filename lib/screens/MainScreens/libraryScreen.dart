@@ -1047,15 +1047,34 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
                     filter: _filter,
                     onTap: () async {
                       _stopSpeculative();
-                      final collectionRoute = MaterialPageRoute<void>(
-                        builder: (context) => collectionScreen(
-                          folderId: folder.id,
-                          name: folder.name,
-                          image: folder.image,
-                          bookIds: folder.bookIds,
-                          downloadedOnly: _filter.downloadedOnly,
-                          readingOnly: _filter.readingOnly,
-                        ),
+                      final collectionRoute = PageRouteBuilder<void>(
+                        pageBuilder: (context, animation, secondaryAnimation) =>
+                            collectionScreen(
+                              folderId: folder.id,
+                              name: folder.name,
+                              image: folder.image,
+                              bookIds: folder.bookIds,
+                              downloadedOnly: _filter.downloadedOnly,
+                              readingOnly: _filter.readingOnly,
+                            ),
+                        transitionDuration: const Duration(milliseconds: 280),
+                        reverseTransitionDuration:
+                            const Duration(milliseconds: 240),
+                        transitionsBuilder: (context, animation, _, child) {
+                          final progress = animation.drive(
+                            CurveTween(curve: Curves.easeOutCubic),
+                          );
+                          return FadeTransition(
+                            opacity: progress,
+                            child: SlideTransition(
+                              position: Tween<Offset>(
+                                begin: const Offset(0.018, 0),
+                                end: Offset.zero,
+                              ).animate(progress),
+                              child: child,
+                            ),
+                          );
+                        },
                       );
                       await Navigator.of(context).push<void>(collectionRoute);
                       // Navigator.push completes when pop begins. Wait for the
