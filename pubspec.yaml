@@ -70,7 +70,6 @@ dependencies:
   device_info_plus: ^13.2.0
   xml: ^6.3.0
   flutter_html: ^3.0.0-beta.2
-  flutter_markdown_plus: ^1.0.12
   infinite_scroll_pagination: ^5.1.1
 
   # Logging
