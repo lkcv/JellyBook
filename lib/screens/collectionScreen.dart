@@ -69,6 +69,8 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
     this.readingOnly = false,
   });
 
+  final GlobalKey<NavigatorState> _readerNavigatorKey = GlobalKey<NavigatorState>();
+  final ValueNotifier<CoverOpeningRoute?> _activeCoverRoute = ValueNotifier(null);
   final ScrollController _gridController = ScrollController();
   // Only mounted cards are tracked; the sliver still disposes offscreen cards.
   final Map<String, KuroStyleBookCardState> _mountedCards = {};
@@ -322,6 +324,7 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
     _inForeground = false;
     serverProgressRevision.removeListener(_onServerProgressRefreshed);
     _cardProgressRevision.dispose();
+    _activeCoverRoute.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _clearPinnedCovers();
     _gridController.removeListener(_onGridScrolled);
@@ -381,16 +384,24 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
   }
 
   Future<T?> _pushWithPausedCovers<T extends Object?>(
-      TransitionRoute<T> route) async {
+      TransitionRoute<T> route, {bool inCollection = false}) async {
     _pauseCoverWarming();
     try {
-      return await Navigator.of(context).push<T>(route);
+      final navigator = inCollection
+          ? _readerNavigatorKey.currentState!
+          : Navigator.of(context);
+      final result = navigator.push<T>(route);
+      if (inCollection && route is CoverOpeningRoute) {
+        _activeCoverRoute.value = route as CoverOpeningRoute;
+      }
+      return await result;
     } finally {
-      // Navigator.push completes when pop begins; wait for the return
-      // transition to finish before starting new image decodes.
       try {
         await route.completed;
       } finally {
+        if (mounted && identical(_activeCoverRoute.value, route)) {
+          _activeCoverRoute.value = null;
+        }
         _resumeCoverWarming();
       }
     }
@@ -634,10 +645,7 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
     final headerBrightness = Theme.of(context).brightness;
     final headerForeground =
         FloatingSurfacePalette.foreground(headerBrightness);
-    return Scaffold(
-      // Let covers scroll behind the translucent header, as on the home screen.
-      extendBodyBehindAppBar: true,
-      appBar: JellyBookHeader(
+    final header = JellyBookHeader(
         topInset: MediaQuery.paddingOf(context).top,
         children: [
           // Match the Reader's 18sp centered title and 56dp side margins.
@@ -679,8 +687,61 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
             ),
           ),
         ],
+      );
+    return Scaffold(
+      // Let covers scroll behind the translucent header, as on the home screen.
+      extendBodyBehindAppBar: true,
+      appBar: PreferredSize(
+        preferredSize: header.preferredSize,
+        child: ValueListenableBuilder<CoverOpeningRoute?>(
+          valueListenable: _activeCoverRoute,
+          child: header,
+          builder: (context, route, child) {
+            final animation = route?.animation ??
+                const AlwaysStoppedAnimation<double>(0);
+            return AnimatedBuilder(
+              animation: animation,
+              child: child,
+              builder: (context, headerChild) {
+                final value = animation.value.clamp(0.0, 1.0).toDouble();
+                final double opacity;
+                if (animation.status == AnimationStatus.reverse) {
+                  final elapsed = 1.0 - value;
+                  final onCoverPage = route?.skipReturnFade?.value ?? false;
+                  final shrink = Curves.easeInOutCubic.transform(
+                    onCoverPage
+                        ? elapsed
+                        : ((elapsed - 0.4) / 0.6)
+                            .clamp(0.0, 1.0)
+                            .toDouble(),
+                  );
+                  opacity = ((shrink - 0.15) / 0.25)
+                      .clamp(0.0, 1.0)
+                      .toDouble();
+                } else {
+                  opacity = (1.0 - value / 0.45)
+                      .clamp(0.0, 1.0)
+                      .toDouble();
+                }
+                return IgnorePointer(
+                  ignoring: route != null,
+                  child: Opacity(opacity: opacity, child: headerChild),
+                );
+              },
+            );
+          },
+        ),
       ),
-      body: FutureBuilder<List<Entry>>(
+      body: NavigatorPopHandler(
+        onPopWithResult: (_) => _readerNavigatorKey.currentState?.maybePop(),
+        child: HeroControllerScope.none(
+          child: Navigator(
+            key: _readerNavigatorKey,
+            onDidRemovePage: (_) {},
+            pages: [
+              MaterialPage<void>(
+                key: const ValueKey('collection-grid'),
+                child: FutureBuilder<List<Entry>>(
         future: _entriesFuture,
         builder: (BuildContext context, AsyncSnapshot snapshot) {
           if (snapshot.hasData && snapshot.data!.isNotEmpty) {
@@ -796,6 +857,7 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
                               resolveReturnCover: _resolveReturnCover,
                             ),
                           ),
+                          inCollection: true,
                         );
                         _refreshEntries();
                         return;
@@ -862,6 +924,11 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
             );
           }
         },
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
