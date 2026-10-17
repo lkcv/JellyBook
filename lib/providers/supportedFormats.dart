@@ -1,12 +1,8 @@
 // One format policy for server discovery and all Isar-backed UI screens.
-// Only ZIP-based comic archives are supported; CBR/RAR are excluded.
 import 'package:jellybook/models/entry.dart';
 
 const supportedFileExtensions = <String>{
   'cbz', 'zip',
-  'epub',
-  // Preserve formats already listed by the importer until a separate cleanup.
-  'mobi', 'azw3', 'kpf',
 };
 
 String entryFileExtension(String path) {
