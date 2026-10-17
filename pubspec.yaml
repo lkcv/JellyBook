@@ -46,7 +46,6 @@ dependencies:
   permission_handler: ^12.0.3
   url_launcher: ^6.3.2
   #http: ^1.1.0
-  open_filex: ^4.7.0
   isar: ^3.1.0
   # Use version of isar core with android compilation fixes.  If this version or ref changes,
   # the linux arm build in upload-assets.yml must be updated.
@@ -69,7 +68,6 @@ dependencies:
   intl: ^0.20.2
   device_info_plus: ^13.2.0
   xml: ^6.3.0
-  flutter_html: ^3.0.0-beta.2
   infinite_scroll_pagination: ^5.1.1
 
   # Logging
@@ -102,7 +100,6 @@ dev_dependencies:
   # objectbox_generator: ^1.6.2
 
 dependency_overrides:
-  html: 0.15.6
   # force isar_generator community fork to accept baseline isar.
   # generated files are identical, so there should be no incompatibilities
   # fork also allows custom build of linux arm binaries
