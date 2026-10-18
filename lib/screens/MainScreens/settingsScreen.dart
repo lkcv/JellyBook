@@ -21,8 +21,7 @@ import 'package:jellybook/widgets/readerCacheSettings.dart';
 import 'package:jellybook/themes/themeConstants.dart';
 import 'package:jellybook/widgets/jellybookHeader.dart';
 import 'package:jellybook/variables.dart';
-
-import 'package:tentacle/tentacle.dart';
+import 'package:jellybook/providers/jellyfinApi.dart';
 
 class SettingsScreen extends StatefulWidget {
   @override
@@ -426,17 +425,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
       'Host': server.substring(server.indexOf("//") + 2, server.length),
       'Content-Length': '0',
     };
-    final api = Tentacle(basePathOverride: server).getImageApi();
+    final api = JellyfinApi(server);
     Uint8List image = Uint8List(0);
     ImageProvider? imageProvider;
     try {
-      var response = await api.getUserImage(
+      final response = await api.getUserImage(
         userId: userId,
         headers: headers,
       );
       logger.i(response.statusCode);
-      if (response != null && response.statusCode == 200) {
-        image = response.data!;
+      if (response.statusCode == 200 && response.data != null) {
+        image = Uint8List.fromList(response.data!);
       }
     } catch (e) {
       logger.e(e.toString());

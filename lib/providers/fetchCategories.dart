@@ -1,7 +1,7 @@
 // The purpose of this file is to fetch the categories from the database
 
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:tentacle/tentacle.dart';
+import 'package:jellybook/providers/jellyfinApi.dart';
 import 'package:jellybook/providers/fetchBooks.dart';
 import 'package:jellybook/providers/folderProvider.dart';
 import 'package:jellybook/providers/supportedFormats.dart';
@@ -108,7 +108,7 @@ Future<(List<Entry>, List<Folder>)> getServerCategories({
   logger.d("got prefs");
   Map<String, String> headers =
       getHeaders(url, client, device, deviceId, version, token);
-  final api = Tentacle(basePathOverride: url).getUserViewApi();
+  final api = JellyfinApi(url);
   var response;
   try {
     response = await api.getUserViews(
@@ -128,28 +128,26 @@ Future<(List<Entry>, List<Folder>)> getServerCategories({
   if (response?.data == null) {
     throw Exception("Empty response from server");
   }
-  final data = response.data.items
-      .where((element) => element.collectionType == CollectionType.books)
+  final data = (response.data!['Items'] as List<dynamic>? ?? [])
+      .cast<Map<String, dynamic>>()
+      .where((element) => element['CollectionType'] == 'books')
       .toList();
 
   bool hasComics = true;
   if (hasComics) {
     String comicsId = '';
-    String etag = '';
     List<String> categories = [];
     // add all data['Items'] to categories
     data.forEach((element) {
-      categories.add(element.name);
+      categories.add(element['Name'] as String);
     });
 
     List<Entry> comics = [];
     List<String> comicsIds = [];
     logger.d("selected: " + categories.toString());
     data.forEach((element) {
-      comicsId = element.id;
+      comicsId = element['Id'] as String;
       comicsIds.add(comicsId);
-      etag = element.etag;
-      // comicsArray.add(getComics(comicsId, etag));
     });
     for (int i = 0; i < comicsIds.length; i++) {
       // turn List<Entry> into Iterable<Entry>
@@ -167,7 +165,7 @@ Future<(List<Entry>, List<Folder>)> getServerCategories({
     // final isar = Isar.getInstance();
     List<String> categoriesList = [];
     for (int i = 0; i < data.length; i++) {
-      categoriesList.add(data[i].name);
+      categoriesList.add(data[i]['Name'] as String);
     }
     logger.i("categoriesList: $categoriesList");
     prefs.setStringList('categories', categoriesList);

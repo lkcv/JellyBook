@@ -4,7 +4,7 @@ import 'dart:convert';
 
 import 'package:package_info_plus/package_info_plus.dart' as p_info;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:tentacle/tentacle.dart';
+import 'package:jellybook/providers/jellyfinApi.dart';
 import 'package:jellybook/variables.dart';
 
 final _progressQueue = _JellyfinProgressQueue();
@@ -196,12 +196,10 @@ class _JellyfinProgressQueue {
           'Device="Unknown Device", DeviceId="Unknown Device id", '
           'Version="$version", Token="$token"',
     };
-    final response = await Tentacle(basePathOverride: server)
-        .getSessionApi()
+    final response = await JellyfinApi(server)
         .reportPlaybackProgress(
-          playbackProgressInfo: PlaybackProgressInfo((b) => b
-            ..itemId = itemId
-            ..positionTicks = pageIndex * 10000),
+          itemId: itemId,
+          positionTicks: pageIndex * 10000,
           headers: headers,
         )
         .timeout(_requestTimeout);

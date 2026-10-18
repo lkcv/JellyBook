@@ -11,7 +11,7 @@ import 'package:package_info_plus/package_info_plus.dart' as package_info;
 import 'package:isar/isar.dart';
 import 'package:jellybook/l10n/app_localizations.dart';
 import 'package:jellybook/models/login.dart';
-import 'package:tentacle/tentacle.dart';
+import 'package:jellybook/providers/jellyfinApi.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:jellybook/variables.dart';
 
@@ -37,15 +37,17 @@ class LoginProvider {
     required String device,
     required String deviceId,
     required String version,
-    required AuthenticationResult? data,
+    required Map<String, dynamic>? data,
   }) async {
     const storage = FlutterSecureStorage();
     final SharedPreferences prefs = await SharedPreferences.getInstance();
+    final user = data?['User'] as Map<String, dynamic>?;
+    final session = data?['SessionInfo'] as Map<String, dynamic>?;
     logger.d("saving data to cache");
     prefs.setString("server", url);
-    prefs.setString("accessToken", data?.accessToken ?? "");
-    prefs.setString("UserId", data?.user?.id ?? "");
-    prefs.setString("ServerId", data?.serverId ?? "");
+    prefs.setString("accessToken", data?['AccessToken'] as String? ?? "");
+    prefs.setString("UserId", user?['Id'] as String? ?? "");
+    prefs.setString("ServerId", data?['ServerId'] as String? ?? "");
 
     prefs.setString("client", client);
     prefs.setString("device", device);
@@ -55,9 +57,9 @@ class LoginProvider {
     await storage.write(key: "server", value: url);
     await storage.write(key: "username", value: username);
     await storage.write(key: "password", value: password);
-    await storage.write(key: "accessToken", value: data?.accessToken ?? "");
-    await storage.write(key: "ServerId", value: data?.serverId ?? "");
-    await storage.write(key: "UserId", value: data?.sessionInfo?.userId ?? "");
+    await storage.write(key: "accessToken", value: data?['AccessToken'] as String? ?? "");
+    await storage.write(key: "ServerId", value: data?['ServerId'] as String? ?? "");
+    await storage.write(key: "UserId", value: session?['UserId'] as String? ?? "");
     await storage.write(key: "client", value: client);
     await storage.write(key: "device", value: device);
     await storage.write(key: "deviceId", value: deviceId);
@@ -107,11 +109,9 @@ class LoginProvider {
       }
       final version = (await package_info.PackageInfo.fromPlatform()).version;
 
-      final api = Tentacle(basePathOverride: _url).getAuthenticationApi();
-      final response = await api.authenticateUserByName(
-        authenticateUserByName: AuthenticateUserByName((b) => b
-          ..username = username
-          ..pw = password),
+      final response = await JellyfinApi(_url).authenticateUserByName(
+        username: username,
+        password: password,
         headers: getHeaders(_url, client, device, deviceId, version),
       );
 
@@ -211,17 +211,13 @@ class LoginProvider {
           "URL is not valid. Please check the URL and try again.";
     }
 
-    final api = Tentacle(basePathOverride: _url);
-    final apiInstance = api.getAuthenticationApi();
-    Response<AuthenticationResult> response;
+    Response<Map<String, dynamic>> response;
 
     try {
-      var authenticateUserByNameRequest = AuthenticateUserByName((b) => b
-        ..username = username
-        ..pw = password);
       final headers = getHeaders(_url, _client, _device, _deviceId, _version);
-      response = await apiInstance.authenticateUserByName(
-        authenticateUserByName: authenticateUserByNameRequest,
+      response = await JellyfinApi(_url).authenticateUserByName(
+        username: username,
+        password: password,
         headers: headers,
       );
       logger.d("Status Code: ${response.statusCode}");

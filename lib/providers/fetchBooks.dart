@@ -1,9 +1,7 @@
 // the purpose of this file is to fetch books from the database to be displayed in the app
 
-import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:tentacle/tentacle.dart';
-import 'package:built_collection/built_collection.dart';
+import 'package:jellybook/providers/jellyfinApi.dart';
 
 // database imports
 import 'package:jellybook/models/entry.dart';
@@ -35,42 +33,23 @@ Future<void> getComics(String comicsId) async {
     'Authorization':
         'MediaBrowser Client="$client", Device="$device", DeviceId="$deviceId", Version="$version", Token="$token"',
   };
-  // make a built list of the fields
-
-  BuiltList<ItemFields> fieldsList = BuiltList<ItemFields>([
-    ItemFields.sortName,
-    ItemFields.path,
-    ItemFields.childCount,
-    ItemFields.mediaSourceCount,
-    ItemFields.tags,
-    ItemFields.overview,
-    ItemFields.parentId,
-  ]);
-
-  // turn into built list
-  final api = Tentacle(basePathOverride: url).getLibraryApi();
+  final api = JellyfinApi(url!);
   final revisionBeforeFetch = progressRevision();
   // Preserve pages that were pending when this network request began, even if
   // their upload completes before the (possibly older) GET response arrives.
   final protectedAtFetchStart =
       await locallyProtectedProgressIds(revisionBeforeFetch);
-  Response<BaseItemDtoQueryResult>? response;
+  List<dynamic> responseData = [];
   try {
-    response = await api.getItems(
+    final response = await api.getItems(
       userId: userId!,
       headers: headers,
-      startIndex: 0,
-      fields: fieldsList,
-      imageTypeLimit: 1,
       parentId: comicsId,
-      recursive: true,
-      sortBy: BuiltList<ItemSortBy>([ItemSortBy.isFolder, ItemSortBy.sortName]),
-      sortOrder: BuiltList<SortOrder>([SortOrder.ascending]),
     );
+    responseData = response.data?['Items'] as List<dynamic>? ?? [];
   } catch (e) {
     logger.e(e);
   }
-  BuiltList<BaseItemDto> responseData = response?.data?.items ?? BuiltList();
   final protectedIds = protectedAtFetchStart
     ..addAll(await locallyProtectedProgressIds(revisionBeforeFetch));
   final restoredPages = <String, int>{};
@@ -92,34 +71,36 @@ Future<void> getComics(String comicsId) async {
   logger.d("got entries");
 
   // List<Map<String, dynamic>> comics = [];
-  for (final element in responseData) {
+  for (final raw in responseData) {
+    final element = raw as Map<String, dynamic>;
     // Jellyfin can flag a one-volume series directory as IsFolder while its
-    // item type is still Book (the web UI opens it as the volume's detail
-    // page, not a folder view). Treat those as books, not folders.
-    final jellyfinKind = element.type.toString().toLowerCase();
+    // item type is still Book. Treat those as books, not folders.
+    final jellyfinKind = (element['Type'] as String? ?? '').toLowerCase();
     final isRealFolder =
-        element.isFolder == true && jellyfinKind != 'book';
+        element['IsFolder'] == true && jellyfinKind != 'book';
+    final imageTags = element['ImageTags'] as Map<String, dynamic>?;
+    final itemId = element['Id'] as String? ?? '';
     Entry entry = Entry(
-      id: element.id ?? '',
-      title: element.name ?? '',
-      imagePath: element.imageTags!['Primary'] != null
-          ? '$url/Items/${element.id}/Images/Primary?quality=90'
+      id: itemId,
+      title: element['Name'] as String? ?? '',
+      imagePath: imageTags?['Primary'] != null
+          ? '$url/Items/$itemId/Images/Primary?quality=90'
           : 'Asset',
-      releaseDate: element.productionYear.toString(),
-      path: element.path ?? '',
-      description: element.overview ?? '',
+      releaseDate: element['ProductionYear'].toString(),
+      path: element['Path'] as String? ?? '',
+      description: element['Overview'] as String? ?? '',
       url: url ?? '',
-      rating: element.communityRating ?? -1,
+      rating: (element['CommunityRating'] as num?)?.toDouble() ?? -1,
       type: isRealFolder ? EntryType.folder : EntryType.book,
-      tags: element.tags != null ? element.tags!.toList() : [],
-      parentId: element.parentId ?? '',
+      tags: (element['Tags'] as List<dynamic>?)?.cast<String>().toList() ?? [],
+      parentId: element['ParentId'] as String? ?? '',
       downloaded: false,
     );
     List<String> comicFileTypes = ['cbz', 'zip'];
 
-    String entryPath = element.path.toString().toLowerCase();
+    String entryPath = (element['Path'] as String?).toString().toLowerCase();
     // Audio entries are excluded by the shared format policy.
-    if (element.type.toString().toLowerCase() == 'folder') {
+    if (jellyfinKind == 'folder') {
       entry.type = EntryType.folder;
     } else if (comicFileTypes.contains(entryPath)) {
       entry.type = EntryType.comic;
@@ -148,14 +129,15 @@ Future<void> getComics(String comicsId) async {
     // A pending local upload or a page change during the GET wins over this
     // potentially stale server snapshot.
     final extension = entryFileExtension(entry.path);
-    final ticks = element.userData?.playbackPositionTicks;
+    final userData = element['UserData'] as Map<String, dynamic>?;
+    final ticks = (userData?['PlaybackPositionTicks'] as num?)?.toInt();
     if ((extension == 'cbz' || extension == 'zip') &&
         !protectedIds.contains(entry.id) &&
         ticks != null && ticks >= 0) {
       final serverPage = ticks ~/ 10000;
       if (entry.pageNum != serverPage) {
         entry.pageNum = serverPage;
-        final serverPercent = element.userData?.playedPercentage;
+        final serverPercent = userData?['PlayedPercentage'] as num?;
         if (serverPercent != null) {
           entry.progress = serverPercent.toDouble().clamp(0.0, 100.0).toDouble();
         } else if (serverPage == 0) {
