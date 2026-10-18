@@ -4,8 +4,6 @@ import 'package:jellybook/screens/downloadedVolumesScreen.dart';
 import 'package:jellybook/cache/readerPageCache.dart';
 import 'package:jellybook/cache/coverCache.dart';
 
-/// Storage controls for the durable, seven-page snapshots retained by the
-/// reader. This intentionally does not count or delete downloaded volumes.
 class ReaderCacheSettings extends StatefulWidget {
   const ReaderCacheSettings({super.key});
 
@@ -197,7 +195,7 @@ class _ReaderCacheSettingsState extends State<ReaderCacheSettings> {
                           style: Theme.of(context).textTheme.bodyLarge),
                       const SizedBox(height: 2),
                       Text(
-                        'Seven nearby pages per recently opened volume',
+                        'Previously viewed pages, up to your cache limit',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                       const SizedBox(height: 12),
@@ -415,8 +413,8 @@ class _CacheLimitDialogState extends State<_CacheLimitDialog> {
           ),
           const SizedBox(height: 12),
           Text(
-            'Reducing the limit evicts the least recently used '
-            'cached volumes. Downloads are unaffected.',
+            'Reducing the limit removes older cached pages or volumes. '
+            'Downloads are unaffected.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           if (_custom && !validCustom)

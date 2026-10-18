@@ -9,7 +9,7 @@ import 'package:jellybook/variables.dart';
 import 'package:path_provider/path_provider.dart';
 
 /// Shared by Volume Info and Settings. Throws on filesystem failure, leaving
-/// Isar's downloaded flag unchanged. Never touches the seven-page reader cache.
+/// Isar's downloaded flag unchanged. Never touches the reader page cache.
 Future<bool> removeDownloadedVolume(String id) async {
   final isar = Isar.getInstance();
   if (isar == null) throw StateError('Database unavailable');

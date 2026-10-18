@@ -13,19 +13,16 @@ class _ReaderPosition {
   const _ReaderPosition(this.count, this.page, this.timestamp);
 }
 
-/// Durable snapshots of the pages most recently viewed in a comic.
+/// Durable snapshots of pages viewed in a comic.
 ///
 /// This cache lives outside Entry.folderPath, so deleting a downloaded volume
-/// does not delete the reader's recovery copy. Both downloaded and streamed
-/// volumes retain up to seven nearby pages. The overall cache has a
-/// configurable disk budget (300 MiB by default) and evicts
-/// least-recently-used volumes, not individual pages.
+/// does not delete the reader's recovery copy. Pages remain available until
+/// the global disk budget (300 MiB by default) requires eviction.
 class ReaderPageCache {
   static const int defaultLimitMb = 300;
   static const int maxCustomLimitMb = 1024 * 1024; // Avoid integer overflow.
   static const String _limitKey = 'reader_cache_limit_mb';
   static const int _bytesPerMb = 1024 * 1024;
-  static const int _maxPagesPerVolume = 7;
   static Future<void> _writeQueue = Future<void>.value();
   // Initialized once per process, then updated using only the modified
   // volume. Avoid scanning every cached page file after each page load.
@@ -332,28 +329,6 @@ class ReaderPageCache {
       }
     }
 
-    // Count only files that made it safely to disk.
-    final validIndices = <int>[];
-    for (final entry in pages.entries) {
-      final index = int.tryParse(entry.key);
-      if (index == null || (index - safeCurrent).abs() > 3) continue;
-      if (await File('${directory.path}/${entry.value}').exists()) {
-        validIndices.add(index);
-      }
-    }
-    validIndices.sort((a, b) {
-      final distance =
-          (a - safeCurrent).abs().compareTo((b - safeCurrent).abs());
-      return distance != 0 ? distance : a.compareTo(b);
-    });
-    final keep = validIndices.take(_maxPagesPerVolume).toSet();
-    for (final entry in pages.entries.toList()) {
-      final index = int.tryParse(entry.key);
-      if (index != null && keep.contains(index)) continue;
-      obsoleteFiles.add('${directory.path}/${entry.value}');
-      pages.remove(entry.key);
-    }
-
     // If the new page has not arrived yet, reopen at the closest retained
     // page; saving the displayed page below updates this immediately.
     final cachedIndices = pages.keys.map(int.tryParse).whereType<int>().toList();
@@ -452,6 +427,62 @@ class ReaderPageCache {
     _trackedBytes = total;
   }
 
+  static Future<void> _trimProtectedVolume(
+    Directory directory,
+    int excessBytes,
+  ) async {
+    if (excessBytes <= 0) return;
+    final manifestFile = File('${directory.path}/manifest.json');
+    final manifest = await _readManifest(directory);
+    final rawPages = manifest['pages'];
+    if (rawPages is! Map) return;
+
+    final pages = <String, String>{
+      for (final entry in rawPages.entries)
+        if (entry.key is String &&
+            entry.value is String &&
+            !(entry.value as String).contains('/') &&
+            !(entry.value as String).contains(Platform.pathSeparator))
+          entry.key as String: entry.value as String,
+    };
+    final current = (manifest['currentPage'] as num?)?.toInt() ?? 0;
+    final indices = pages.keys.map(int.tryParse).whereType<int>().toList()
+      ..sort((a, b) => (b - current).abs().compareTo((a - current).abs()));
+    final removed = <File>[];
+    var bytes = 0;
+    for (final index in indices) {
+      if (bytes >= excessBytes) break;
+      if (index == current) continue;
+      final file = File('${directory.path}/${pages['$index']}');
+      if (await file.exists()) bytes += await file.length();
+      pages.remove('$index');
+      removed.add(file);
+    }
+    if (removed.isEmpty) return;
+
+    // Update the manifest first so a crash cannot leave references to
+    // pages that have already been deleted.
+    final temporary = File('${manifestFile.path}.tmp');
+    await temporary.writeAsString(
+      jsonEncode({...manifest, 'pages': pages}),
+      flush: true,
+    );
+    try {
+      await temporary.rename(manifestFile.path);
+    } on FileSystemException {
+      if (await manifestFile.exists()) await manifestFile.delete();
+      await temporary.rename(manifestFile.path);
+    }
+
+    for (final file in removed) {
+      try {
+        if (await file.exists()) await file.delete();
+      } on FileSystemException {
+        // The next cache write will retry removing unreferenced page files.
+      }
+    }
+  }
+
   /// Enforce a global budget across snapshots from downloaded and streamed
   /// volumes. All writers are serialized by _writeQueue. Only check the size
   /// of the changed volume on normal writes; scan the LRU manifests when
@@ -511,9 +542,25 @@ class ReaderPageCache {
             '${stale.directory.path}: $error');
       }
     }
-    // Preserve the volume being saved even when its seven pages alone are
-    // larger than the budget. All other volumes are eligible for eviction.
+    if (_trackedBytes! > maxCacheBytes && protectedDirectory != null) {
+      try {
+        await _trimProtectedVolume(
+          protectedDirectory,
+          _trackedBytes! - maxCacheBytes,
+        );
+        final previous = _volumeByteCounts[protectedDirectory.path] ?? 0;
+        final updated = await _directoryBytes(protectedDirectory);
+        _volumeByteCounts[protectedDirectory.path] = updated;
+        _trackedBytes = _trackedBytes! + updated - previous;
+      } on FileSystemException catch (error) {
+        _trackedBytes = null;
+        _volumeByteCounts.clear();
+        logger.w('ReaderPageCache: could not trim active volume: $error');
+        return;
+      }
+    }
     if (_trackedBytes! > maxCacheBytes) {
+      // Keep the displayed page even when one page exceeds the configured limit.
       logger.w('ReaderPageCache: cache remains above disk budget '
           '($_trackedBytes / $maxCacheBytes bytes)');
     }
