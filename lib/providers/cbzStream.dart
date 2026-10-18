@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:http/http.dart' as http;
+import 'package:jellybook/providers/jellyfinApi.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:jellybook/variables.dart';
 
@@ -17,6 +17,7 @@ class CbzStream {
   final String url;
   final String itemId;
   final Map<String, String> headers;
+  late final JellyfinApi _api = JellyfinApi(url);
 
   late Directory _cacheDir;
   int _totalSize = 0;
@@ -136,12 +137,13 @@ class CbzStream {
   }
 
   Future<int> _fetchTotalSize() async {
-    final r = await http.get(Uri.parse('$url/Items/$itemId/Download'),
-        headers: {
-          ...headers,
-          'Range': 'bytes=0-0'
-        }).timeout(const Duration(seconds: 15));
-    final range = r.headers['content-range']; // "bytes 0-0/180204386"
+    final r = await _api.getItemDownloadRange(
+      itemId: itemId,
+      start: 0,
+      end: 0,
+      headers: headers,
+    ).timeout(const Duration(seconds: 15));
+    final range = r.headers.value('content-range');
     if (r.statusCode != 206 || range == null) {
       throw Exception('Server does not support range requests');
     }
@@ -149,15 +151,19 @@ class CbzStream {
   }
 
   Future<Uint8List> _fetchRange(int start, int end) async {
-    final r = await http.get(Uri.parse('$url/Items/$itemId/Download'),
-        headers: {
-          ...headers,
-          'Range': 'bytes=$start-$end'
-        }).timeout(const Duration(seconds: 30));
+    final r = await _api.getItemDownloadRange(
+      itemId: itemId,
+      start: start,
+      end: end,
+      headers: headers,
+    ).timeout(const Duration(seconds: 30));
     if (r.statusCode != 206) {
       throw Exception('Range request failed (${r.statusCode})');
     }
-    return r.bodyBytes;
+    final bytes = r.data;
+    return bytes is Uint8List
+        ? bytes
+        : Uint8List.fromList(bytes ?? const <int>[]);
   }
 
   int _u16(Uint8List d, int o) => d[o] | (d[o + 1] << 8);

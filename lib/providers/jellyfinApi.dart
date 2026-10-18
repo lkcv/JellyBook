@@ -10,6 +10,27 @@ class JellyfinApi {
 
   final Dio _dio;
 
+  Future<Response<Object?>> getPublicSystemInfo() =>
+      _dio.get<Object?>(
+        '/System/Info/Public',
+        options: Options(
+          responseType: ResponseType.plain,
+          validateStatus: (status) => status != null,
+        ),
+      );
+
+  Future<Response<Object?>> getCurrentUser({
+    required Map<String, String> headers,
+  }) =>
+      _dio.get<Object?>(
+        '/Users/Me',
+        options: Options(
+          headers: headers,
+          responseType: ResponseType.plain,
+          validateStatus: (status) => status != null,
+        ),
+      );
+
   Future<Response<Map<String, dynamic>>> authenticateUserByName({
     required String username,
     required String password,
@@ -61,6 +82,25 @@ class JellyfinApi {
           'sortOrder': ['Ascending'],
         },
         options: Options(headers: headers),
+      );
+
+  Future<Response<List<int>>> getItemDownloadRange({
+    required String itemId,
+    required int start,
+    required int end,
+    required Map<String, String> headers,
+  }) =>
+      _dio.get<List<int>>(
+        '/Items/${Uri.encodeComponent(itemId)}/Download',
+        options: Options(
+          headers: {
+            ...headers,
+            'Accept': '*/*',
+            'Range': 'bytes=$start-$end',
+          },
+          responseType: ResponseType.bytes,
+          validateStatus: (status) => status != null,
+        ),
       );
 
   Future<Response<void>> reportPlaybackProgress({

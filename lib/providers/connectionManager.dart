@@ -1,9 +1,7 @@
-// lib/providers/connectionManager.dart
-
 import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:http/http.dart' as http;
+import 'package:jellybook/providers/jellyfinApi.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:isar/isar.dart';
 import 'package:jellybook/models/login.dart';
@@ -173,9 +171,8 @@ class ConnectionManager extends ChangeNotifier with WidgetsBindingObserver {
           '';
       if (server.isEmpty) return false;
 
-      final response = await http
-          .get(Uri.parse('$server/System/Info/Public'))
-          .timeout(_timeout);
+      final response =
+          await JellyfinApi(server).getPublicSystemInfo().timeout(_timeout);
       return response.statusCode == 200;
     } catch (_) {
       return false;
@@ -190,8 +187,7 @@ class ConnectionManager extends ChangeNotifier with WidgetsBindingObserver {
       final deviceId = prefs.getString('deviceId') ?? 'Unknown Device id';
       final version = prefs.getString('version') ?? '';
 
-      final response = await http.get(
-        Uri.parse('$server/Users/Me'),
+      final response = await JellyfinApi(server).getCurrentUser(
         headers: {
           'Authorization':
               'MediaBrowser Client="$client", Device="$device", DeviceId="$deviceId", Version="$version", Token="$token"',
