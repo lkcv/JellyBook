@@ -89,9 +89,11 @@ class JellyfinApi {
     required int start,
     required int end,
     required Map<String, String> headers,
+    CancelToken? cancelToken,
   }) =>
       _dio.get<List<int>>(
         '/Items/${Uri.encodeComponent(itemId)}/Download',
+        cancelToken: cancelToken,
         options: Options(
           headers: {
             ...headers,

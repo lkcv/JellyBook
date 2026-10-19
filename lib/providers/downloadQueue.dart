@@ -12,16 +12,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:jellybook/models/entry.dart';
 import 'package:jellybook/providers/downloadEntry.dart';
 import 'package:jellybook/providers/downloadBackground.dart';
-import 'package:jellybook/providers/resumableTransfer.dart';
-import 'package:jellybook/providers/fileNameFromTitle.dart';
+import 'package:jellybook/providers/downloadExceptions.dart';
 import 'package:jellybook/providers/supportedFormats.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:jellybook/providers/connectionManager.dart';
 
-/// Shared queue with a persistent journal and optional Android foreground
-/// execution while it drains. The service helps with lock/background survival,
-/// but cannot survive a force-stop or process kill. Interrupted transfers are
-/// resumed from retained bytes after restart, while queued work survives.
+/// Interrupted jobs resume from validated saved pages after restart.
 enum DownloadJobState {
   queued,
   downloading,
@@ -245,9 +240,7 @@ class DownloadQueue extends ChangeNotifier {
             continue;
           }
           final job = DownloadJob(entry);
-          final fileName = await fileNameFromTitle(entry.path.split('/').last);
-          final directory = await getApplicationDocumentsDirectory();
-          job.progress = await retainedDownloadProgress('${directory.path}/$fileName');
+          job.progress = await retainedPageDownloadProgress(entry);
           if (state == 'queued' || state == 'downloading' ||
               state == 'waitingForNetwork' || state == 'waitingForServer') {
             job.state = DownloadJobState.queued;
@@ -382,15 +375,7 @@ class DownloadQueue extends ChangeNotifier {
 
   Future<void> _finishCanceledJob(DownloadJob job) async {
     try {
-      // A canceled queue entry must not reuse its old Range sidecar when
-      // somebody explicitly requests the same book again.
-      final filename = await fileNameFromTitle(job.entry.path.split('/').last);
-      final folder = await getApplicationDocumentsDirectory();
-      final archive = '${folder.path}/$filename';
-      for (final path in [archive, '$archive.part', '$archive.part.json']) {
-        final file = File(path);
-        if (await file.exists()) await file.delete();
-      }
+      await discardPageDownload(job.entry);
     } catch (error) {
       debugPrint('DownloadQueue: could not clean canceled download: $error');
     } finally {
@@ -439,8 +424,7 @@ class DownloadQueue extends ChangeNotifier {
         job.state = DownloadJobState.downloading;
         job._cancelToken = CancelToken();
         _changed();
-        // Record the in-flight state before network/disk work begins. If the
-        // process dies during extraction, don't auto-retry a partial folder.
+        // Record the in-flight state before touching persistent page files.
         await _persistenceTail;
         _lastProgressNotice = null;
         try {
@@ -495,7 +479,7 @@ class DownloadQueue extends ChangeNotifier {
             job.state = await _waitingState();
             debugPrint('DownloadQueue: ${job.id} interrupted ($error), '
                 'waiting as ${job.state.name}');
-            // Preserve the existing completion Future and .part bytes.
+            // Keep completed pages and their persisted progress.
             // No immediate requeue: only a connectivity event or timer wakes it.
             _changed();
             final quickReconnect = _quickReconnectRetryAvailable &&

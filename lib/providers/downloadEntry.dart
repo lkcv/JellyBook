@@ -1,20 +1,57 @@
+import 'dart:convert';
 import 'dart:io';
-import 'dart:isolate';
+
 import 'package:dio/dio.dart';
-import 'package:archive/archive_io.dart';
+import 'package:isar/isar.dart';
+import 'package:jellybook/cache/readerPageCache.dart';
+import 'package:jellybook/models/entry.dart';
+import 'package:jellybook/providers/cbzStream.dart';
+import 'package:jellybook/providers/ComicInfoXML.dart';
+import 'package:jellybook/providers/fileNameFromTitle.dart';
+import 'package:jellybook/providers/downloadExceptions.dart';
+import 'package:jellybook/providers/supportedFormats.dart';
+import 'package:jellybook/variables.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:isar/isar.dart';
-import 'package:jellybook/models/entry.dart';
-import 'package:jellybook/providers/supportedFormats.dart';
-import 'package:jellybook/providers/fileNameFromTitle.dart';
-import 'package:jellybook/providers/ComicInfoXML.dart';
-import 'package:jellybook/variables.dart';
-import 'package:jellybook/providers/resumableTransfer.dart';
 
 typedef ProgressCallback = void Function(double progress);
 
-/// Download and extract an entry. Calls onProgress with 0–100 as it progresses.
+Future<Directory> _stagingDirectory(Entry entry) async {
+  final root = await getApplicationDocumentsDirectory();
+  final folderName = await fileNameFromTitle(entry.title);
+  return Directory('${root.path}/$folderName.pages.part');
+}
+
+Future<double> retainedPageDownloadProgress(Entry entry) async {
+  final staging = await _stagingDirectory(entry);
+  final manifest = File('${staging.path}/.kurage-part.json');
+  if (!await manifest.exists()) return 0;
+  try {
+    final saved = jsonDecode(await manifest.readAsString());
+    if (saved is! Map || saved['itemId'] != entry.id) return 0;
+    final count = saved['pageCount'];
+    if (count is! int || count <= 0) return 0;
+    final files = await staging.list().where((item) =>
+        item is File && RegExp(r'/\d{6,}\.(jpg|jpeg|png|gif|webp|bmp|tiff)$',
+            caseSensitive: false).hasMatch(item.path.replaceAll('\\', '/'))).length;
+    return (files / count * 100).clamp(0.0, 99.0).toDouble();
+  } catch (_) {
+    return 0;
+  }
+}
+
+Future<void> discardPageDownload(Entry entry) async {
+  final staging = await _stagingDirectory(entry);
+  if (await staging.exists()) await staging.delete(recursive: true);
+  final root = await getApplicationDocumentsDirectory();
+  final archiveName = await fileNameFromTitle(entry.path.split('/').last);
+  final archive = '${root.path}/$archiveName';
+  for (final path in [archive, '$archive.part', '$archive.part.json']) {
+    final file = File(path);
+    if (await file.exists()) await file.delete();
+  }
+}
+
 Future<Entry> downloadEntry(
   Entry entry, {
   required ProgressCallback onProgress,
@@ -22,210 +59,219 @@ Future<Entry> downloadEntry(
   CancelToken? cancelToken,
 }) async {
   checkDownloadCanceled(cancelToken);
-  final originalDownloaded = entry.downloaded;
-  final originalFolderPath = entry.folderPath;
-  final originalFilePath = entry.filePath;
-  // Reject before writing to disk or issuing a download request.
   if (!isSupportedEntry(entry)) {
     throw UnsupportedError('Unsupported file format: ${entry.path}');
   }
-
-  final storage = await SharedPreferences.getInstance();
   final isar = Isar.getInstance();
-  if (isar == null) throw Exception('Isar not initialized');
-
-  // Check if already downloaded
-  if (entry.folderPath.isNotEmpty && entry.downloaded && !forceDownload) {
+  if (isar == null) throw StateError('Isar not initialized');
+  if (entry.downloaded && entry.folderPath.isNotEmpty && !forceDownload &&
+      await Directory(entry.folderPath).exists()) {
     onProgress(100);
     return entry;
   }
 
-  // Prepare directory
-  String dirLocation = (await getApplicationDocumentsDirectory()).path;
-  await Directory(dirLocation).create(recursive: true);
+  final originalDownloaded = entry.downloaded;
+  final originalFolderPath = entry.folderPath;
+  final originalFilePath = entry.filePath;
+  final root = await getApplicationDocumentsDirectory();
+  final folderName = await fileNameFromTitle(entry.title);
+  final finalDirectory = Directory('${root.path}/$folderName');
+  final staging = await _stagingDirectory(entry);
+  final backup = Directory('${finalDirectory.path}.previous');
+  if (await backup.exists() && !await finalDirectory.exists()) {
+    await backup.rename(finalDirectory.path);
+  }
+  final prefs = await SharedPreferences.getInstance();
+  final server = prefs.getString('server') ?? entry.url;
+  final token = prefs.getString('accessToken') ?? '';
+  final client = prefs.getString('client') ?? 'JellyBook';
+  final device = prefs.getString('device') ?? '';
+  final deviceId = prefs.getString('deviceId') ?? '';
+  final version = prefs.getString('version') ?? '';
+  final headers = <String, String>{
+    'Authorization': 'MediaBrowser Client="$client", Device="$device", '
+        'DeviceId="$deviceId", Version="$version", Token="$token"',
+  };
+  final stream = CbzStream(
+    url: server,
+    itemId: entry.id,
+    headers: headers,
+    pageDirectory: staging,
+    cancelToken: cancelToken,
+  );
+  var published = false;
+  var committed = false;
 
-  String fileName = await fileNameFromTitle(entry.path.split('/').last);
-  String dir = '$dirLocation/$fileName';
-  entry.filePath = dir;
-
-  logger.d('Downloading: ${entry.title} to $dir');
-
-  // Stream the archive into a persisted .part file, rather than buffering an
-  // entire volume in memory. Range requests resume existing bytes.
-  final headers = _getHeaders(entry, storage);
-  var extractionStarted = false;
-  var databaseCommitted = false;
   try {
+    await stream.init();
     checkDownloadCanceled(cancelToken);
-    final base = Uri.parse(entry.url);
-    final prefix = base.path.endsWith('/') ? base.path : '${base.path}/';
-    final uri = base.replace(path: '${prefix}Items/${Uri.encodeComponent(entry.id)}/Download');
-    await downloadResumableArchive(
-      url: uri,
-      headers: headers,
-      destination: File(dir),
-      onProgress: onProgress,
-      cancelToken: cancelToken,
-    );
-    checkDownloadCanceled(cancelToken);
-    onProgress(92);
+    final count = stream.pageCount;
+    final manifest = File('${staging.path}/.kurage-part.json');
+    final identity = <String, Object>{
+      'itemId': entry.id,
+      'pageCount': count,
+      'fingerprint': stream.fingerprint,
+    };
+    final completedMarker = File('${finalDirectory.path}/.kurage-complete.json');
+    if (!originalDownloaded && await completedMarker.exists()) {
+      try {
+        final saved = jsonDecode(await completedMarker.readAsString());
+        if (saved is Map && saved['itemId'] == entry.id &&
+            saved['pageCount'] == count &&
+            saved['fingerprint'] == stream.fingerprint) {
+          var valid = true;
+          for (var index = 0; index < count; index++) {
+            final file = File('${finalDirectory.path}/'
+                '${stream.pageFile(index).uri.pathSegments.last}');
+            if (!await stream.isPageValid(index, file)) {
+              valid = false;
+              break;
+            }
+          }
+          if (valid) {
+            checkDownloadCanceled(cancelToken);
+            entry.folderPath = finalDirectory.path;
+            entry.filePath = finalDirectory.path;
+            entry.downloaded = true;
+            await isar.writeTxn(() async => isar.entrys.put(entry));
+            committed = true;
+            onProgress(100);
+            if (await staging.exists()) await staging.delete(recursive: true);
+            return entry;
+          }
+        }
+      } on FileSystemException {
+        // Recovery falls through to the staged page download.
+      } on FormatException {
+        // Recovery falls through to the staged page download.
+      }
+    }
+    var reuse = false;
+    if (await manifest.exists()) {
+      try {
+        final saved = jsonDecode(await manifest.readAsString());
+        reuse = saved is Map && saved['itemId'] == entry.id &&
+            saved['pageCount'] == count &&
+            saved['fingerprint'] == stream.fingerprint;
+      } catch (_) {}
+    }
+    if (!reuse && await staging.exists()) {
+      await staging.delete(recursive: true);
+    }
+    await staging.create(recursive: true);
+    await manifest.writeAsString(jsonEncode(identity), flush: true);
 
-    extractionStarted = true;
-    await _extractFile(entry, dirLocation, fileName, dir);
-    checkDownloadCanceled(cancelToken);
-    onProgress(100);
+    final completed = <int>{};
+    for (var index = 0; index < count; index++) {
+      checkDownloadCanceled(cancelToken);
+      final file = stream.pageFile(index);
+      if (await stream.isPageValid(index, file)) {
+        completed.add(index);
+      } else if (await file.exists()) {
+        await file.delete();
+      }
+    }
+    void report() {
+      onProgress(completed.length == count
+          ? 99
+          : completed.length / count * 100);
+    }
+    report();
 
-    // Update the entry (do not reset reading progress)
+    for (var index = 0; index < count; index++) {
+      if (completed.contains(index)) continue;
+      checkDownloadCanceled(cancelToken);
+      final cached = await ReaderPageCache.getPage(entry.id, index);
+      if (cached == null) continue;
+      final target = stream.pageFile(index);
+      final temporary = File('${target.path}.tmp');
+      try {
+        await cached.copy(temporary.path);
+        if (!await stream.isPageValid(index, temporary)) continue;
+        checkDownloadCanceled(cancelToken);
+        await temporary.rename(target.path);
+        completed.add(index);
+        report();
+      } on FileSystemException {
+        // Cache eviction can race a copy; the network path will fill the gap.
+      } finally {
+        if (await temporary.exists()) await temporary.delete();
+      }
+    }
+
+    for (var index = 0; index < count; index++) {
+      if (completed.contains(index)) continue;
+      checkDownloadCanceled(cancelToken);
+      await stream.getPage(index);
+      completed.add(index);
+      report();
+    }
+    checkDownloadCanceled(cancelToken);
+
+    final names = [
+      for (var index = 0; index < count; index++) stream.pageName(index) ?? ''
+    ];
+    await File('${staging.path}/.kurage-page-names.json')
+        .writeAsString(jsonEncode(names), flush: true);
+    await stream.getComicInfo(File('${staging.path}/ComicInfo.xml'));
+    await File('${staging.path}/.kurage-complete.json')
+        .writeAsString(jsonEncode(identity), flush: true);
+    if (await manifest.exists()) await manifest.delete();
+    checkDownloadCanceled(cancelToken);
+
+    if (originalDownloaded && await finalDirectory.exists()) {
+      if (await backup.exists()) await backup.delete(recursive: true);
+      await finalDirectory.rename(backup.path);
+    } else if (await finalDirectory.exists()) {
+      await finalDirectory.delete(recursive: true);
+    }
+    await staging.rename(finalDirectory.path);
+    published = true;
+    entry.folderPath = finalDirectory.path;
+    entry.filePath = finalDirectory.path;
     entry.downloaded = true;
     checkDownloadCanceled(cancelToken);
-    await isar.writeTxn(() async {
-      await isar.entrys.put(entry);
-    });
-    databaseCommitted = true;
-    checkDownloadCanceled(cancelToken);
-
-    // Retain the complete archive through extraction and the final Isar commit.
-    // After a crash during extraction, startup can safely try again.
-    final archive = File(dir);
-    if (await archive.exists()) await archive.delete();
-    // Cancellation can arrive during the final asynchronous file operation.
-    checkDownloadCanceled(cancelToken);
-    logger.d('Download complete: ${entry.title}');
+    await isar.writeTxn(() async => isar.entrys.put(entry));
+    committed = true;
+    onProgress(100);
+    if (await File('${finalDirectory.path}/ComicInfo.xml').exists()) {
+      try {
+        await parseXML(entry);
+      } catch (error) {
+        logger.w('Could not read ComicInfo.xml for ${entry.id}: $error');
+      }
+    }
+    try {
+      if (await backup.exists()) await backup.delete(recursive: true);
+    } catch (error) {
+      logger.w('Could not remove replaced download: $error');
+    }
+    try {
+      final archiveName = await fileNameFromTitle(entry.path.split('/').last);
+      final archive = '${root.path}/$archiveName';
+      for (final path in [archive, '$archive.part', '$archive.part.json']) {
+        final old = File(path);
+        if (await old.exists()) await old.delete();
+      }
+    } catch (error) {
+      logger.w('Could not remove old archive download: $error');
+    }
     return entry;
-  } catch (e) {
-    if (cancelToken?.isCancelled ?? false) {
-      // Do not leave an archive or half-extracted book behind. The extraction
-      // isolate has finished before this cleanup runs, so files aren't deleted
-      // while it still writes to them.
+  } catch (error) {
+    if (published && !committed) {
+      if (await staging.exists()) await staging.delete(recursive: true);
+      await finalDirectory.rename(staging.path);
+      if (await backup.exists()) await backup.rename(finalDirectory.path);
+    }
+    if (!committed) {
       entry.downloaded = originalDownloaded;
       entry.folderPath = originalFolderPath;
       entry.filePath = originalFilePath;
-      if (databaseCommitted) {
-        await isar.writeTxn(() async => isar.entrys.put(entry));
-      }
-      if (extractionStarted && !originalDownloaded) {
-        final folderName = await fileNameFromTitle(entry.title);
-        final folder = Directory('$dirLocation/$folderName');
-        if (await folder.exists()) await folder.delete(recursive: true);
-      }
-      for (final path in [dir, '$dir.part', '$dir.part.json']) {
-        final file = File(path);
-        if (await file.exists()) await file.delete();
-      }
+    }
+    if (cancelToken?.isCancelled ?? false) {
+      await discardPageDownload(entry);
       throw const DownloadCanceled();
     }
-    logger.e('Download failed: $e');
     rethrow;
   }
-}
-
-Future<void> _extractFile(
-  Entry entry,
-  String dirLocation,
-  String fileName,
-  String dir,
-) async {
-  final isar = Isar.getInstance();
-  if (isar == null) return;
-
-  final folderName = await fileNameFromTitle(entry.title);
-  String comicFolder = '$dirLocation/$folderName';
-  await Directory(comicFolder).create(recursive: true);
-
-  try {
-    if (dir.contains('.zip') || dir.contains('.cbz')) {
-      // Clear any files left by a previous interrupted extraction.
-      if (await Directory(comicFolder).exists()) {
-        await Directory(comicFolder).delete(recursive: true);
-      }
-      await Directory(comicFolder).create(recursive: true);
-      // Stream entries to disk on a background isolate. Avoids decodeBytes()
-      // which keeps the entire archive in RAM and starves the reader.
-      await _extractZipOffUi(dir, comicFolder);
-      entry.downloaded = true;
-      entry.folderPath = comicFolder;
-    } else if (_isAudioFile(dir)) {
-      var file = File('$dirLocation/$fileName');
-      await Directory(comicFolder).create(recursive: true);
-      file.renameSync('$comicFolder/$fileName');
-      entry.folderPath = comicFolder;
-      entry.filePath = '$comicFolder/$fileName';
-      entry.downloaded = true;
-    }
-
-    // The caller performs the single durable Isar update after checking
-    // cancellation. Committing here could resurrect a canceled download.
-    parseXML(entry);
-  } catch (e) {
-    logger.e('Extract failed: $e');
-    rethrow;
-  }
-}
-
-/// Stream-unzip a CBZ/ZIP on a background isolate.
-/// Uses file streams so pages are written one at a time instead of holding
-/// the full decompressed archive in memory (which caused UI jank ~95%).
-Future<void> _extractZipOffUi(String archivePath, String destFolder) async {
-  await Isolate.run(() {
-    final input = InputFileStream(archivePath);
-    try {
-      final archive = ZipDecoder().decodeBuffer(input);
-      for (final file in archive) {
-        if (!file.isFile) continue;
-        final name = file.name.replaceAll('\\', '/');
-        if (name.isEmpty || name.endsWith('/')) continue;
-        if (name.split('/').contains('..')) continue;
-        final outPath = '$destFolder/$name';
-        // Keep writes inside the destination folder
-        final destCanon = Directory(destFolder).absolute.path;
-        final outCanon = File(outPath).absolute.path;
-        if (!outCanon.startsWith(destCanon)) continue;
-
-        File(outPath).parent.createSync(recursive: true);
-        final output = OutputFileStream(outPath);
-        try {
-          file.writeContent(output);
-        } finally {
-          output.close();
-        }
-        // Free this entry's decompressed bytes before the next one
-        file.clear();
-      }
-    } finally {
-      input.close();
-    }
-  });
-}
-
-bool _isAudioFile(String path) {
-  final audioExts = [
-    '.flac',
-    '.mpga',
-    '.mp3',
-    '.m3u',
-    '.m3u8',
-    '.m4a',
-    '.m4b',
-    '.wav'
-  ];
-  return audioExts.any(path.toLowerCase().endsWith);
-}
-
-Map<String, String> _getHeaders(Entry entry, SharedPreferences prefs) {
-  String client = prefs.getString('client') ?? 'JellyBook';
-  String token = prefs.getString('accessToken') ?? '';
-  String device = prefs.getString('device') ?? '';
-  String deviceId = prefs.getString('deviceId') ?? '';
-  String version = prefs.getString('version') ?? '';
-
-  return {
-    'Accept':
-        'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-    'Accept-Encoding': 'gzip, deflate',
-    'Accept-Language': 'en-US,en;q=0.5',
-    'Connection': 'keep-alive',
-    'Upgrade-Insecure-Requests': '1',
-    'Authorization':
-        'MediaBrowser Client="$client", Device="$device", DeviceId="$deviceId", Version="$version", Token="$token"',
-  };
 }

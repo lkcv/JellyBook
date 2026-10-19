@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:jellybook/providers/updatePagenum.dart';
@@ -261,9 +262,20 @@ class _CbzReaderState extends State<CbzReader>
         await _ensureStreamInitialized();
       } else {
         await createPageList();
+        var originalNames = pages;
+        final namesFile = File('$path/.kurage-page-names.json');
+        if (await namesFile.exists()) {
+          try {
+            final decoded = jsonDecode(await namesFile.readAsString());
+            if (decoded is List && decoded.length == pages.length &&
+                decoded.every((value) => value is String)) {
+              originalNames = decoded.cast<String>();
+            }
+          } catch (_) {}
+        }
         _chapterLabels
           ..clear()
-          ..addAll(_chaptersFromNames(pages));
+          ..addAll(_chaptersFromNames(originalNames));
       }
 
       final lastPage = pageNums == 0 ? 0 : pageNums - 1;
