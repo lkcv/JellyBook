@@ -13,7 +13,7 @@ import 'package:isar/isar.dart';
 import 'package:jellybook/variables.dart';
 
 // get comics
-Future<void> getComics(String comicsId) async {
+Future<Set<String>> getComics(String comicsId) async {
   logger.d('getting comics');
   final prefs = await SharedPreferences.getInstance();
   final token = prefs.getString('accessToken');
@@ -46,9 +46,18 @@ Future<void> getComics(String comicsId) async {
       headers: headers,
       parentId: comicsId,
     );
-    responseData = response.data?['Items'] as List<dynamic>? ?? [];
+    final data = response.data;
+    if (data == null || data['Items'] is! List) {
+      throw StateError('Invalid Jellyfin items response');
+    }
+    responseData = data['Items'] as List<dynamic>;
+    final total = (data['TotalRecordCount'] as num?)?.toInt();
+    if (total != null && total != responseData.length) {
+      throw StateError('Incomplete Jellyfin items response');
+    }
   } catch (e) {
     logger.e(e);
+    rethrow;
   }
   final protectedIds = protectedAtFetchStart
     ..addAll(await locallyProtectedProgressIds(revisionBeforeFetch));
@@ -57,20 +66,11 @@ Future<void> getComics(String comicsId) async {
   logger.d("Now saving comics to database");
 
   final isar = Isar.getInstance();
-  // get entries from the database
-  try {
-    final entries = await isar!.entrys.where().idEqualTo(comicsId).findAll();
-    logger.d("entries: $entries");
-    logger.d("entries length: ${entries.length}");
-  } catch (e) {
-    logger.e(e.toString());
-  }
-
-  logger.d("got box");
-  final entries = await isar!.entrys.where().findAll();
-  logger.d("got entries");
-
-  // List<Map<String, dynamic>> comics = [];
+  final existing = {
+    for (final entry in await isar!.entrys.where().findAll()) entry.id: entry,
+  };
+  final updated = <Entry>[];
+  final serverIds = <String>{};
   for (final raw in responseData) {
     final element = raw as Map<String, dynamic>;
     // Jellyfin can flag a one-volume series directory as IsFolder while its
@@ -80,6 +80,9 @@ Future<void> getComics(String comicsId) async {
         element['IsFolder'] == true && jellyfinKind != 'book';
     final imageTags = element['ImageTags'] as Map<String, dynamic>?;
     final itemId = element['Id'] as String? ?? '';
+    if (itemId.isEmpty) throw StateError('Jellyfin item without an ID');
+    // Include unsupported types so their previously stored rows aren't purged.
+    serverIds.add(itemId);
     Entry entry = Entry(
       id: itemId,
       title: element['Name'] as String? ?? '',
@@ -110,20 +113,15 @@ Future<void> getComics(String comicsId) async {
     // rows remain in Isar but are hidden by the same format policy.
     if (!isSupportedEntry(entry)) continue;
 
-    entries.indexWhere((element1) {
-      if (element1.id == entry.id) {
-        entry.isarId = element1.isarId;
-        entry.downloaded = element1.downloaded;
-        entry.progress = element1.progress;
-        entry.folderPath = element1.folderPath;
-        entry.filePath = element1.filePath;
-        entry.pageNum = element1.pageNum;
-
-        return true;
-      } else {
-        return false;
-      }
-    });
+    final previous = existing[entry.id];
+    if (previous != null) {
+      entry.isarId = previous.isarId;
+      entry.downloaded = previous.downloaded;
+      entry.progress = previous.progress;
+      entry.folderPath = previous.folderPath;
+      entry.filePath = previous.filePath;
+      entry.pageNum = previous.pageNum;
+    }
     // Jellyfin reports comic page indices as 10,000 ticks per zero-based
     // page. Only CBZ/ZIP progress uses this convention; EPUB is separate.
     // A pending local upload or a page change during the GET wins over this
@@ -147,10 +145,10 @@ Future<void> getComics(String comicsId) async {
         logger.d('Restored Jellyfin page index $serverPage for ${entry.id}');
       }
     }
-    entries.add(entry);
+    updated.add(entry);
   }
   await isar.writeTxn(() async {
-    await isar.entrys.putAll(entries);
+    await isar.entrys.putAll(updated);
   });
 
   // The streaming reader prefers the retained cache's page marker. Bring it
@@ -164,8 +162,45 @@ Future<void> getComics(String comicsId) async {
     }
   }
 
-  // update folders
-  await updateFolders();
+  return serverIds;
+}
+
+/// Reconcile a completed, successful Jellyfin library snapshot with Isar.
+/// Never interpret a failed fetch as an empty catalog; getComics validates
+/// every response before this is called. A running scan can be incomplete.
+/// This changes database metadata only; it does not delete local files.
+Future<void> reconcileMissingEntries(
+  Set<String> serverIds, {
+  required JellyfinApi api,
+  required Map<String, String> headers,
+}) async {
+  final isar = Isar.getInstance()!;
+  final entries = await isar.entrys.where().findAll();
+  final folders = await isar.folders.where().findAll();
+  final missingEntries = entries
+      .where((entry) => !serverIds.contains(entry.id))
+      .toList();
+  final missingFolders = folders
+      .where((folder) => !serverIds.contains(folder.id))
+      .toList();
+
+  if (missingEntries.isEmpty && missingFolders.isEmpty) return;
+  if (await api.isLibraryScanRunning(headers: headers) == true) {
+    logger.i('Skipping library pruning while Jellyfin is scanning');
+    return;
+  }
+
+  // An absent item should no longer appear in the Library after one
+  // successful refresh, regardless of its old Isar insertion order or
+  // whether it was previously downloaded. Leave physical files untouched.
+  await isar.writeTxn(() async {
+    await isar.entrys.deleteAll(
+        missingEntries.map((entry) => entry.isarId).toList());
+    await isar.folders.deleteAll(
+        missingFolders.map((folder) => folder.isarId).toList());
+  });
+  logger.i('Pruned ${missingEntries.length} missing entries and '
+      '${missingFolders.length} missing folders from Isar');
 }
 
 Future<void> updateFolders() async {

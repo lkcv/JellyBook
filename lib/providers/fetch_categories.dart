@@ -150,10 +150,20 @@ Future<(List<Entry>, List<Folder>)> getServerCategories({
       comicsId = element['Id'] as String;
       comicsIds.add(comicsId);
     });
+    final serverIds = <String>{};
     for (int i = 0; i < comicsIds.length; i++) {
       // turn List<Entry> into Iterable<Entry>
-      await getComics(comicsIds[i]);
+      serverIds.addAll(await getComics(comicsIds[i]));
       // comics.addAll(comicsTemp);
+    }
+    // Only reconcile after every library returned a complete, successful GET.
+    // A transiently empty UserViews response cannot wipe the local catalog.
+    if (comicsIds.isNotEmpty) {
+      await reconcileMissingEntries(
+        serverIds,
+        api: api,
+        headers: headers,
+      );
     }
     comics = (await typeNotBook.sortByTitle().findAll())
         .where(isSupportedEntry).toList();

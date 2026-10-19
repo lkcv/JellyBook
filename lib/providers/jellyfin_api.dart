@@ -84,6 +84,28 @@ class JellyfinApi {
         options: Options(headers: headers),
       );
 
+  // Scan status requires admin permissions on some Jellyfin servers.
+  // Unknown is not the same as idle; callers must also use a grace period.
+  Future<bool?> isLibraryScanRunning({
+    required Map<String, String> headers,
+  }) async {
+    try {
+      final response = await _dio.get<List<dynamic>>(
+        '/ScheduledTasks',
+        options: Options(headers: headers),
+      );
+      for (final raw in response.data ?? const <dynamic>[]) {
+        if (raw is! Map) continue;
+        if (raw['Key']?.toString().toLowerCase() == 'refreshlibrary') {
+          return raw['State']?.toString().toLowerCase() == 'running';
+        }
+      }
+    } on DioException {
+      // Non-admin accounts commonly cannot inspect scheduled tasks.
+    }
+    return null;
+  }
+
   Future<Response<List<int>>> getItemDownloadRange({
     required String itemId,
     required int start,
