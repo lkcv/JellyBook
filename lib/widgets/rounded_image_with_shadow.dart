@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:jellybook/cache/coverCache.dart';
+import 'package:jellybook/cache/cover_cache.dart';
 
 class RoundedImageWithShadow extends StatefulWidget {
   final String imageUrl;

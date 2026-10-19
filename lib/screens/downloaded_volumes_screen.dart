@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import 'package:jellybook/models/entry.dart';
 import 'package:jellybook/models/folder.dart';
-import 'package:jellybook/providers/deleteComic.dart';
-import 'package:jellybook/providers/supportedFormats.dart';
+import 'package:jellybook/providers/delete_comic.dart';
+import 'package:jellybook/providers/supported_formats.dart';
 
 /// Storage management, not a second reading/browsing interface.
 class DownloadedVolumesScreen extends StatefulWidget {

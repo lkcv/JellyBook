@@ -1,10 +1,10 @@
 // The purpose of this file is to fetch the categories from the database
 
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:jellybook/providers/jellyfinApi.dart';
-import 'package:jellybook/providers/fetchBooks.dart';
-import 'package:jellybook/providers/folderProvider.dart';
-import 'package:jellybook/providers/supportedFormats.dart';
+import 'package:jellybook/providers/jellyfin_api.dart';
+import 'package:jellybook/providers/fetch_books.dart';
+import 'package:jellybook/providers/folder_provider.dart';
+import 'package:jellybook/providers/supported_formats.dart';
 import 'package:jellybook/models/entry.dart';
 import 'package:jellybook/models/folder.dart';
 import 'package:isar/isar.dart';

@@ -5,10 +5,10 @@
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import 'package:jellybook/models/entry.dart';
-import 'package:jellybook/providers/supportedFormats.dart';
+import 'package:jellybook/providers/supported_formats.dart';
 
 // reading screen
-import 'package:jellybook/screens/readingScreens/cbzReader.dart';
+import 'package:jellybook/screens/readingScreens/cbz_reader.dart';
 
 import 'package:jellybook/l10n/app_localizations.dart';
 import 'package:jellybook/variables.dart';

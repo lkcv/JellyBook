@@ -1,8 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:jellybook/providers/downloadQueue.dart';
-import 'package:jellybook/cache/coverCache.dart';
+import 'package:jellybook/providers/download_queue.dart';
+import 'package:jellybook/cache/cover_cache.dart';
 
 /// A single low-priority disk-only cover fetcher shared by Library/Collection.
 /// It deliberately never resolves an ImageProvider or pins decoded images.

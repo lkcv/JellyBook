@@ -9,13 +9,13 @@ import 'package:google_nav_bar/google_nav_bar.dart';
 import 'package:provider/provider.dart';
 
 // Screens imports
-import 'package:jellybook/screens/MainScreens/libraryScreen.dart';
-import 'package:jellybook/screens/MainScreens/settingsScreen.dart';
-import 'package:jellybook/screens/MainScreens/searchScreen.dart';
-import 'package:jellybook/screens/loginScreen.dart';
+import 'package:jellybook/screens/MainScreens/library_screen.dart';
+import 'package:jellybook/screens/MainScreens/settings_screen.dart';
+import 'package:jellybook/screens/MainScreens/search_screen.dart';
+import 'package:jellybook/screens/login_screen.dart';
 import 'package:jellybook/l10n/app_localizations.dart';
 import 'package:jellybook/variables.dart';
-import 'package:jellybook/providers/connectionManager.dart';
+import 'package:jellybook/providers/connection_manager.dart';
 
 class HomeScreen extends StatefulWidget {
   @override

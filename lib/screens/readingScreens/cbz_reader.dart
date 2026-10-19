@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:jellybook/providers/updatePagenum.dart';
-import 'package:jellybook/providers/downloadQueue.dart';
+import 'package:jellybook/providers/update_pagenum.dart';
+import 'package:jellybook/providers/download_queue.dart';
 import 'package:isar/isar.dart';
 import 'package:jellybook/models/entry.dart';
 import 'package:jellybook/providers/progress.dart';
@@ -14,11 +14,11 @@ import 'package:auto_size_text/auto_size_text.dart';
 import 'dart:collection';
 import 'package:flutter/scheduler.dart';
 import 'package:provider/provider.dart';
-import 'package:jellybook/providers/connectionManager.dart';
-import 'package:jellybook/providers/cbzStream.dart';
-import 'package:jellybook/cache/readerPageCache.dart';
-import 'package:jellybook/widgets/readerPinchZoom.dart';
-import 'package:jellybook/widgets/coverOpeningRoute.dart';
+import 'package:jellybook/providers/connection_manager.dart';
+import 'package:jellybook/providers/cbz_stream.dart';
+import 'package:jellybook/cache/reader_page_cache.dart';
+import 'package:jellybook/widgets/reader_pinch_zoom.dart';
+import 'package:jellybook/widgets/cover_opening_route.dart';
 
 class CbzReader extends StatefulWidget {
   final String title;

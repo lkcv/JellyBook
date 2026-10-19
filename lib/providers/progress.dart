@@ -4,7 +4,7 @@
 import 'package:isar/isar.dart';
 import 'package:jellybook/models/entry.dart';
 import 'package:jellybook/variables.dart';
-import 'package:jellybook/providers/updatePagenum.dart';
+import 'package:jellybook/providers/update_pagenum.dart';
 
 Future<void> saveProgress({
   required int page,

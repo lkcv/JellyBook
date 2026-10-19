@@ -1,14 +1,14 @@
 // the purpose of this file is to fetch books from the database to be displayed in the app
 
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:jellybook/providers/jellyfinApi.dart';
+import 'package:jellybook/providers/jellyfin_api.dart';
 
 // database imports
 import 'package:jellybook/models/entry.dart';
 import 'package:jellybook/models/folder.dart';
-import 'package:jellybook/providers/supportedFormats.dart';
-import 'package:jellybook/providers/updatePagenum.dart';
-import 'package:jellybook/cache/readerPageCache.dart';
+import 'package:jellybook/providers/supported_formats.dart';
+import 'package:jellybook/providers/update_pagenum.dart';
+import 'package:jellybook/cache/reader_page_cache.dart';
 import 'package:isar/isar.dart';
 import 'package:jellybook/variables.dart';
 

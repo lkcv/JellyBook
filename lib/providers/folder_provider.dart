@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:isar/isar.dart';
 import 'package:jellybook/models/folder.dart';
 import 'package:jellybook/models/entry.dart';
-import 'package:jellybook/providers/supportedFormats.dart';
+import 'package:jellybook/providers/supported_formats.dart';
 import 'package:jellybook/variables.dart';
 
 // This function takes the list of entries and creates folders if their parentId is not one of the categories

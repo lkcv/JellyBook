@@ -7,21 +7,21 @@ import 'package:isar/isar.dart';
 import 'package:jellybook/models/entry.dart';
 import 'package:jellybook/models/folder.dart';
 import 'package:jellybook/models/login.dart';
-import 'package:jellybook/screens/loginScreen.dart';
-import 'package:jellybook/providers/themeProvider.dart';
+import 'package:jellybook/screens/login_screen.dart';
+import 'package:jellybook/providers/theme_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart' as p_info;
 import 'package:provider/provider.dart';
 import 'package:jellybook/l10n/app_localizations.dart';
-import 'package:jellybook/providers/languageProvider.dart';
-import 'package:jellybook/widgets/SettingsItem.dart';
-import 'package:jellybook/cache/coverCache.dart';
-import 'package:jellybook/widgets/readerCacheSettings.dart';
-import 'package:jellybook/themes/themeConstants.dart';
-import 'package:jellybook/widgets/jellybookHeader.dart';
+import 'package:jellybook/providers/language_provider.dart';
+import 'package:jellybook/widgets/settings_item.dart';
+import 'package:jellybook/cache/cover_cache.dart';
+import 'package:jellybook/widgets/reader_cache_settings.dart';
+import 'package:jellybook/themes/theme_constants.dart';
+import 'package:jellybook/widgets/jellybook_header.dart';
 import 'package:jellybook/variables.dart';
-import 'package:jellybook/providers/jellyfinApi.dart';
+import 'package:jellybook/providers/jellyfin_api.dart';
 
 class SettingsScreen extends StatefulWidget {
   @override

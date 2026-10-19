@@ -11,7 +11,7 @@ import 'package:package_info_plus/package_info_plus.dart' as package_info;
 import 'package:isar/isar.dart';
 import 'package:jellybook/l10n/app_localizations.dart';
 import 'package:jellybook/models/login.dart';
-import 'package:jellybook/providers/jellyfinApi.dart';
+import 'package:jellybook/providers/jellyfin_api.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:jellybook/variables.dart';
 

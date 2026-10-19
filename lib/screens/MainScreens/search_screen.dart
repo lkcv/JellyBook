@@ -7,18 +7,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:isar/isar.dart';
 import 'package:jellybook/models/entry.dart';
-import 'package:jellybook/providers/supportedFormats.dart';
-import 'package:jellybook/screens/readingScreen.dart';
-import 'package:jellybook/screens/readingScreens/cbzReader.dart';
-import 'package:jellybook/cache/readerPageCache.dart';
-import 'package:jellybook/providers/connectionManager.dart';
-import 'package:jellybook/widgets/coverOpeningRoute.dart';
-import 'package:jellybook/widgets/volumeActions.dart';
+import 'package:jellybook/providers/supported_formats.dart';
+import 'package:jellybook/screens/reading_screen.dart';
+import 'package:jellybook/screens/readingScreens/cbz_reader.dart';
+import 'package:jellybook/cache/reader_page_cache.dart';
+import 'package:jellybook/providers/connection_manager.dart';
+import 'package:jellybook/widgets/cover_opening_route.dart';
+import 'package:jellybook/widgets/volume_actions.dart';
 import 'package:provider/provider.dart';
 import 'package:string_similarity/string_similarity.dart';
 import 'package:jellybook/l10n/app_localizations.dart';
-import 'package:jellybook/themes/themeConstants.dart';
-import 'package:jellybook/screens/collectionScreen.dart' show KuroStyleBookCard;
+import 'package:jellybook/themes/theme_constants.dart';
+import 'package:jellybook/screens/collection_screen.dart' show KuroStyleBookCard;
 
 // Match the Library's two 17.5px concave header corners while leaving the
 // middle transparent for content scrolling behind the header.

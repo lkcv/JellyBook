@@ -3,14 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import 'package:jellybook/models/entry.dart';
-import 'package:jellybook/providers/deleteComic.dart';
-import 'package:jellybook/providers/downloadQueue.dart';
-import 'package:jellybook/providers/libraryFilter.dart';
-import 'package:jellybook/cache/readerPageCache.dart';
-import 'package:jellybook/providers/serverProgressRevision.dart';
-import 'package:jellybook/providers/supportedFormats.dart';
+import 'package:jellybook/providers/delete_comic.dart';
+import 'package:jellybook/providers/download_queue.dart';
+import 'package:jellybook/providers/library_filter.dart';
+import 'package:jellybook/cache/reader_page_cache.dart';
+import 'package:jellybook/providers/server_progress_revision.dart';
+import 'package:jellybook/providers/supported_formats.dart';
 import 'package:jellybook/variables.dart';
-import 'package:jellybook/widgets/itemActionSheet.dart';
+import 'package:jellybook/widgets/item_action_sheet.dart';
 
 /// Distinguishes filesystem/queue changes from progress-only badge updates.
 enum VolumeActionChange { download, readingStatus }

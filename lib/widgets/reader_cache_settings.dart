@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:jellybook/screens/downloadedVolumesScreen.dart';
-import 'package:jellybook/cache/readerPageCache.dart';
-import 'package:jellybook/cache/coverCache.dart';
+import 'package:jellybook/screens/downloaded_volumes_screen.dart';
+import 'package:jellybook/cache/reader_page_cache.dart';
+import 'package:jellybook/cache/cover_cache.dart';
 
 class ReaderCacheSettings extends StatefulWidget {
   const ReaderCacheSettings({super.key});

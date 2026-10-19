@@ -4,7 +4,7 @@
 import 'package:isar/isar.dart';
 import 'package:jellybook/models/entry.dart';
 import 'package:jellybook/models/folder.dart';
-import 'package:jellybook/providers/supportedFormats.dart';
+import 'package:jellybook/providers/supported_formats.dart';
 
 class LibraryFilter {
   const LibraryFilter({this.downloadedOnly = false, this.readingOnly = false});
