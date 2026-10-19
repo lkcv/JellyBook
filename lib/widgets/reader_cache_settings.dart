@@ -351,81 +351,87 @@ class _CacheLimitDialogState extends State<_CacheLimitDialog> {
     return AlertDialog(
       scrollable: true,
       title: const Text('Maximum reader cache size'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          InkWell(
-            borderRadius: BorderRadius.circular(8),
-            onTap: () => setState(() => _custom = false),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              child: Row(
-                children: [
-                  Radio<bool>(
-                    value: false,
-                    groupValue: _custom,
-                    onChanged: (_) => setState(() => _custom = false),
-                  ),
-                  const Expanded(child: Text('300 MB (default)')),
-                ],
-              ),
-            ),
-          ),
-          InkWell(
-            borderRadius: BorderRadius.circular(8),
-            onTap: () => _selectCustom(),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              child: Row(
-                children: [
-                  Radio<bool>(
-                    value: true,
-                    groupValue: _custom,
-                    onChanged: (_) => _selectCustom(),
-                  ),
-                  const Text('Custom'),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: TextField(
-                      controller: _controller,
-                      focusNode: _numberFocus,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      textAlign: TextAlign.center,
-                      decoration: const InputDecoration(
-                        isDense: true,
-                        border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 10,
-                        ),
-                      ),
-                      onTap: () => _selectCustom(focusNumber: false),
-                      onChanged: (_) => setState(() => _custom = true),
+      content: RadioGroup<bool>(
+        groupValue: _custom,
+        onChanged: (bool? selected) {
+          if (selected == true) {
+            _selectCustom();
+          } else if (selected == false) {
+            setState(() => _custom = false);
+          }
+        },
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: () => setState(() => _custom = false),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                child: Row(
+                  children: [
+                    const Radio<bool>(
+                      value: false,
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  const Text('MB'),
-                ],
+                    const Expanded(child: Text('300 MB (default)')),
+                  ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Reducing the limit removes older cached pages or volumes. '
-            'Downloads are unaffected.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          if (_custom && !validCustom)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                'Enter a positive whole number of MB.',
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
+            InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: () => _selectCustom(),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                child: Row(
+                  children: [
+                    const Radio<bool>(
+                      value: true,
+                    ),
+                    const Text('Custom'),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextField(
+                        controller: _controller,
+                        focusNode: _numberFocus,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        textAlign: TextAlign.center,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 10,
+                          ),
+                        ),
+                        onTap: () => _selectCustom(focusNumber: false),
+                        onChanged: (_) => setState(() => _custom = true),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const Text('MB'),
+                  ],
+                ),
               ),
             ),
-        ],
+            const SizedBox(height: 12),
+            Text(
+              'Reducing the limit removes older cached pages or volumes. '
+              'Downloads are unaffected.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            if (_custom && !validCustom)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  'Enter a positive whole number of MB.',
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ),
+          ],
+        ),
       ),
       actions: [
         TextButton(
