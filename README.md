@@ -1,6 +1,6 @@
 # Kurage (クラゲ)
 
-*Pronounced “koo-rah-geh” — Japanese for jellyfish.*
+*Pronounced similarly to “koo-rah-geh” — Japanese for jellyfish.*
 
 > **AI Disclosure:** Kurage is developed with significant AI assistance. I lead the project's UI design and architecture, with AI assisting in investigation and implementation. I've reviewed and tested all changes.
 
@@ -17,6 +17,15 @@ Kurage is a manga and comic reader for [Jellyfin](https://jellyfin.org/), built 
 - Stream volumes directly from Jellyfin or download them for offline reading.
 
 - Cover caching and preloading to minimize image pop-in during navigation.
+
+## Screenshots
+<p align="center">
+  <img src="assets/githubImages/screenshots/Phone/library.jpg" width="250" alt="Library">
+  <img src="assets/githubImages/screenshots/Phone/collection.jpg" width="250" alt="Collection">
+  <br>
+  <img src="assets/githubImages/screenshots/Phone/reader-ui_all.jpg" width="250" alt="Reader-UI-All">
+  <img src="assets/githubImages/screenshots/Phone/reader_ui-immersive.jpg" width="250" alt="Reader-UI-Immersive">
+</p>
 
 ## Platform Support
 I've only tested Android so far, but iOS should work too.
