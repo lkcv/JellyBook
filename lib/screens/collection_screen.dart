@@ -7,6 +7,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:isar/isar.dart';
 import 'package:jellybook/models/entry.dart';
 import 'package:jellybook/providers/supported_formats.dart';
+import 'package:jellybook/providers/volume_sort.dart';
 import 'package:jellybook/providers/library_filter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -645,6 +646,7 @@ class _CollectionScreenState extends State<CollectionScreen> with WidgetsBinding
         .filter()
         .anyOf(bookIds, (q, String id) => q.idEqualTo(id))
         .findAll();
+    entryList.sort(compareVolumeEntries);
     _unfilteredEntries = entryList.where((entry) =>
         entry.type != EntryType.folder && isSupportedEntry(entry)).toList();
     entryList = LibraryFilter(
