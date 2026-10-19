@@ -157,7 +157,7 @@ class LoginProvider {
   ]) async {
     logger.d("LoginStatic called");
     String requestUrl = url;
-    final BuildContext loginContext = context;
+    final localizations = AppLocalizations.of(context);
     const client = "JellyBook";
     String device;
     String deviceId;
@@ -194,18 +194,18 @@ class LoginProvider {
       logger.e("URL is not valid");
       // tell why it is not valid
       if (!requestUrl.startsWith("http")) {
-        return AppLocalizations.of(loginContext)?.noHttp ??
+        return localizations?.noHttp ??
             "URL does not start with http:// or https://";
       }
       if (!requestUrl.contains(".")) {
-        return AppLocalizations.of(loginContext)?.noDot ??
+        return localizations?.noDot ??
             "URL does not contain a .";
       }
       if (!requestUrl.contains("/")) {
-        return AppLocalizations.of(loginContext)?.noSlash ??
+        return localizations?.noSlash ??
             "URL does not contain a /";
       }
-      return AppLocalizations.of(loginContext)?.invalidUrl ??
+      return localizations?.invalidUrl ??
           "URL is not valid. Please check the URL and try again.";
     }
 
@@ -242,35 +242,35 @@ class LoginProvider {
     } else {
       if (response.statusCode == 401) {
         logger.e("401");
-        return AppLocalizations.of(loginContext)?.invalidCredentials ??
+        return localizations?.invalidCredentials ??
             "Incorrect username or password";
       } else if (response.statusCode == 404) {
         logger.e("404");
-        return AppLocalizations.of(loginContext)?.serverNotFound ??
+        return localizations?.serverNotFound ??
             "Server not found\nPlease check the URL";
       } else if (response.statusCode == 407) {
         logger.e("407");
-        return AppLocalizations.of(loginContext)?.proxyAuthRequired ??
+        return localizations?.proxyAuthRequired ??
             "Proxy authentication required\nPlease check the server logs";
       } else if (response.statusCode == 408) {
         logger.e("408");
-        return AppLocalizations.of(loginContext)?.requestTimeout ??
+        return localizations?.requestTimeout ??
             "Request timeout\nPlease check the server logs";
       } else if (response.statusCode == 418) {
         logger.e("418");
-        return AppLocalizations.of(loginContext)?.dontBrewCoffee ??
+        return localizations?.dontBrewCoffee ??
             "Do not brew coffee with me. I am a teapot";
       } else if (response.statusCode == 500) {
         logger.e("500");
-        return AppLocalizations.of(loginContext)?.serverError ??
+        return localizations?.serverError ??
             "Server error\nPlease check the server logs";
       } else if (response.statusCode == 502) {
         logger.e("502");
-        return AppLocalizations.of(loginContext)?.badGateway ??
+        return localizations?.badGateway ??
             "Bad gateway\nPlease check the server logs";
       } else {
         logger.e("Unknown error");
-        return "${AppLocalizations.of(loginContext)?.error ?? 'Error:'} ${response.statusCode}";
+        return "${localizations?.error ?? 'Error:'} ${response.statusCode}";
       }
     }
   }

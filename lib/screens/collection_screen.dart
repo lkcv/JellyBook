@@ -834,7 +834,7 @@ class _CollectionScreenState extends State<CollectionScreen> with WidgetsBinding
                                 entry.pageNum;
                         final cachedPage =
                             await ReaderPageCache.getPage(entry.id, cachedIndex);
-                        if (!mounted) return;
+                        if (!mounted || !context.mounted) return;
                         if (cachedPage == null) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(

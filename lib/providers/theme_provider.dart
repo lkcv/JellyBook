@@ -25,6 +25,7 @@ class ThemeChangeNotifier extends ChangeNotifier {
         case "amoled":
           _theme = oledTheme;
         case "system":
+          if (!_context.mounted) return;
           _theme = Theme.of(_context).brightness == Brightness.light
               ? ThemeData.light(useMaterial3: true)
               : ThemeData.dark(useMaterial3: true);

@@ -43,6 +43,7 @@ class _HomeScreenState extends State<HomeScreen> {
       isar.logins.deleteAll(loginIds);
       logger.d('deleted ${loginIds.length} logins');
     });
+    if (!mounted) return;
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (context) => const LoginScreen()),

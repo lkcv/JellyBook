@@ -293,7 +293,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               // writes the *applied* theme to 'theme', which may be light or
               // dark when the selection is 'system'.
               await sharedPrefs.setString('themeSelection', selected);
-              if (!mounted) return;
+              if (!mounted || !context.mounted) return;
               prefs = sharedPrefs;
               context.read<ThemeChangeNotifier>().setTheme = selected;
               setState(() {});

@@ -169,6 +169,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       context,
                       _password.text,
                     ).then((value) {
+                      if (!mounted || !context.mounted) return;
                       if (value == "true") {
                         Navigator.pushReplacement(
                           context,

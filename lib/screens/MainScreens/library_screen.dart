@@ -1124,7 +1124,7 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
                           // its visible covers, exactly as with a manual toggle.
                           _coverSignature = null;
                           _scheduleCoverWarming();
-                          ScaffoldMessenger.of(context).showSnackBar(
+                          ScaffoldMessenger.of(this.context).showSnackBar(
                             const SnackBar(
                               content: Text(
                                 'No matching volumes remaining — showing all series',
