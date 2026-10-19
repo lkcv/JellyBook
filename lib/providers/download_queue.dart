@@ -155,7 +155,9 @@ class DownloadQueue extends ChangeNotifier {
   bool _recoverable(Object error) {
     if (error is InterruptedDownload || error is SocketException ||
         error is HttpException || error is TimeoutException ||
-        error is HandshakeException) return true;
+        error is HandshakeException) {
+      return true;
+    }
     if (error is! DioException) return false;
     final status = error.response?.statusCode;
     if (status != null) {
@@ -164,7 +166,9 @@ class DownloadQueue extends ChangeNotifier {
     // Streaming-body errors may be wrapped as DioExceptionType.unknown.
     // File errors and malformed bodies must remain terminal failures.
     if (error.error is FileSystemException ||
-        error.error is FormatException) return false;
+        error.error is FormatException) {
+      return false;
+    }
     return error.type == DioExceptionType.connectionError ||
         error.type == DioExceptionType.connectionTimeout ||
         error.type == DioExceptionType.receiveTimeout ||
@@ -231,7 +235,9 @@ class DownloadQueue extends ChangeNotifier {
           if (id is! String || id.isEmpty) continue;
           if (state != 'queued' && state != 'downloading' &&
               state != 'waitingForNetwork' && state != 'waitingForServer' &&
-              state != 'failed') continue;
+              state != 'failed') {
+            continue;
+          }
           if (!savedIds.add(id)) continue;
           final entry = await isar.entrys.where().idEqualTo(id).findFirst();
           // Never resurrect queued downloads for formats we no longer support.
@@ -354,7 +360,9 @@ class DownloadQueue extends ChangeNotifier {
   void cancel(String id) {
     for (final job in _jobs.toList()) {
       if (job.id != id || job.state == DownloadJobState.canceling ||
-          job.state == DownloadJobState.canceled) continue;
+          job.state == DownloadJobState.canceled) {
+        continue;
+      }
       if (job.state == DownloadJobState.downloading) {
         job.state = DownloadJobState.canceling;
         _changed();

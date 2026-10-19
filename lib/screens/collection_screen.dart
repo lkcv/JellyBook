@@ -146,7 +146,9 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
     try {
       final refreshed = await getEntries();
       if (!mounted || generation != _progressReadGeneration ||
-          !identical(displayed, _latestEntries)) return;
+          !identical(displayed, _latestEntries)) {
+        return;
+      }
       final byId = {for (final entry in refreshed) entry.id: entry};
       if (readingOnly &&
           (displayed.length != refreshed.length ||
@@ -166,7 +168,9 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
         final newest = byId[entry.id];
         if (newest == null ||
             (entry.pageNum == newest.pageNum &&
-                entry.progress == newest.progress)) continue;
+                entry.progress == newest.progress)) {
+          continue;
+        }
         entry.pageNum = newest.pageNum;
         entry.progress = newest.progress;
         changed = true;
@@ -181,7 +185,9 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
   // discover that this filtered Collection no longer contains any volumes.
   void _leaveEmptyFilteredCollection() {
     if (!mounted || _emptyFilteredPopPending ||
-        !(ModalRoute.of(context)?.isCurrent ?? false)) return;
+        !(ModalRoute.of(context)?.isCurrent ?? false)) {
+      return;
+    }
     _emptyFilteredPopPending = true;
     unawaited(Navigator.of(context).maybePop());
   }
@@ -224,9 +230,11 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
     // not a guessed grid rectangle, supplies the shrink destination.
     WidgetsBinding.instance.scheduleFrame();
     await WidgetsBinding.instance.endOfFrame;
-    if (!mounted) return CoverReturnTarget(
-      coverPath: entry.imagePath, rect: null,
-    );
+    if (!mounted) {
+      return CoverReturnTarget(
+        coverPath: entry.imagePath, rect: null,
+      );
+    }
     final rect = _mountedCards[entry.id]?.coverRect;
     return CoverReturnTarget(
       coverPath: entry.imagePath,
@@ -339,7 +347,9 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
       _latestEntries = entries;
     }
     if (!mounted || !_inForeground || _coverWarmingPaused ||
-        _latestEntries == null) return;
+        _latestEntries == null) {
+      return;
+    }
     if (_warming) {
       _warmAgain = true;
       return;
@@ -459,17 +469,29 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
       if (index < 0 || index >= entries.length) return;
       final path = entries[index].imagePath;
       if (path.isNotEmpty && path.toLowerCase() != 'asset' &&
-          seen.add(path)) paths.add(path);
+          seen.add(path)) {
+        paths.add(path);
+      }
     }
 
     // Always prepare the onscreen images first, including after a fling.
-    for (var i = visible.first; i < visible.end; i++) add(i);
+    for (var i = visible.first; i < visible.end; i++) {
+      add(i);
+    }
     if (_scrollDirection >= 0) {
-      for (var i = visible.end; i < math.min(entries.length, visible.end + ahead); i++) add(i);
-      for (var i = visible.first - 1; i >= math.max(0, visible.first - behind); i--) add(i);
+      for (var i = visible.end; i < math.min(entries.length, visible.end + ahead); i++) {
+        add(i);
+      }
+      for (var i = visible.first - 1; i >= math.max(0, visible.first - behind); i--) {
+        add(i);
+      }
     } else {
-      for (var i = visible.first - 1; i >= math.max(0, visible.first - ahead); i--) add(i);
-      for (var i = visible.end; i < math.min(entries.length, visible.end + behind); i++) add(i);
+      for (var i = visible.first - 1; i >= math.max(0, visible.first - ahead); i--) {
+        add(i);
+      }
+      for (var i = visible.end; i < math.min(entries.length, visible.end + behind); i++) {
+        add(i);
+      }
     }
     return paths.take(_maxPinnedCovers).toList();
   }
@@ -489,7 +511,9 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
   Future<void> _pinCover(String path, int generation,
       {Duration timeout = const Duration(seconds: 4)}) async {
     if (!_canWarmCovers(generation) ||
-        _failedCovers.contains(path)) return;
+        _failedCovers.contains(path)) {
+      return;
+    }
     final previous = _pinnedCovers[path];
     if (previous != null && !_revalidateCovers.contains(path)) return;
 

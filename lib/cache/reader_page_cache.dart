@@ -212,7 +212,9 @@ class ReaderPageCache {
       final filename = entry.value;
       if (index == null || index < 0 || filename is! String ||
           filename.isEmpty || filename.contains('/') ||
-          filename.contains('\\')) continue;
+          filename.contains('\\')) {
+        continue;
+      }
       files[index] = File('${directory.path}/$filename');
     }
     return files;

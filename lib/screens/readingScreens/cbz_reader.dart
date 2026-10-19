@@ -348,7 +348,9 @@ class _CbzReaderState extends State<CbzReader>
       return true;
     }
     if (animation.status == AnimationStatus.reverse ||
-        animation.status == AnimationStatus.dismissed) return false;
+        animation.status == AnimationStatus.dismissed) {
+      return false;
+    }
 
     final done = Completer<void>();
     void onStatus(AnimationStatus status) {
@@ -1093,7 +1095,9 @@ class _CbzReaderState extends State<CbzReader>
     }
     const swipeDistance = 56.0; // logical pixels
     if (main.abs() < swipeDistance ||
-        main.abs() < cross.abs() * 1.3) return false;
+        main.abs() < cross.abs() * 1.3) {
+      return false;
+    }
 
     final outward = main > 0 ? _edgePositiveAtStart : _edgeNegativeAtStart;
     if (!outward) return false;

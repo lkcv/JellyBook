@@ -258,7 +258,9 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
   void _tryPendingSync() {
     if (!_startupSyncPending || !mounted || !_inForeground ||
         !_initialCoversReady || _activeRefresh != null ||
-        _connectionManager?.status != ConnectionStatus.online) return;
+        _connectionManager?.status != ConnectionStatus.online) {
+      return;
+    }
     _startupSyncPending = false;
     if (!_serverRefreshStarted) unawaited(_reloadCategories(background: true));
   }
@@ -267,7 +269,9 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
   void _refreshOnLibraryReturnIfStale() {
     if (!mounted || !widget.isActive || !_inForeground ||
         !_initialCoversReady || _activeRefresh != null ||
-        _connectionManager?.status != ConnectionStatus.online) return;
+        _connectionManager?.status != ConnectionStatus.online) {
+      return;
+    }
     if (_startupSyncPending) {
       _tryPendingSync();
       return;
@@ -278,7 +282,9 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
     if ((success != null &&
             now.difference(success) < _libraryReturnRefreshInterval) ||
         (attempt != null &&
-            now.difference(attempt) < _libraryReturnRefreshInterval)) return;
+            now.difference(attempt) < _libraryReturnRefreshInterval)) {
+      return;
+    }
     unawaited(_reloadCategories(background: true));
   }
 
@@ -626,7 +632,9 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
       for (final path in _scrollCoverPriority) {
         if (_scrollCoverLoading.length >= _maxConcurrentScrollCoverLoads) break;
         if (_scrollCoverLoading.contains(path) ||
-            _scrollCoverFailures.contains(path)) continue;
+            _scrollCoverFailures.contains(path)) {
+          continue;
+        }
         if (_scrollCoverPins.containsKey(path)) {
           if (_scrollCoverRefreshPending.contains(path)) {
             _refreshScrollCoverPin(path);
@@ -747,10 +755,14 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
     final wanted = <String>{};
     void addIndex(int index) {
       if (index < 0 || index >= folders.length ||
-          priority.length >= _maxScrollCoverPins) return;
+          priority.length >= _maxScrollCoverPins) {
+        return;
+      }
       final path = folders[index].image;
       if (path.isNotEmpty && path.toLowerCase() != 'asset' &&
-          wanted.add(path)) priority.add(path);
+          wanted.add(path)) {
+        priority.add(path);
+      }
     }
 
     // Resolve covers already on screen first; alternate the lookahead and
@@ -917,7 +929,9 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
       var added = 0;
       for (final entry in latest.where(isVolume)) {
         if (entry.downloaded || !isSupportedEntry(entry) ||
-            !knownJobs.add(entry.id)) continue;
+            !knownJobs.add(entry.id)) {
+          continue;
+        }
         queue.enqueue(entry);
         added++;
       }

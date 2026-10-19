@@ -259,7 +259,9 @@ class _SystemThemeFollowerState extends State<_SystemThemeFollower>
 
   void _syncSystemTheme() {
     if (!mounted || widget.prefs.getString('themeSelection') != 'system' ||
-        _updateScheduled) return;
+        _updateScheduled) {
+      return;
+    }
 
     // The provider can notify listeners during a Settings rebuild. Apply any
     // correction after that frame instead of notifying during build.
