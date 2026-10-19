@@ -394,9 +394,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final token = prefs.getString('accessToken') ?? '';
     final username = prefs.getString('username') ?? '';
     final version = packageInfo.version;
-    const _client = "JellyBook";
-    const _device = "Unknown Device";
-    const _deviceId = "Unknown Device id";
+    const client = "JellyBook";
+    const device = "Unknown Device";
+    const deviceId = "Unknown Device id";
 
     userName = username;
     serverUrl = server;
@@ -419,7 +419,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       'Accept-Encoding': 'gzip, deflate',
       'Content-Type': 'application/json',
       "Authorization":
-          "MediaBrowser Client=\"$_client\", Device=\"$_device\", DeviceId=\"$_deviceId\", Version=\"$version\", Token=\"$token\"",
+          "MediaBrowser Client=\"$client\", Device=\"$device\", DeviceId=\"$deviceId\", Version=\"$version\", Token=\"$token\"",
       'Connection': 'keep-alive',
       'Origin': server,
       'Host': server.substring(server.indexOf("//") + 2, server.length),

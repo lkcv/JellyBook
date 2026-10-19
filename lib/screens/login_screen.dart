@@ -66,10 +66,10 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  FocusNode _focusNode1 = FocusNode();
-  FocusNode _focusNode2 = FocusNode();
-  FocusNode _focusNode3 = FocusNode();
-  FocusNode _focusNode4 = FocusNode();
+  final FocusNode _focusNode1 = FocusNode();
+  final FocusNode _focusNode2 = FocusNode();
+  final FocusNode _focusNode3 = FocusNode();
+  final FocusNode _focusNode4 = FocusNode();
 
   @override
   void dispose() {
@@ -174,7 +174,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   key: const Key('connectButton'),
                   focusNode: _focusNode4,
                   onPressed: () async {
-                    logger.d("username: " + _username.text);
+                    logger.d("username: ${_username.text}");
                     LoginProvider.loginStatic(
                       _url.text,
                       _username.text,

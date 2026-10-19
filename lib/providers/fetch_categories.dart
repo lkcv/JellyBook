@@ -144,7 +144,7 @@ Future<(List<Entry>, List<Folder>)> getServerCategories({
 
     List<Entry> comics = [];
     List<String> comicsIds = [];
-    logger.d("selected: " + categories.toString());
+    logger.d("selected: $categories");
     data.forEach((element) {
       comicsId = element['Id'] as String;
       comicsIds.add(comicsId);
@@ -160,7 +160,7 @@ Future<(List<Entry>, List<Folder>)> getServerCategories({
 
     prefs.setStringList('comicsIds', comicsIds);
 
-    logger.d("comics: " + comics.length.toString());
+    logger.d("comics: ${comics.length}");
 
     // final isar = Isar.getInstance();
     List<String> categoriesList = [];
@@ -184,7 +184,7 @@ Future<(int, List<Entry>)> fetchEntries(int offset, int limit) async {
   List<Entry> entries = await typeNotBook.sortByTitle().findAll();
   entries = entries.where(isSupportedEntry).skip(offset).take(limit).toList();
   int length = entries.length;
-  logger.f("entries: " + entries.length.toString());
+  logger.f("entries: ${entries.length}");
   return (length, entries);
 }
 
@@ -194,9 +194,9 @@ Future<List<Map<String, dynamic>>> compareFolders(
 ) async {
   logger.d("comparing folders");
   List<Map<String, dynamic>> newFolders = [];
-  logger.d("folders: " + folders.length.toString());
+  logger.d("folders: ${folders.length}");
   for (int i = 0; i < folders.length; i++) {
-    logger.d("folder: " + folders[i]['name']);
+    logger.d("folder: ${folders[i]['name']}");
     bool isSubfolder = false;
     for (int j = 0; j < folders.length; j++) {
       if (i != j) {
@@ -209,7 +209,7 @@ Future<List<Map<String, dynamic>>> compareFolders(
       newFolders.add(folders[i]);
     }
   }
-  logger.d("newFolders: " + newFolders.length.toString());
+  logger.d("newFolders: ${newFolders.length}");
   return newFolders;
 }
 

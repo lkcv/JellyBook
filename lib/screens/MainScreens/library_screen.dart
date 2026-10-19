@@ -739,7 +739,7 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
     final behind = math.min(16, span);
     final key = '$_scrollCatalogVersion:${_filter.downloadedOnly}:'
         '${_filter.readingOnly}:${range.first}:${range.end}:'
-        '${_scrollDirection}:$fast';
+        '$_scrollDirection:$fast';
     if (key == _scrollWindowKey) return;
     _scrollWindowKey = key;
 

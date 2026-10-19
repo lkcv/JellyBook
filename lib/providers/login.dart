@@ -92,7 +92,7 @@ class LoginProvider {
     String password,
   ) async {
     try {
-      String _url = url.endsWith("/") ? url.substring(0, url.length - 1) : url;
+      String requestUrl = url.endsWith("/") ? url.substring(0, url.length - 1) : url;
       const client = "JellyBook";
       String device = "Unknown Device";
       String deviceId = "Unknown Device id";
@@ -109,15 +109,15 @@ class LoginProvider {
       }
       final version = (await package_info.PackageInfo.fromPlatform()).version;
 
-      final response = await JellyfinApi(_url).authenticateUserByName(
+      final response = await JellyfinApi(requestUrl).authenticateUserByName(
         username: username,
         password: password,
-        headers: getHeaders(_url, client, device, deviceId, version),
+        headers: getHeaders(requestUrl, client, device, deviceId, version),
       );
 
       if (response.statusCode == 200) {
         await _saveSession(
-          url: _url,
+          url: requestUrl,
           username: username,
           password: password,
           client: client,
@@ -156,65 +156,64 @@ class LoginProvider {
     String password = "",
   ]) async {
     logger.d("LoginStatic called");
-    // String _url = "$url/Users/authenticatebyname";
-    String _url = url;
-    final BuildContext _context = context;
-    const _client = "JellyBook";
-    String _device;
-    String _deviceId;
-    late String _version;
+    String requestUrl = url;
+    final BuildContext loginContext = context;
+    const client = "JellyBook";
+    String device;
+    String deviceId;
+    late String version;
 
     logger.d("getDeviceInfo called");
     DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
-    _device = "Unknown Device";
-    _deviceId = "Unknown Device id";
+    device = "Unknown Device";
+    deviceId = "Unknown Device id";
     if (Platform.isAndroid) {
       AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
-      _device = androidInfo.model;
-      _deviceId = "Android ${androidInfo.version.release}";
+      device = androidInfo.model;
+      deviceId = "Android ${androidInfo.version.release}";
     } else if (Platform.isIOS) {
       IosDeviceInfo iosInfo = await deviceInfo.iosInfo;
-      _device = iosInfo.name;
-      _device = iosInfo.identifierForVendor ?? "Unknown Device id";
+      device = iosInfo.name;
+      device = iosInfo.identifierForVendor ?? "Unknown Device id";
     }
 
     package_info.PackageInfo packageInfo =
         await package_info.PackageInfo.fromPlatform();
 
-    _version = packageInfo.version;
+    version = packageInfo.version;
 
     logger.d("Attempting to login to $url");
 
     // check if the last character is a /
-    if (_url.endsWith("/")) {
-      _url = _url.substring(0, _url.length - 1);
+    if (requestUrl.endsWith("/")) {
+      requestUrl = requestUrl.substring(0, requestUrl.length - 1);
     }
     // check if url is valid using regex (allow other languages and emojis)
     final RegExp urlTest = RegExp(r"^(http|https)://+.+");
-    if (!urlTest.hasMatch(_url)) {
+    if (!urlTest.hasMatch(requestUrl)) {
       logger.e("URL is not valid");
       // tell why it is not valid
-      if (!_url.startsWith("http")) {
-        return AppLocalizations.of(_context)?.noHttp ??
+      if (!requestUrl.startsWith("http")) {
+        return AppLocalizations.of(loginContext)?.noHttp ??
             "URL does not start with http:// or https://";
       }
-      if (!_url.contains(".")) {
-        return AppLocalizations.of(_context)?.noDot ??
+      if (!requestUrl.contains(".")) {
+        return AppLocalizations.of(loginContext)?.noDot ??
             "URL does not contain a .";
       }
-      if (!_url.contains("/")) {
-        return AppLocalizations.of(_context)?.noSlash ??
+      if (!requestUrl.contains("/")) {
+        return AppLocalizations.of(loginContext)?.noSlash ??
             "URL does not contain a /";
       }
-      return AppLocalizations.of(_context)?.invalidUrl ??
+      return AppLocalizations.of(loginContext)?.invalidUrl ??
           "URL is not valid. Please check the URL and try again.";
     }
 
     Response<Map<String, dynamic>> response;
 
     try {
-      final headers = getHeaders(_url, _client, _device, _deviceId, _version);
-      response = await JellyfinApi(_url).authenticateUserByName(
+      final headers = getHeaders(requestUrl, client, device, deviceId, version);
+      response = await JellyfinApi(requestUrl).authenticateUserByName(
         username: username,
         password: password,
         headers: headers,
@@ -230,49 +229,48 @@ class LoginProvider {
 
     if (response.statusCode == 200) {
       await _saveSession(
-        url: _url,
+        url: requestUrl,
         username: username,
         password: password,
-        client: _client,
-        device: _device,
-        deviceId: _deviceId,
-        version: _version,
+        client: client,
+        device: device,
+        deviceId: deviceId,
+        version: version,
         data: response.data,
       );
       return "true";
     } else {
       if (response.statusCode == 401) {
         logger.e("401");
-        return AppLocalizations.of(_context)?.invalidCredentials ??
+        return AppLocalizations.of(loginContext)?.invalidCredentials ??
             "Incorrect username or password";
       } else if (response.statusCode == 404) {
         logger.e("404");
-        return AppLocalizations.of(_context)?.serverNotFound ??
+        return AppLocalizations.of(loginContext)?.serverNotFound ??
             "Server not found\nPlease check the URL";
       } else if (response.statusCode == 407) {
         logger.e("407");
-        return AppLocalizations.of(_context)?.proxyAuthRequired ??
+        return AppLocalizations.of(loginContext)?.proxyAuthRequired ??
             "Proxy authentication required\nPlease check the server logs";
       } else if (response.statusCode == 408) {
         logger.e("408");
-        return AppLocalizations.of(_context)?.requestTimeout ??
+        return AppLocalizations.of(loginContext)?.requestTimeout ??
             "Request timeout\nPlease check the server logs";
       } else if (response.statusCode == 418) {
         logger.e("418");
-        return AppLocalizations.of(_context)?.dontBrewCoffee ??
+        return AppLocalizations.of(loginContext)?.dontBrewCoffee ??
             "Do not brew coffee with me. I am a teapot";
       } else if (response.statusCode == 500) {
         logger.e("500");
-        return AppLocalizations.of(_context)?.serverError ??
+        return AppLocalizations.of(loginContext)?.serverError ??
             "Server error\nPlease check the server logs";
       } else if (response.statusCode == 502) {
         logger.e("502");
-        return AppLocalizations.of(_context)?.badGateway ??
+        return AppLocalizations.of(loginContext)?.badGateway ??
             "Bad gateway\nPlease check the server logs";
       } else {
         logger.e("Unknown error");
-        return (AppLocalizations.of(_context)?.error ?? "Error:") +
-            " ${response.statusCode}";
+        return "${AppLocalizations.of(loginContext)?.error ?? 'Error:'} ${response.statusCode}";
       }
     }
   }

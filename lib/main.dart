@@ -100,9 +100,9 @@ Future<void> main() async {
   // set the localPath variable
   localPath = await _localPath;
   // check if localPath file exists
-  if (!await File(localPath + "/jellybook.log").exists()) {
+  if (!await File("$localPath/jellybook.log").exists()) {
     // create the file
-    await File(localPath + "/jellybook.log").create();
+    await File("$localPath/jellybook.log").create();
   }
   debugPrint("localPath: $localPath");
 
@@ -110,7 +110,7 @@ Future<void> main() async {
   logStoragePath = "$localPath/Documents/";
 
   var logins = await isar.logins.where().findAll();
-  if (logins.length != 0) {
+  if (logins.isNotEmpty) {
     prefs.setString("username", logins[0].username);
     runApp(MyApp(
       url: logins[0].serverUrl,
