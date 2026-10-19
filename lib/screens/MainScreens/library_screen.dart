@@ -1063,7 +1063,7 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
                       _stopSpeculative();
                       final collectionRoute = PageRouteBuilder<void>(
                         pageBuilder: (context, animation, secondaryAnimation) =>
-                            collectionScreen(
+                            CollectionScreen(
                               folderId: folder.id,
                               name: folder.name,
                               image: folder.image,

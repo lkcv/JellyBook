@@ -14,22 +14,10 @@ class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState(
-        url: null,
-        username: null,
-        password: null,
-      );
+  State<LoginScreen> createState() => _LoginScreenState();
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final String? url;
-  final String? username;
-  final String? password;
-  _LoginScreenState({
-    required this.url,
-    required this.username,
-    required this.password,
-  });
 
   final storage = FlutterSecureStorage();
   final _url = TextEditingController();

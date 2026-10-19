@@ -27,7 +27,7 @@ import 'package:jellybook/widgets/volume_actions.dart';
 import 'package:provider/provider.dart';
 import 'package:jellybook/providers/connection_manager.dart';
 
-class collectionScreen extends StatefulWidget {
+class CollectionScreen extends StatefulWidget {
   final String folderId;
   final String name;
   final String image;
@@ -35,7 +35,8 @@ class collectionScreen extends StatefulWidget {
   final bool downloadedOnly;
   final bool readingOnly;
 
-  collectionScreen({
+  const CollectionScreen({
+    super.key,
     required this.folderId,
     required this.name,
     required this.image,
@@ -45,28 +46,17 @@ class collectionScreen extends StatefulWidget {
   });
 
   @override
-  State<collectionScreen> createState() => _collectionScreenState(
-      folderId: folderId, name: name, image: image, bookIds: bookIds,
-      downloadedOnly: downloadedOnly, readingOnly: readingOnly);
+  State<CollectionScreen> createState() => _CollectionScreenState();
 }
 
-class _collectionScreenState extends State<collectionScreen> with WidgetsBindingObserver {
+class _CollectionScreenState extends State<CollectionScreen> with WidgetsBindingObserver {
 
-  final String folderId;
-  final String name;
-  final String image;
-  final List<String> bookIds;
-  final bool downloadedOnly;
-  final bool readingOnly;
-
-  _collectionScreenState({
-    required this.folderId,
-    required this.name,
-    required this.image,
-    required this.bookIds,
-    this.downloadedOnly = false,
-    this.readingOnly = false,
-  });
+  late final String folderId;
+  late final String name;
+  late final String image;
+  late final List<String> bookIds;
+  late final bool downloadedOnly;
+  late final bool readingOnly;
 
   final GlobalKey<NavigatorState> _readerNavigatorKey = GlobalKey<NavigatorState>();
   final ValueNotifier<CoverOpeningRoute?> _activeCoverRoute = ValueNotifier(null);
@@ -108,6 +98,12 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
   @override
   void initState() {
     super.initState();
+    folderId = widget.folderId;
+    name = widget.name;
+    image = widget.image;
+    bookIds = widget.bookIds;
+    downloadedOnly = widget.downloadedOnly;
+    readingOnly = widget.readingOnly;
     _entriesFuture = getEntries();
     _gridController.addListener(_onGridScrolled);
     serverProgressRevision.addListener(_onServerProgressRefreshed);
@@ -811,7 +807,7 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
                             .findFirstSync();
                         await _pushWithPausedCovers(
                           MaterialPageRoute(
-                            builder: (context) => collectionScreen(
+                            builder: (context) => CollectionScreen(
                               folderId: folder!.id,
                               name: folder.name,
                               image: folder.image,
