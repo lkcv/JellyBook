@@ -1,5 +1,6 @@
 // The purpose of this file is to fetch the categories from the database
 
+import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:jellybook/providers/jellyfin_api.dart';
 import 'package:jellybook/providers/fetch_books.dart';
@@ -64,7 +65,7 @@ List<Folder> visibleLibraryFolders(
 
 // have optional perameter to have the function return the list of folders
 Future<(List<Entry>, List<Folder>)> getServerCategories({
-  force = false,
+  bool force = false,
   void Function()? onCacheHit,
 }) async {
   logger.d("getting server categories");
@@ -90,7 +91,7 @@ Future<(List<Entry>, List<Folder>)> getServerCategories({
       visibleLibraryFolders(folders, books, excludedNames: libraryNames);
   final List<Folder> foldersTemp = await isar!.folders.where().findAll();
   QueryBuilder<Entry, Entry, QAfterFilterCondition> typeNotBook =
-      await isar.entrys.filter().not().typeEqualTo(EntryType.folder);
+      isar.entrys.filter().not().typeEqualTo(EntryType.folder);
   List<Entry> booksTemp = await typeNotBook.sortByTitle().findAll();
   final hasCachedBooks = booksTemp.isNotEmpty;
   booksTemp = booksTemp.where(isSupportedEntry).toList();
@@ -109,7 +110,7 @@ Future<(List<Entry>, List<Folder>)> getServerCategories({
   Map<String, String> headers =
       getHeaders(url, client, device, deviceId, version, token);
   final api = JellyfinApi(url);
-  var response;
+  late final Response<Map<String, dynamic>> response;
   try {
     response = await api.getUserViews(
       userId: userId,
@@ -123,9 +124,9 @@ Future<(List<Entry>, List<Folder>)> getServerCategories({
   }
 
   logger.d("got response");
-  logger.d(response?.statusCode.toString());
+  logger.d(response.statusCode.toString());
 
-  if (response?.data == null) {
+  if (response.data == null) {
     throw Exception("Empty response from server");
   }
   final data = (response.data!['Items'] as List<dynamic>? ?? [])

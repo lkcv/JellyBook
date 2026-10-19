@@ -65,7 +65,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
-  themeListener() {
+  void themeListener() {
     if (mounted) {
       setState(() {});
     }
