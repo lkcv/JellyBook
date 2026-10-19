@@ -36,7 +36,7 @@ class LibraryScreen extends StatefulWidget {
   LibraryScreen({this.isActive = true});
 
   @override
-  _LibraryScreenState createState() => _LibraryScreenState();
+  State<LibraryScreen> createState() => _LibraryScreenState();
 }
 
 class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserver {

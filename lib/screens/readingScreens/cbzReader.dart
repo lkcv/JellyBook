@@ -60,7 +60,7 @@ class CbzReader extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  _CbzReaderState createState() => _CbzReaderState();
+  State<CbzReader> createState() => _CbzReaderState();
 }
 
 class _CbzReaderState extends State<CbzReader>

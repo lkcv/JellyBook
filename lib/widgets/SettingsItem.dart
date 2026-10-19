@@ -50,7 +50,7 @@ class SettingsItem extends StatefulWidget {
   });
 
   @override
-  _SettingsItemState createState() => _SettingsItemState();
+  State<SettingsItem> createState() => _SettingsItemState();
 }
 
 class _SettingsItemState extends State<SettingsItem> {

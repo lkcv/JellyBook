@@ -19,7 +19,7 @@ class WaveProgressBar extends StatefulWidget {
       : super(key: key);
 
   @override
-  _WaveProgressBarState createState() => _WaveProgressBarState();
+  State<WaveProgressBar> createState() => _WaveProgressBarState();
 }
 
 /// The state class for [WaveProgressBar] which manages the animation controller.

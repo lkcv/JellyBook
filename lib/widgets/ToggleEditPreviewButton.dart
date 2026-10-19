@@ -15,7 +15,7 @@ class ToggleEditPreviewButton extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  _ToggleEditPreviewButtonState createState() =>
+  State<ToggleEditPreviewButton> createState() =>
       _ToggleEditPreviewButtonState();
 }
 

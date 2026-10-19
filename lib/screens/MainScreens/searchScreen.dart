@@ -64,7 +64,7 @@ class SearchScreen extends StatefulWidget {
   SearchScreen({super.key, this.onBack});
 
   @override
-  _SearchScreenState createState() => _SearchScreenState();
+  State<SearchScreen> createState() => _SearchScreenState();
 }
 
 // _SearchScreenState

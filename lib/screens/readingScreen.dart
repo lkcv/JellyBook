@@ -23,7 +23,7 @@ class ReadingScreen extends StatefulWidget {
     required this.comicId,
   });
 
-  _ReadingScreenState createState() => _ReadingScreenState(
+  State<ReadingScreen> createState() => _ReadingScreenState(
         title: title,
         comicId: comicId,
       );

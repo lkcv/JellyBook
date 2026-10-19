@@ -25,7 +25,7 @@ class RoundedImageWithShadow extends StatefulWidget {
   });
 
   @override
-  _RoundedImageWithShadowState createState() => _RoundedImageWithShadowState();
+  State<RoundedImageWithShadow> createState() => _RoundedImageWithShadowState();
 }
 
 class _RoundedImageWithShadowState extends State<RoundedImageWithShadow> {

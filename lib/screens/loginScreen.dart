@@ -14,7 +14,7 @@ class LoginScreen extends StatefulWidget {
   const LoginScreen();
 
   @override
-  _LoginScreenState createState() => _LoginScreenState(
+  State<LoginScreen> createState() => _LoginScreenState(
         url: null,
         username: null,
         password: null,

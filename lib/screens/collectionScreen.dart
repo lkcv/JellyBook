@@ -46,7 +46,7 @@ class collectionScreen extends StatefulWidget {
   });
 
   @override
-  _collectionScreenState createState() => _collectionScreenState(
+  State<collectionScreen> createState() => _collectionScreenState(
       folderId: folderId, name: name, image: image, bookIds: bookIds,
       downloadedOnly: downloadedOnly, readingOnly: readingOnly);
 }
