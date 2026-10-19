@@ -33,7 +33,7 @@ class LibraryScreen extends StatefulWidget {
   // Library stays mounted in HomeScreen's IndexedStack across tab changes.
   final bool isActive;
 
-  LibraryScreen({this.isActive = true});
+  const LibraryScreen({super.key, this.isActive = true});
 
   @override
   State<LibraryScreen> createState() => _LibraryScreenState();

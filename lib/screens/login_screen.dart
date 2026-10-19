@@ -11,7 +11,7 @@ import 'package:isar/isar.dart';
 import 'package:jellybook/models/login.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen();
+  const LoginScreen({super.key});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState(
@@ -185,7 +185,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         Navigator.pushReplacement(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => HomeScreen(),
+                            builder: (context) => const HomeScreen(),
                           ),
                         );
                       } else {

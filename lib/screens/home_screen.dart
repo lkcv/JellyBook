@@ -18,6 +18,8 @@ import 'package:jellybook/variables.dart';
 import 'package:jellybook/providers/connection_manager.dart';
 
 class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
@@ -43,7 +45,7 @@ class _HomeScreenState extends State<HomeScreen> {
     });
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (context) => LoginScreen()),
+      MaterialPageRoute(builder: (context) => const LoginScreen()),
     );
   }
 
@@ -85,7 +87,7 @@ class _HomeScreenState extends State<HomeScreen> {
       case 1:
         return SearchScreen(onBack: _goBackFromSearch);
       case 2:
-        return SettingsScreen();
+        return const SettingsScreen();
       default:
         return const SizedBox.shrink();
     }
@@ -102,7 +104,7 @@ class _HomeScreenState extends State<HomeScreen> {
         if (mounted) {
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (context) => LoginScreen()),
+            MaterialPageRoute(builder: (context) => const LoginScreen()),
           );
         }
       });

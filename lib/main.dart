@@ -130,12 +130,12 @@ class MyApp extends StatelessWidget {
   final SharedPreferences prefs;
 
   const MyApp({
-    Key? key,
+    super.key,
     this.url,
     this.username,
     this.password,
     required this.prefs,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -193,8 +193,8 @@ class MyApp extends StatelessWidget {
               snackBarTheme: floatingSnackBarTheme(themeData),
             ),
             home: url != null && username != null && password != null
-                ? HomeScreen()
-                : LoginScreen(),
+                ? const HomeScreen()
+                : const LoginScreen(),
           );
             },
           ),

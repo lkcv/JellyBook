@@ -37,7 +37,8 @@ class SettingsItem extends StatefulWidget {
   final String selected;
   final Color? backgroundColor;
 
-  SettingsItem({
+  const SettingsItem({
+    super.key,
     required this.icon,
     this.iconStyle,
     required this.title,

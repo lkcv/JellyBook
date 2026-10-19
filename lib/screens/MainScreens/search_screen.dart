@@ -60,7 +60,7 @@ class SearchScreen extends StatefulWidget {
   /// Used by the bottom-nav host to restore the previous tab.
   final VoidCallback? onBack;
 
-  SearchScreen({super.key, this.onBack});
+  const SearchScreen({super.key, this.onBack});
 
   @override
   State<SearchScreen> createState() => _SearchScreenState();

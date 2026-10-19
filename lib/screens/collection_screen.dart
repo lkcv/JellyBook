@@ -1135,6 +1135,7 @@ class KuroStyleBookCard extends StatefulWidget {
   final VoidCallback? onEntryLongPressed; // new
 
   const KuroStyleBookCard({
+    super.key,
     required this.entry,
     this.progressRevision,
     required this.onEntryTapped,

@@ -40,7 +40,7 @@ class CbzReader extends StatefulWidget {
   final VoidCallback? onContinuationLoadFailed;
 
   const CbzReader({
-    Key? key,
+    super.key,
     required this.title,
     required this.comicId,
     this.openingReady,
@@ -54,7 +54,7 @@ class CbzReader extends StatefulWidget {
     this.continuingVolume = false,
     this.restoreSystemUiOnDispose = true,
     this.onContinuationLoadFailed,
-  }) : super(key: key);
+  });
 
   @override
   State<CbzReader> createState() => _CbzReaderState();
