@@ -8,7 +8,6 @@ import 'package:flutter/services.dart';
 import 'package:isar/isar.dart';
 import 'package:jellybook/models/entry.dart';
 import 'package:jellybook/providers/supported_formats.dart';
-import 'package:jellybook/screens/reading_screen.dart';
 import 'package:jellybook/screens/readingScreens/cbz_reader.dart';
 import 'package:jellybook/cache/reader_page_cache.dart';
 import 'package:jellybook/providers/connection_manager.dart';
@@ -147,7 +146,6 @@ class _SearchScreenState extends State<SearchScreen> {
         builder: (context) => CbzReader(
           title: entry.title,
           comicId: entry.id,
-          openedDirectly: true,
           openingReady: firstPageReady,
           skipReturnFade: skipReturnFade,
         ),
@@ -155,15 +153,6 @@ class _SearchScreenState extends State<SearchScreen> {
       await Navigator.of(context).push<void>(route);
       // push() completes when pop starts, not after the cover shrinks.
       // Avoid rebuilding the underlying search list during that animation.
-      await route.completed;
-    } else if (entry.downloaded) {
-      final route = MaterialPageRoute<void>(
-        builder: (context) => ReadingScreen(
-          title: entry.title,
-          comicId: entry.id,
-        ),
-      );
-      await Navigator.of(context).push<void>(route);
       await route.completed;
     } else {
       await _openVolumeActions(entry);

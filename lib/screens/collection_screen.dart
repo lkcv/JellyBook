@@ -19,7 +19,6 @@ import 'package:jellybook/variables.dart';
 import 'package:jellybook/cache/cover_cache.dart';
 import 'package:jellybook/cache/speculative_cover_prefetcher.dart';
 import 'package:auto_size_text/auto_size_text.dart';
-import 'package:jellybook/screens/reading_screen.dart';
 import 'package:jellybook/providers/server_progress_revision.dart';
 import 'package:jellybook/cache/reader_page_cache.dart';
 import 'package:jellybook/screens/readingScreens/cbz_reader.dart';
@@ -827,8 +826,7 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
                         }
                       }
 
-                      // Open comic archives directly so the animated cover
-                      // is not interrupted by ReadingScreen's extra route.
+                      // Open supported archives through the cover animation.
                       final extension = entryFileExtension(entry.path);
                       final isArchive = const ['cbz', 'zip'].contains(extension);
                       final streamable = extension == 'cbz';
@@ -868,19 +866,6 @@ class _collectionScreenState extends State<collectionScreen> with WidgetsBinding
                             },
                           ),
                           inCollection: true,
-                        );
-                        _refreshEntries();
-                        return;
-                      }
-                      // Other downloaded formats keep their existing reader.
-                      if (entry.downloaded) {
-                        await _pushWithPausedCovers(
-                          MaterialPageRoute(
-                            builder: (context) => ReadingScreen(
-                              title: entry.title,
-                              comicId: entry.id,
-                            ),
-                          ),
                         );
                         _refreshEntries();
                         return;
@@ -1098,7 +1083,6 @@ class _VolumeReaderSessionState extends State<_VolumeReaderSession> {
       key: ValueKey(entry.id),
       title: entry.title,
       comicId: entry.id,
-      openedDirectly: true,
       openingReady: widget.openingReady,
       openingState: widget.openingState,
       skipReturnFade: widget.skipReturnFade,

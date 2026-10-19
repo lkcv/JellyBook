@@ -23,8 +23,6 @@ import 'package:jellybook/widgets/cover_opening_route.dart';
 class CbzReader extends StatefulWidget {
   final String title;
   final String comicId;
-  /// True when opened straight from a collection, with no ReadingScreen below.
-  final bool openedDirectly;
   /// Signal the cover transition once the first page is decoded and painted.
   final ValueNotifier<bool>? openingReady;
   final ValueNotifier<ReaderOpeningState>? openingState;
@@ -45,7 +43,6 @@ class CbzReader extends StatefulWidget {
     Key? key,
     required this.title,
     required this.comicId,
-    this.openedDirectly = false,
     this.openingReady,
     this.openingState,
     this.skipReturnFade,
@@ -334,9 +331,6 @@ class _CbzReaderState extends State<CbzReader>
             ),
           );
           nav.pop();
-          if (!widget.openedDirectly) {
-            nav.pop(); // The legacy route has ReadingScreen underneath.
-          }
         }
       }
     }
@@ -1403,9 +1397,6 @@ class _CbzReaderState extends State<CbzReader>
     if (!mounted) return;
     widget.skipReturnFade?.value = _currentPage == 0;
     Navigator.pop(context);
-    if (!widget.openedDirectly) {
-      Navigator.pop(context);
-    }
   }
 
   Widget _fade(Widget child) {
