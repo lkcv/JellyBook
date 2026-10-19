@@ -22,14 +22,14 @@ Logger logger = Logger(
         ),
   level: Level.debug,
   printer: kDebugMode
-      ? PrettyPrinter(printTime: true, printEmojis: true, colors: true)
+      ? PrettyPrinter(dateTimeFormat: DateTimeFormat.onlyTimeAndSinceStart, printEmojis: true, colors: true)
       : PrettyPrinter(
           methodCount: 5,
           errorMethodCount: 8,
           lineLength: 120,
           colors: false,
           printEmojis: true,
-          printTime: true,
+          dateTimeFormat: DateTimeFormat.onlyTimeAndSinceStart,
         ),
 );
 

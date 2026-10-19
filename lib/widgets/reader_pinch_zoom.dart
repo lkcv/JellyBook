@@ -104,8 +104,8 @@ class ReaderPinchZoomState extends State<ReaderPinchZoom> {
     final dx = translation.dx.clamp(minX, 0.0).toDouble();
     final dy = translation.dy.clamp(minY, 0.0).toDouble();
     _transform.value = Matrix4.identity()
-      ..translate(dx, dy)
-      ..scale(scale);
+      ..translateByDouble(dx, dy, 0.0, 1.0)
+      ..scaleByDouble(scale, scale, scale, 1.0);
   }
 
   @override
