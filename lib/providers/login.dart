@@ -156,7 +156,6 @@ class LoginProvider {
     String password = "",
   ]) async {
     logger.d("LoginStatic called");
-    const storage = FlutterSecureStorage();
     // String _url = "$url/Users/authenticatebyname";
     String _url = url;
     final BuildContext _context = context;

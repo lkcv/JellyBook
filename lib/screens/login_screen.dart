@@ -36,7 +36,6 @@ class _LoginScreenState extends State<LoginScreen> {
   final _username = TextEditingController();
   final _password = TextEditingController();
   bool _passwordVisible = false;
-  bool _loading = false;
   String _error = '';
   SharedPreferences? prefs;
 
@@ -175,9 +174,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   key: const Key('connectButton'),
                   focusNode: _focusNode4,
                   onPressed: () async {
-                    setState(() {
-                      _loading = true;
-                    });
                     logger.d("username: " + _username.text);
                     LoginProvider.loginStatic(
                       _url.text,
@@ -209,7 +205,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
                         setState(() {
                           _error = displayError;
-                          _loading = false;
                         });
                       }
                     });

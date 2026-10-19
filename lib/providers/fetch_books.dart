@@ -89,7 +89,7 @@ Future<void> getComics(String comicsId) async {
       releaseDate: element['ProductionYear'].toString(),
       path: element['Path'] as String? ?? '',
       description: element['Overview'] as String? ?? '',
-      url: url ?? '',
+      url: url,
       rating: (element['CommunityRating'] as num?)?.toDouble() ?? -1,
       type: isRealFolder ? EntryType.folder : EntryType.book,
       tags: (element['Tags'] as List<dynamic>?)?.cast<String>().toList() ?? [],

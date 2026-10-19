@@ -25,9 +25,9 @@ static Future<void> createFolders(
       List<String> bookEntryIds = bookEntries.map((entry) => entry.id).toList();
       
       // Get folder image - use first book's image if folder doesn't have one
-      String folderImage = entry.imagePath ?? '';
+      String folderImage = entry.imagePath;
       if ((folderImage.isEmpty || folderImage == 'Asset') && bookEntries.isNotEmpty) {
-        folderImage = bookEntries.first.imagePath ?? '';
+        folderImage = bookEntries.first.imagePath;
       }
       
       // IMPORTANT: Only create folders for non-library items

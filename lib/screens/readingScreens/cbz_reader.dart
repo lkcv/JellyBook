@@ -446,10 +446,6 @@ class _CbzReaderState extends State<CbzReader>
     final prefs = await SharedPreferences.getInstance();
     final server = prefs.getString('server') ?? '';
     final token = prefs.getString('accessToken') ?? '';
-    final client = prefs.getString('client') ?? 'JellyBook';
-    final device = prefs.getString('device') ?? '';
-    final deviceId = prefs.getString('deviceId') ?? '';
-    final version = prefs.getString('version') ?? '';
 
     final headers = {
       'Authorization': 'MediaBrowser Token="$token"',
