@@ -198,6 +198,26 @@ class ReaderPageCache {
     return await file.exists() ? file : null;
   }
 
+  /// Avoid rereading and reparsing the entire manifest for each page when
+  /// the downloader assesses a large cached volume.
+  static Future<Map<int, File>> snapshotPages(String volumeId) async {
+    final root = await _root();
+    final directory = Directory('${root.path}/${_key(volumeId)}');
+    if (!await directory.exists()) return <int, File>{};
+    final rawPages = (await _readManifest(directory))['pages'];
+    if (rawPages is! Map) return <int, File>{};
+    final files = <int, File>{};
+    for (final entry in rawPages.entries) {
+      final index = int.tryParse(entry.key.toString());
+      final filename = entry.value;
+      if (index == null || index < 0 || filename is! String ||
+          filename.isEmpty || filename.contains('/') ||
+          filename.contains('\\')) continue;
+      files[index] = File('${directory.path}/$filename');
+    }
+    return files;
+  }
+
   /// Record a page turn immediately, even if the network fetch has not
   /// finished. The serialized disk update also persists the last page.
   static Future<void> touch({

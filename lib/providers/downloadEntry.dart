@@ -31,10 +31,28 @@ Future<double> retainedPageDownloadProgress(Entry entry) async {
     if (saved is! Map || saved['itemId'] != entry.id) return 0;
     final count = saved['pageCount'];
     if (count is! int || count <= 0) return 0;
-    final files = await staging.list().where((item) =>
-        item is File && RegExp(r'/\d{6,}\.(jpg|jpeg|png|gif|webp|bmp|tiff)$',
-            caseSensitive: false).hasMatch(item.path.replaceAll('\\', '/'))).length;
-    return (files / count * 100).clamp(0.0, 99.0).toDouble();
+    final savedSizes = saved['pageSizes'];
+    final sizes = savedSizes is List && savedSizes.length == count &&
+            savedSizes.every((size) => size is int && size >= 0)
+        ? savedSizes.cast<int>()
+        : <int>[];
+    final totalBytes = sizes.fold<int>(0, (sum, size) => sum + size);
+    final completed = <int>{};
+    final pageFile = RegExp(r'^(\d{6,})\.(jpg|jpeg|png|gif|webp|bmp|tiff)$',
+        caseSensitive: false);
+    await for (final item in staging.list()) {
+      if (item is! File) continue;
+      final match = pageFile.firstMatch(item.uri.pathSegments.last);
+      if (match == null) continue;
+      final index = int.parse(match.group(1)!) - 1;
+      if (index < 0 || index >= count || completed.contains(index)) continue;
+      if (totalBytes > 0 && await item.length() != sizes[index]) continue;
+      completed.add(index);
+    }
+    final fraction = totalBytes > 0
+        ? completed.fold<int>(0, (sum, index) => sum + sizes[index]) / totalBytes
+        : completed.length / count;
+    return (fraction * 100).clamp(0.0, 99.0).toDouble();
   } catch (_) {
     return 0;
   }
@@ -106,6 +124,8 @@ Future<Entry> downloadEntry(
     await stream.init();
     checkDownloadCanceled(cancelToken);
     final count = stream.pageCount;
+    final pageSizes = List<int>.generate(count, stream.pageSize);
+    final totalBytes = pageSizes.fold<int>(0, (sum, size) => sum + size);
     final manifest = File('${staging.path}/.kurage-part.json');
     final identity = <String, Object>{
       'itemId': entry.id,
@@ -159,53 +179,91 @@ Future<Entry> downloadEntry(
       await staging.delete(recursive: true);
     }
     await staging.create(recursive: true);
-    await manifest.writeAsString(jsonEncode(identity), flush: true);
+    await manifest.writeAsString(
+        jsonEncode({...identity, 'pageSizes': pageSizes}), flush: true);
 
     final completed = <int>{};
+    var completedBytes = 0;
     for (var index = 0; index < count; index++) {
       checkDownloadCanceled(cancelToken);
       final file = stream.pageFile(index);
       if (await stream.isPageValid(index, file)) {
         completed.add(index);
+        completedBytes += pageSizes[index];
       } else if (await file.exists()) {
         await file.delete();
       }
     }
+
+    final cachedPages = await ReaderPageCache.snapshotPages(entry.id);
+    final candidates = <int, File>{};
+    var pendingCachedBytes = 0;
+    for (final candidate in cachedPages.entries) {
+      checkDownloadCanceled(cancelToken);
+      final index = candidate.key;
+      if (index >= count || completed.contains(index)) continue;
+      try {
+        if (await candidate.value.length() != pageSizes[index]) continue;
+        candidates[index] = candidate.value;
+        pendingCachedBytes += pageSizes[index];
+      } on FileSystemException {
+        // The cache can be evicted while the downloader takes its snapshot.
+      }
+    }
+    var pendingCachedCount = candidates.length;
     void report() {
-      onProgress(completed.length == count
-          ? 99
-          : completed.length / count * 100);
+      final fraction = totalBytes > 0
+          ? (completedBytes + pendingCachedBytes) / totalBytes
+          : (completed.length + pendingCachedCount) / count;
+      onProgress((fraction * 100).clamp(0.0, 99.0).toDouble());
     }
     report();
 
-    for (var index = 0; index < count; index++) {
-      if (completed.contains(index)) continue;
-      checkDownloadCanceled(cancelToken);
-      final cached = await ReaderPageCache.getPage(entry.id, index);
-      if (cached == null) continue;
-      final target = stream.pageFile(index);
-      final temporary = File('${target.path}.tmp');
-      try {
-        await cached.copy(temporary.path);
-        if (!await stream.isPageValid(index, temporary)) continue;
+    Future<void> copyCachedPages() async {
+      for (final candidate in candidates.entries) {
         checkDownloadCanceled(cancelToken);
-        await temporary.rename(target.path);
-        completed.add(index);
-        report();
-      } on FileSystemException {
-        // Cache eviction can race a copy; the network path will fill the gap.
-      } finally {
-        if (await temporary.exists()) await temporary.delete();
+        final index = candidate.key;
+        final target = stream.pageFile(index);
+        final temporary = File('${target.path}.tmp');
+        var copied = false;
+        try {
+          await candidate.value.copy(temporary.path);
+          if (!await stream.isPageValid(index, temporary)) continue;
+          checkDownloadCanceled(cancelToken);
+          await temporary.rename(target.path);
+          completed.add(index);
+          completedBytes += pageSizes[index];
+          copied = true;
+        } on FileSystemException {
+          // Cache eviction can race a copy; the network path will fill the gap.
+        } finally {
+          pendingCachedBytes -= pageSizes[index];
+          pendingCachedCount--;
+          if (!copied) report();
+          if (await temporary.exists()) await temporary.delete();
+        }
       }
     }
 
-    for (var index = 0; index < count; index++) {
-      if (completed.contains(index)) continue;
-      checkDownloadCanceled(cancelToken);
-      await stream.getPage(index);
-      completed.add(index);
-      report();
+    Future<void> downloadPages(Iterable<int> indices) async {
+      for (final index in indices) {
+        checkDownloadCanceled(cancelToken);
+        await stream.getPage(index);
+        completed.add(index);
+        completedBytes += pageSizes[index];
+        report();
+      }
     }
+
+    final missing = [
+      for (var index = 0; index < count; index++)
+        if (!completed.contains(index) && !candidates.containsKey(index)) index,
+    ];
+    await Future.wait([downloadPages(missing), copyCachedPages()]);
+    await downloadPages([
+      for (var index = 0; index < count; index++)
+        if (!completed.contains(index)) index,
+    ]);
     checkDownloadCanceled(cancelToken);
 
     final names = [

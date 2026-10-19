@@ -77,6 +77,7 @@ class CbzStream {
   });
 
   int get pageCount => _pages.length;
+  int pageSize(int index) => _pages[index].uncompressedSize;
   String get fingerprint => _fingerprint;
 
   String? pageName(int index) =>
