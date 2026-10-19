@@ -127,20 +127,23 @@ class _CbzReaderState extends State<CbzReader>
   // Its cleanup must finish before a new CbzStream uses the same temp path.
   static final Map<String, Future<void>> _cleanupByVolume = {};
 
-  // Download in background
-  bool _downloadInProgress = false;
-  double _downloadProgress = 0.0;
+  late final Future<void> _initialLoad;
+  Future<Entry?>? _observedDownload;
+  bool _switchingToLocal = false;
 
   @override
   void initState() {
     super.initState();
     title = widget.title;
     comicId = widget.comicId;
-    _load();
+    _initialLoad = _load();
+    DownloadQueue.instance.addListener(_onDownloadQueueChanged);
+    _onDownloadQueueChanged();
   }
 
   @override
   void dispose() {
+    DownloadQueue.instance.removeListener(_onDownloadQueueChanged);
     _volumeSwipeMessageTimer?.cancel();
     _pageController?.dispose();
     _verticalScrollController.dispose();
@@ -153,46 +156,65 @@ class _CbzReaderState extends State<CbzReader>
   }
 
   Widget _buildDownloadButton(ColorScheme scheme) {
-    final connection =
-        Provider.of<ConnectionManager>(context).status;
-    final offline = connection == ConnectionStatus.offline;
-    final enabled = !_downloadInProgress && !offline;
+    final manager = DownloadQueue.instance;
+    return ListenableBuilder(
+      listenable: manager,
+      builder: (context, _) {
+        DownloadJob? job;
+        for (final candidate in manager.jobs) {
+          if (candidate.id == comicId) {
+            job = candidate;
+            break;
+          }
+        }
+        final active = _switchingToLocal || (job != null &&
+            (job.state == DownloadJobState.queued ||
+                job.state == DownloadJobState.downloading ||
+                job.state == DownloadJobState.waitingForNetwork ||
+                job.state == DownloadJobState.waitingForServer ||
+                job.state == DownloadJobState.canceling));
+        final offline = Provider.of<ConnectionManager>(context).status ==
+            ConnectionStatus.offline;
+        final enabled = !active && !offline;
+        final progress = _switchingToLocal ? 100.0 : (job?.progress ?? 0.0);
 
-    return GestureDetector(
-      onTap: enabled ? _downloadInBackground : null,
-      child: SizedBox(
-        width: 50,
-        height: 50,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            SizedBox(
-              width: 40,
-              height: 40,
-              child: CircularProgressIndicator(
-                value: _downloadInProgress ? _downloadProgress / 100 : 0,
-                strokeWidth: 3,
-                backgroundColor: Colors.white.withValues(alpha: 0.3),
-                valueColor: AlwaysStoppedAnimation<Color>(scheme.primary),
-              ),
-            ),
-            _downloadInProgress
-                ? Text(
-                    '${_downloadProgress.round()}%',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  )
-                : Icon(
-                    Icons.download,
-                    size: 20,
-                    color: enabled ? scheme.primary : Colors.grey,
+        return GestureDetector(
+          onTap: enabled ? _downloadInBackground : null,
+          child: SizedBox(
+            width: 50,
+            height: 50,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                SizedBox(
+                  width: 40,
+                  height: 40,
+                  child: CircularProgressIndicator(
+                    value: active ? progress / 100 : 0,
+                    strokeWidth: 3,
+                    backgroundColor: Colors.white.withValues(alpha: 0.3),
+                    valueColor: AlwaysStoppedAnimation<Color>(scheme.primary),
                   ),
-          ],
-        ),
-      ),
+                ),
+                active
+                    ? Text(
+                        '${progress.round()}%',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      )
+                    : Icon(
+                        Icons.download,
+                        size: 20,
+                        color: enabled ? scheme.primary : Colors.grey,
+                      ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -664,36 +686,37 @@ class _CbzReaderState extends State<CbzReader>
     });
   }
 
-  Future<void> _downloadInBackground() async {
-    if (_downloadInProgress) return;
-    final isar = Isar.getInstance();
-    final entry = await isar!.entrys.where().idEqualTo(comicId).findFirst();
-    if (entry == null || !mounted) return;
-
-    final manager = DownloadQueue.instance;
-    final job = manager.enqueue(entry);
-    void updateProgress() {
-      if (!mounted) return;
-      if ((job.progress - _downloadProgress).abs() < 1 &&
-          job.state == DownloadJobState.downloading) return;
-      setState(() => _downloadProgress = job.progress);
+  void _onDownloadQueueChanged() {
+    for (final job in DownloadQueue.instance.jobs) {
+      if (job.id != comicId || job.state == DownloadJobState.failed ||
+          job.state == DownloadJobState.canceling ||
+          job.state == DownloadJobState.canceled) {
+        continue;
+      }
+      final completion = job.result;
+      if (!identical(_observedDownload, completion)) {
+        _observedDownload = completion;
+        unawaited(_switchToLocalOnCompletion(completion));
+      }
+      break;
     }
-    manager.addListener(updateProgress);
-    setState(() {
-      _downloadInProgress = true;
-      _downloadProgress = job.progress;
-    });
+  }
+
+  Future<void> _switchToLocalOnCompletion(Future<Entry?> completion) async {
     try {
-      // The manager owns the transfer, not this reader route. Closing the
-      // reader only removes the listener; the queue continues independently.
-      final downloaded = await job.result;
-      if (!mounted || downloaded == null) return;
-      await createPageList(); // local page paths ready
+      final downloaded = await completion;
+      if (downloaded == null) return;
+      await _initialLoad;
+      if (!mounted || !_isStreaming) return;
+      setState(() => _switchingToLocal = true);
+      await createPageList();
       if (!mounted) return;
-      // Warm the visible local pages before switching off streaming.
       await _precacheLocalAround(_currentPage);
       if (!mounted) return;
-      setState(() => _isStreaming = false);
+      setState(() {
+        _isStreaming = false;
+        _switchingToLocal = false;
+      });
       _pageCache.clear();
       _precacheAround(_currentPage);
       final stream = _stream;
@@ -701,11 +724,24 @@ class _CbzReaderState extends State<CbzReader>
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _clearStreamAfterPageWork(stream);
       });
-    } catch (e) {
-      logger.e('CbzReader: download failed: $e');
+    } catch (error) {
+      logger.e('CbzReader: download completion failed: $error');
     } finally {
-      manager.removeListener(updateProgress);
-      if (mounted) setState(() => _downloadInProgress = false);
+      if (mounted && _switchingToLocal) {
+        setState(() => _switchingToLocal = false);
+      }
+    }
+  }
+
+  Future<void> _downloadInBackground() async {
+    try {
+      final isar = Isar.getInstance();
+      final entry = await isar?.entrys.where().idEqualTo(comicId).findFirst();
+      if (entry == null || !mounted) return;
+      DownloadQueue.instance.enqueue(entry);
+      _onDownloadQueueChanged();
+    } catch (error) {
+      logger.e('CbzReader: could not enqueue download: $error');
     }
   }
 
