@@ -25,6 +25,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _password = TextEditingController();
   bool _passwordVisible = false;
   String _error = '';
+  bool _isConnecting = false;
   SharedPreferences? prefs;
 
   @override
@@ -69,6 +70,45 @@ class _LoginScreenState extends State<LoginScreen> {
     _username.dispose();
     _password.dispose();
     super.dispose();
+  }
+
+  Future<void> _connect() async {
+    if (_isConnecting) return;
+    final address = _url.text.trim();
+    final username = _username.text.trim();
+    if (address.isEmpty || username.isEmpty) {
+      setState(() {
+        _error = address.isEmpty
+            ? 'Enter your server address.'
+            : 'Enter your username.';
+      });
+      return;
+    }
+
+    setState(() {
+      _isConnecting = true;
+      _error = '';
+    });
+    try {
+      final result = await LoginProvider.loginStatic(
+        address, username, context, _password.text,
+      );
+      if (!mounted) return;
+      if (result == 'true') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const HomeScreen()),
+        );
+      } else {
+        setState(() => _error = result);
+      }
+    } catch (e) {
+      logger.e('Unexpected login screen failure (${e.runtimeType})');
+      if (!mounted) return;
+      setState(() => _error = 'Could not sign in. Please try again.');
+    } finally {
+      if (mounted) setState(() => _isConnecting = false);
+    }
   }
 
   @override
@@ -161,43 +201,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: ElevatedButton(
                   key: const Key('connectButton'),
                   focusNode: _focusNode4,
-                  onPressed: () async {
-                    logger.d("username: ${_username.text}");
-                    LoginProvider.loginStatic(
-                      _url.text,
-                      _username.text,
-                      context,
-                      _password.text,
-                    ).then((value) {
-                      if (!mounted || !context.mounted) return;
-                      if (value == "true") {
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const HomeScreen(),
-                          ),
-                        );
-                      } else {
-                        // Map common errors to user-friendly messages
-                        String displayError = value;
-                        if (value.contains("SocketException") ||
-                            value.contains("Failed host lookup") ||
-                            value.contains("Connection refused")) {
-                          displayError = AppLocalizations.of(context)
-                                  ?.serverNotFound ??
-                              "Could not reach the server. Please check the URL and your connection.";
-                        } else if (value.contains("Connection timed out")) {
-                          displayError = AppLocalizations.of(context)
-                                  ?.requestTimeout ??
-                              "Request timed out. Please try again.";
-                        }
-
-                        setState(() {
-                          _error = displayError;
-                        });
-                      }
-                    });
-                  },
+                  onPressed: _isConnecting ? null : _connect,
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [

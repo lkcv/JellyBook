@@ -31,16 +31,19 @@ class JellyfinApi {
         ),
       );
 
-  Future<Response<Map<String, dynamic>>> authenticateUserByName({
+  Future<Response<String>> authenticateUserByName({
     required String username,
     required String password,
     required Map<String, String> headers,
   }) =>
-      _dio.post<Map<String, dynamic>>(
+      _dio.post<String>(
         '/Users/AuthenticateByName',
         data: {'Username': username, 'Pw': password},
         options: Options(
           headers: headers,
+          // Non-200 responses can have plain-text bodies, not JSON maps.
+          // Preserve the status and decode JSON only after successful login.
+          responseType: ResponseType.plain,
           validateStatus: (status) => status != null,
         ),
       );

@@ -1,6 +1,7 @@
 // This files purpose is to attempt to login to the server
 // this is not the screen, it is just the request and response
 
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -84,6 +85,75 @@ class LoginProvider {
     }
   }
 
+  // Authentication errors may be plain text, even when the request asks for
+  // JSON. Only decode a successful response, and verify the fields we need.
+  static Map<String, dynamic>? _authData(String? body) {
+    if (body == null) return null;
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is! Map<String, dynamic>) return null;
+      final user = decoded['User'];
+      final token = decoded['AccessToken'];
+      if (token is! String || token.isEmpty ||
+          user is! Map<String, dynamic> ||
+          user['Id'] is! String ||
+          (user['Id'] as String).isEmpty) {
+        return null;
+      }
+      return decoded;
+    } on FormatException {
+      return null;
+    }
+  }
+
+  static String _httpLoginError(int? status, AppLocalizations? l) {
+    switch (status) {
+      case 400:
+      case 401:
+      case 403:
+        return l?.invalidCredentials ?? 'Incorrect username or password.';
+      case 404:
+        return l?.serverNotFound ??
+            'Could not find Jellyfin at this address. Check the server URL.';
+      case 407:
+        return l?.proxyAuthRequired ?? 'The server requires proxy authentication.';
+      case 408:
+      case 504:
+        return l?.requestTimeout ?? 'The connection timed out. Please try again.';
+      case 429:
+        return 'Too many attempts. Please wait a moment and try again.';
+      case 500:
+        return l?.serverError ?? 'The server encountered an error. Please try again later.';
+      case 502:
+      case 503:
+        return l?.badGateway ?? 'The server is temporarily unavailable. Please try again later.';
+      default:
+        return 'Could not sign in. Please check the server and try again.';
+    }
+  }
+
+  static String _dioLoginError(DioException e, AppLocalizations? l) {
+    if (e.response?.statusCode != null) {
+      return _httpLoginError(e.response!.statusCode, l);
+    }
+    switch (e.type) {
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.sendTimeout:
+      case DioExceptionType.receiveTimeout:
+      case DioExceptionType.transformTimeout:
+        return 'The connection timed out. Please try again.';
+      case DioExceptionType.connectionError:
+        return 'Could not connect to the server. Check its address and your connection.';
+      case DioExceptionType.badCertificate:
+        return 'Could not verify the server security certificate.';
+      case DioExceptionType.cancel:
+        return 'The login attempt was cancelled.';
+      case DioExceptionType.badResponse:
+      case DioExceptionType.unknown:
+        return 'Could not sign in. Please check the server and try again.';
+    }
+  }
+
   // Login without a UI/BuildContext. Used by ConnectionManager to refresh an
   // expired token with the saved credentials.
   static Future<LoginResult> silentLogin(
@@ -116,6 +186,8 @@ class LoginProvider {
       );
 
       if (response.statusCode == 200) {
+        final data = _authData(response.data);
+        if (data == null) return LoginResult.unreachable;
         await _saveSession(
           url: requestUrl,
           username: username,
@@ -124,11 +196,12 @@ class LoginProvider {
           device: device,
           deviceId: deviceId,
           version: version,
-          data: response.data,
+          data: data,
         );
         return LoginResult.success;
       }
-      if (response.statusCode == 401 || response.statusCode == 403) {
+      if (response.statusCode == 400 ||
+          response.statusCode == 401 || response.statusCode == 403) {
         return LoginResult.rejected;
       }
       return LoginResult.unreachable;
@@ -148,130 +221,73 @@ class LoginProvider {
      curl 'http://[REDACTED]/Users/authenticatebyname' -X POST -H 'User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:107.0) Gecko/20100101 Firefox/107.0' -H 'Accept: application/json' -H 'Accept-Language: en-US,en;q=0.5' -H 'Accept-Encoding: gzip, deflate' -H 'X-Emby-Authorization: MediaBrowser Client="Jellyfin Web", Device="Firefox", DeviceId="[REDACTED]", Version="10.8.5"' -H 'Content-Type: application/json' -H 'Origin: [REDACTED]' -H 'Connection: keep-alive' --data-raw '{"Username":"example","Pw":""}' > output
      */
 
-  // make a static version of the above class
+  // Login from the UI. Return only safe, human-readable error messages.
   static Future<String> loginStatic(
     String url,
     String username,
     BuildContext context, [
     String password = "",
   ]) async {
-    logger.d("LoginStatic called");
-    String requestUrl = url;
-    final localizations = AppLocalizations.of(context);
+    final l = AppLocalizations.of(context);
+    final requestUrl = url.trim().replaceFirst(RegExp(r'/+$'), '');
+    final address = Uri.tryParse(requestUrl);
+    if (address == null ||
+        (address.scheme != 'http' && address.scheme != 'https') ||
+        !address.hasAuthority ||
+        address.host.isEmpty) {
+      return l?.invalidUrl ??
+          'Enter a valid server address starting with http:// or https://.';
+    }
+    if (username.trim().isEmpty) return 'Enter your username.';
+
     const client = "JellyBook";
-    String device;
-    String deviceId;
-    late String version;
-
-    logger.d("getDeviceInfo called");
-    DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
-    device = "Unknown Device";
-    deviceId = "Unknown Device id";
-    if (Platform.isAndroid) {
-      AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
-      device = androidInfo.model;
-      deviceId = "Android ${androidInfo.version.release}";
-    } else if (Platform.isIOS) {
-      IosDeviceInfo iosInfo = await deviceInfo.iosInfo;
-      device = iosInfo.name;
-      device = iosInfo.identifierForVendor ?? "Unknown Device id";
-    }
-
-    package_info.PackageInfo packageInfo =
-        await package_info.PackageInfo.fromPlatform();
-
-    version = packageInfo.version;
-
-    logger.d("Attempting to login to $url");
-
-    // check if the last character is a /
-    if (requestUrl.endsWith("/")) {
-      requestUrl = requestUrl.substring(0, requestUrl.length - 1);
-    }
-    // check if url is valid using regex (allow other languages and emojis)
-    final RegExp urlTest = RegExp(r"^(http|https)://+.+");
-    if (!urlTest.hasMatch(requestUrl)) {
-      logger.e("URL is not valid");
-      // tell why it is not valid
-      if (!requestUrl.startsWith("http")) {
-        return localizations?.noHttp ??
-            "URL does not start with http:// or https://";
-      }
-      if (!requestUrl.contains(".")) {
-        return localizations?.noDot ??
-            "URL does not contain a .";
-      }
-      if (!requestUrl.contains("/")) {
-        return localizations?.noSlash ??
-            "URL does not contain a /";
-      }
-      return localizations?.invalidUrl ??
-          "URL is not valid. Please check the URL and try again.";
-    }
-
-    Response<Map<String, dynamic>> response;
-
     try {
-      final headers = getHeaders(requestUrl, client, device, deviceId, version);
-      response = await JellyfinApi(requestUrl).authenticateUserByName(
-        username: username,
+      String device = "Unknown Device";
+      String deviceId = "Unknown Device id";
+      final deviceInfo = DeviceInfoPlugin();
+      if (Platform.isAndroid) {
+        final androidInfo = await deviceInfo.androidInfo;
+        device = androidInfo.model;
+        deviceId = "Android ${androidInfo.version.release}";
+      } else if (Platform.isIOS) {
+        final iosInfo = await deviceInfo.iosInfo;
+        device = iosInfo.name;
+        deviceId = iosInfo.identifierForVendor ?? "Unknown Device id";
+      }
+
+      final version = (await package_info.PackageInfo.fromPlatform()).version;
+      final response = await JellyfinApi(requestUrl).authenticateUserByName(
+        username: username.trim(),
         password: password,
-        headers: headers,
+        headers: getHeaders(requestUrl, client, device, deviceId, version),
       );
-      logger.d("Status Code: ${response.statusCode}");
-    } catch (e) {
-      logger.e("Error:\n$e");
-      return e.toString();
-    }
+      if (response.statusCode != 200) {
+        logger.w('Login rejected (HTTP ${response.statusCode})');
+        return _httpLoginError(response.statusCode, l);
+      }
 
-    logger.d("Response: ${response.statusCode}");
-    // logger.d("Response: ${response.data}");
-
-    if (response.statusCode == 200) {
+      final data = _authData(response.data);
+      if (data == null) {
+        logger.w('Login returned an invalid success payload');
+        return 'Unexpected response from the server. Check the server address.';
+      }
       await _saveSession(
         url: requestUrl,
-        username: username,
+        username: username.trim(),
         password: password,
         client: client,
         device: device,
         deviceId: deviceId,
         version: version,
-        data: response.data,
+        data: data,
       );
       return "true";
-    } else {
-      if (response.statusCode == 401) {
-        logger.e("401");
-        return localizations?.invalidCredentials ??
-            "Incorrect username or password";
-      } else if (response.statusCode == 404) {
-        logger.e("404");
-        return localizations?.serverNotFound ??
-            "Server not found\nPlease check the URL";
-      } else if (response.statusCode == 407) {
-        logger.e("407");
-        return localizations?.proxyAuthRequired ??
-            "Proxy authentication required\nPlease check the server logs";
-      } else if (response.statusCode == 408) {
-        logger.e("408");
-        return localizations?.requestTimeout ??
-            "Request timeout\nPlease check the server logs";
-      } else if (response.statusCode == 418) {
-        logger.e("418");
-        return localizations?.dontBrewCoffee ??
-            "Do not brew coffee with me. I am a teapot";
-      } else if (response.statusCode == 500) {
-        logger.e("500");
-        return localizations?.serverError ??
-            "Server error\nPlease check the server logs";
-      } else if (response.statusCode == 502) {
-        logger.e("502");
-        return localizations?.badGateway ??
-            "Bad gateway\nPlease check the server logs";
-      } else {
-        logger.e("Unknown error");
-        return "${localizations?.error ?? 'Error:'} ${response.statusCode}";
-      }
+    } on DioException catch (e) {
+      logger.w('Login network failure (${e.type}, HTTP ${e.response?.statusCode})');
+      return _dioLoginError(e, l);
+    } catch (e) {
+      logger.e('Unexpected login failure (${e.runtimeType})');
+      return 'Could not sign in. Please try again.';
     }
   }
 }
