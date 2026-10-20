@@ -89,7 +89,7 @@ android {
         }
         debug {
             applicationIdSuffix '.debug'
-            resValue "string", "app_name", "JellyBook Debug"
+            resValue "string", "app_name", "Kurage Debug"
 
             ndk {
                 abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86_64'

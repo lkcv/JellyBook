@@ -18,7 +18,7 @@
         </intent>
     </queries>
     <application
-        android:label="JellyBook"
+        android:label="Kurage"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"

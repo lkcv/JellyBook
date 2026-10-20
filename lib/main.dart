@@ -182,7 +182,7 @@ class MyApp extends StatelessWidget {
           Locale locale = localeChangeNotifier.locale;
           ThemeData themeData = themeChangeNotifier.getTheme;
           return MaterialApp(
-            title: 'JellyBook',
+            title: 'Kurage',
             debugShowCheckedModeBanner: false,
             localizationsDelegates: AppLocalizations.localizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
