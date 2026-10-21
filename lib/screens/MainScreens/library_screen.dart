@@ -26,6 +26,7 @@ import 'package:jellybook/cache/speculative_cover_prefetcher.dart';
 import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
 import 'package:provider/provider.dart';
 import 'package:jellybook/providers/connection_manager.dart';
+import 'package:jellybook/providers/theme_provider.dart';
 
 enum _SeriesAction { downloadRemaining, deleteDownloaded }
 
@@ -1227,6 +1228,8 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
     final headerBrightness = Theme.of(context).brightness;
     final headerForeground =
         FloatingSurfacePalette.foreground(headerBrightness);
+    final accent = context.watch<ThemeChangeNotifier>().accentColor ??
+        ThemeChangeNotifier.defaultAccent;
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: JellyBookHeader(
@@ -1307,9 +1310,9 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 4, vertical: 1),
-                                    decoration: const BoxDecoration(
-                                      color: Color(0xFFAA5CC3),
-                                      borderRadius: BorderRadius.all(
+                                    decoration: BoxDecoration(
+                                      color: accent,
+                                      borderRadius: const BorderRadius.all(
                                           Radius.circular(10)),
                                     ),
                                     child: Text(pending > 99 ? '99+' : '$pending',

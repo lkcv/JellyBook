@@ -9,6 +9,7 @@ import 'package:jellybook/models/folder.dart';
 import 'package:jellybook/models/login.dart';
 import 'package:jellybook/screens/login_screen.dart';
 import 'package:jellybook/providers/theme_provider.dart';
+import 'package:jellybook/themes/accent_palette.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart' as p_info;
@@ -268,6 +269,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       'RTL': l10n?.rtl ?? 'Right to Left',
       'Vertical': l10n?.vertical ?? 'Vertical',
     };
+    final accent = context.watch<ThemeChangeNotifier>().accentColor;
     final selectedTheme = prefs?.getString('themeSelection') ??
         prefs?.getString('theme') ?? 'system';
     final selectedDirection = prefs?.getString('readingDirection') ?? 'LTR';
@@ -276,7 +278,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: Column(
         children: [
           _choiceTile(
-            icon: Icons.color_lens_outlined,
+            icon: Icons.brightness_6_outlined,
             title: l10n?.theme ?? 'Theme',
             value: themeOptions[selectedTheme] ?? themeOptions['system']!,
             onTap: () async {
@@ -300,6 +302,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
             },
           ),
           const Divider(height: 1, indent: 16, endIndent: 16),
+          ListTile(
+            leading: const Icon(Icons.palette_outlined),
+            title: const Text('Accent color'),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _accentPreviewCircle(
+                  accent: accent ?? ThemeChangeNotifier.defaultAccent,
+                  isDefault: accent == null,
+                  size: 20,
+                ),
+                const SizedBox(width: 10),
+                Text(_accentLabel(accent),
+                    style: Theme.of(context).textTheme.bodyMedium),
+                const SizedBox(width: 8),
+                const Icon(Icons.chevron_right),
+              ],
+            ),
+            onTap: _showAccentChoices,
+          ),
+          const Divider(height: 1, indent: 16, endIndent: 16),
           _choiceTile(
             icon: Icons.format_textdirection_l_to_r_rounded,
             title: l10n?.readingDirection ?? 'Reading Direction',
@@ -321,6 +344,166 @@ class _SettingsScreenState extends State<SettingsScreen> {
             },
           ),
         ],
+      ),
+    );
+  }
+
+  String _accentLabel(Color? accent) {
+    if (accent == null) return 'Default';
+    return AccentPalette.forColor(accent)?.name ?? 'Custom';
+  }
+
+  Color _accentCompanion(Color accent) {
+    return ColorScheme.fromSeed(
+      seedColor: accent,
+      brightness: Theme.of(context).brightness,
+    ).primary;
+  }
+
+  Widget _accentPreviewCircle({
+    required Color accent,
+    double size = 46,
+    bool selected = false,
+    bool showSelectionRing = false,
+    bool isDefault = false,
+  }) {
+    const divider = Colors.black;
+    final defaultScheme = isDefault
+        ? ThemeChangeNotifier.defaultColorScheme(Theme.of(context).brightness)
+        : null;
+    final companion = defaultScheme?.primary ?? _accentCompanion(accent);
+    final dominant = defaultScheme?.primaryContainer ?? accent;
+    final preview = SizedBox(
+      width: size,
+      height: size,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              companion,
+              companion,
+              divider,
+              divider,
+              dominant,
+              dominant,
+            ],
+            stops: const [0.0, 0.47, 0.49, 0.51, 0.53, 1.0],
+          ),
+          border: Border.all(color: divider),
+        ),
+      ),
+    );
+    if (!showSelectionRing) return preview;
+
+    final ringColor = Theme.of(context).brightness == Brightness.dark
+        ? Colors.white
+        : Colors.black87;
+    return SizedBox(
+      width: size + 10,
+      height: size + 10,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          if (selected)
+            DecoratedBox(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: ringColor, width: 2),
+              ),
+              child: SizedBox(width: size + 10, height: size + 10),
+            ),
+          preview,
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showAccentChoices() {
+    return showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) => Consumer<ThemeChangeNotifier>(
+        builder: (context, notifier, _) => SafeArea(
+          top: false,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Accent color',
+                    style: Theme.of(sheetContext).textTheme.titleMedium),
+                const SizedBox(height: 16),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 12,
+                  runSpacing: 16,
+                  children: [
+                    for (final entry in AccentPalette.options)
+                      Semantics(
+                        button: true,
+                        selected: notifier.accentColor == entry.color,
+                        label: entry.name,
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          splashFactory: NoSplash.splashFactory,
+                          highlightColor: Colors.transparent,
+                          onTap: () {
+                            notifier.setAccentColor = entry.color;
+                          },
+                          child: SizedBox(
+                            width: 64,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _accentPreviewCircle(
+                                  accent: entry.color,
+                                  selected: notifier.accentColor == entry.color,
+                                  showSelectionRing: true,
+                                ),
+                                const SizedBox(height: 5),
+                                Text(entry.name,
+                                    maxLines: 1,
+                                    style: Theme.of(sheetContext)
+                                        .textTheme
+                                        .labelSmall),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                TextButton.icon(
+                  // Suppress the tap flash without hiding keyboard focus.
+                  style: ButtonStyle(
+                    splashFactory: NoSplash.splashFactory,
+                    overlayColor: WidgetStateProperty.resolveWith<Color?>(
+                      (states) => states.contains(WidgetState.pressed)
+                          ? Colors.transparent
+                          : null,
+                    ),
+                  ),
+                  onPressed: () {
+                    notifier.setAccentColor = null;
+                  },
+                  icon: _accentPreviewCircle(
+                    accent: ThemeChangeNotifier.defaultAccent,
+                    isDefault: true,
+                    size: 18,
+                    selected: notifier.accentColor == null,
+                    showSelectionRing: true,
+                  ),
+                  label: const Text('Use default'),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

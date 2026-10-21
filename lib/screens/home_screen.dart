@@ -16,6 +16,8 @@ import 'package:jellybook/screens/login_screen.dart';
 import 'package:jellybook/l10n/app_localizations.dart';
 import 'package:jellybook/variables.dart';
 import 'package:jellybook/providers/connection_manager.dart';
+import 'package:jellybook/providers/theme_provider.dart';
+import 'package:jellybook/themes/accent_palette.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -98,6 +100,9 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     // Watch the ConnectionManager from the provider
     final connectionManager = Provider.of<ConnectionManager>(context);
+    final accent = context.watch<ThemeChangeNotifier>().accentColor;
+    final gradientEnd = AccentPalette.forColor(accent)?.gradientEnd ??
+        AccentPalette.defaultGradientEnd;
 
     // If auth failed, redirect to login
     if (connectionManager.status == ConnectionStatus.authFailed) {
@@ -134,7 +139,9 @@ class _HomeScreenState extends State<HomeScreen> {
         height: 70 + iosBottomInset,
         padding: EdgeInsets.only(bottom: iosBottomInset),
         decoration: BoxDecoration(
-          color: Theme.of(context).primaryColor,
+          color: accent != null && Theme.of(context).brightness == Brightness.light
+              ? accent
+              : Theme.of(context).primaryColor,
           borderRadius: const BorderRadius.only(
             topLeft: Radius.circular(20),
             topRight: Radius.circular(20),
@@ -157,8 +164,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     tabBorderRadius: 15,
                     tabBackgroundGradient: LinearGradient(
                       colors: [
-                        const Color(0xFFAA5CC3).withValues(alpha: 0.75),
-                        const Color(0xFF00A4DC).withValues(alpha: 0.75),
+                        (accent ?? ThemeChangeNotifier.defaultAccent).withValues(alpha: 0.75),
+                        gradientEnd.withValues(alpha: 0.75),
                       ],
                     ),
                     tabActiveBorder:
