@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:jellybook/themes/theme_constants.dart';
+import 'package:kurage/themes/theme_constants.dart';
 
 /// The default floating snackbar appearance, shared by all app themes.
 /// Its colors and opacity are defined alongside the app's theme palettes.

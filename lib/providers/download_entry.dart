@@ -3,14 +3,14 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:isar/isar.dart';
-import 'package:jellybook/cache/reader_page_cache.dart';
-import 'package:jellybook/models/entry.dart';
-import 'package:jellybook/providers/cbz_stream.dart';
-import 'package:jellybook/providers/comic_info_xml.dart';
-import 'package:jellybook/providers/file_name_from_title.dart';
-import 'package:jellybook/providers/download_exceptions.dart';
-import 'package:jellybook/providers/supported_formats.dart';
-import 'package:jellybook/variables.dart';
+import 'package:kurage/cache/reader_page_cache.dart';
+import 'package:kurage/models/entry.dart';
+import 'package:kurage/providers/cbz_stream.dart';
+import 'package:kurage/providers/comic_info_xml.dart';
+import 'package:kurage/providers/file_name_from_title.dart';
+import 'package:kurage/providers/download_exceptions.dart';
+import 'package:kurage/providers/supported_formats.dart';
+import 'package:kurage/variables.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

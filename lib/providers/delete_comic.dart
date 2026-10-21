@@ -3,9 +3,9 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
-import 'package:jellybook/models/entry.dart';
-import 'package:jellybook/l10n/app_localizations.dart';
-import 'package:jellybook/variables.dart';
+import 'package:kurage/models/entry.dart';
+import 'package:kurage/l10n/app_localizations.dart';
+import 'package:kurage/variables.dart';
 import 'package:path_provider/path_provider.dart';
 
 /// Shared by Volume Info and Settings. Throws on filesystem failure, leaving

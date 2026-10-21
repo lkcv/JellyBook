@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:jellybook/themes/accent_palette.dart';
+import 'package:kurage/themes/accent_palette.dart';
 
 class ThemeChangeNotifier extends ChangeNotifier {
   ThemeChangeNotifier(BuildContext context, SharedPreferences prefs)

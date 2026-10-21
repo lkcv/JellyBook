@@ -10,11 +10,11 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:package_info_plus/package_info_plus.dart' as package_info;
 import 'package:isar/isar.dart';
-import 'package:jellybook/l10n/app_localizations.dart';
-import 'package:jellybook/models/login.dart';
-import 'package:jellybook/providers/jellyfin_api.dart';
+import 'package:kurage/l10n/app_localizations.dart';
+import 'package:kurage/models/login.dart';
+import 'package:kurage/providers/jellyfin_api.dart';
 import 'package:device_info_plus/device_info_plus.dart';
-import 'package:jellybook/variables.dart';
+import 'package:kurage/variables.dart';
 
 enum LoginResult { success, rejected, unreachable }
 

@@ -1,5 +1,5 @@
 // One format policy for server discovery and all Isar-backed UI screens.
-import 'package:jellybook/models/entry.dart';
+import 'package:kurage/models/entry.dart';
 
 const supportedFileExtensions = <String>{
   'cbz', 'zip',

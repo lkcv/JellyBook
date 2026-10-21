@@ -1,14 +1,14 @@
 // This Files purpose is to have a login screen where the user can login into the server
 import 'package:flutter/material.dart';
-import 'package:jellybook/providers/login.dart';
+import 'package:kurage/providers/login.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:jellybook/screens/home_screen.dart';
+import 'package:kurage/screens/home_screen.dart';
 
-import 'package:jellybook/l10n/app_localizations.dart';
+import 'package:kurage/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:jellybook/variables.dart';
+import 'package:kurage/variables.dart';
 import 'package:isar/isar.dart';
-import 'package:jellybook/models/login.dart';
+import 'package:kurage/models/login.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});

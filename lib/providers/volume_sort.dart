@@ -1,4 +1,4 @@
-import 'package:jellybook/models/entry.dart';
+import 'package:kurage/models/entry.dart';
 
 // Compare number runs numerically, so Volume 2 sorts before Volume 10.
 final _chunks = RegExp(r'\d+|\D+');

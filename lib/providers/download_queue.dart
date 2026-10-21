@@ -9,12 +9,12 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:isar/isar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:jellybook/models/entry.dart';
-import 'package:jellybook/providers/download_entry.dart';
-import 'package:jellybook/providers/download_background.dart';
-import 'package:jellybook/providers/download_exceptions.dart';
-import 'package:jellybook/providers/supported_formats.dart';
-import 'package:jellybook/providers/connection_manager.dart';
+import 'package:kurage/models/entry.dart';
+import 'package:kurage/providers/download_entry.dart';
+import 'package:kurage/providers/download_background.dart';
+import 'package:kurage/providers/download_exceptions.dart';
+import 'package:kurage/providers/supported_formats.dart';
+import 'package:kurage/providers/connection_manager.dart';
 
 /// Interrupted jobs resume from validated saved pages after restart.
 enum DownloadJobState {

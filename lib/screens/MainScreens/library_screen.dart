@@ -5,28 +5,28 @@ import 'dart:math' as math;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:jellybook/models/folder.dart';
-import 'package:jellybook/providers/fetch_categories.dart';
-import 'package:jellybook/providers/library_filter.dart';
-import 'package:jellybook/providers/download_queue.dart';
-import 'package:jellybook/providers/delete_comic.dart';
-import 'package:jellybook/providers/supported_formats.dart';
-import 'package:jellybook/widgets/item_action_sheet.dart';
-import 'package:jellybook/widgets/download_queue_sheet.dart';
-import 'package:jellybook/providers/server_progress_revision.dart';
-import 'package:jellybook/screens/collection_screen.dart';
+import 'package:kurage/models/folder.dart';
+import 'package:kurage/providers/fetch_categories.dart';
+import 'package:kurage/providers/library_filter.dart';
+import 'package:kurage/providers/download_queue.dart';
+import 'package:kurage/providers/delete_comic.dart';
+import 'package:kurage/providers/supported_formats.dart';
+import 'package:kurage/widgets/item_action_sheet.dart';
+import 'package:kurage/widgets/download_queue_sheet.dart';
+import 'package:kurage/providers/server_progress_revision.dart';
+import 'package:kurage/screens/collection_screen.dart';
 import 'package:isar/isar.dart';
-import 'package:jellybook/models/entry.dart';
-import 'package:jellybook/l10n/app_localizations.dart';
-import 'package:jellybook/themes/theme_constants.dart';
-import 'package:jellybook/widgets/floating_surface_header.dart';
-import 'package:jellybook/variables.dart';
-import 'package:jellybook/cache/cover_cache.dart';
-import 'package:jellybook/cache/speculative_cover_prefetcher.dart';
+import 'package:kurage/models/entry.dart';
+import 'package:kurage/l10n/app_localizations.dart';
+import 'package:kurage/themes/theme_constants.dart';
+import 'package:kurage/widgets/floating_surface_header.dart';
+import 'package:kurage/variables.dart';
+import 'package:kurage/cache/cover_cache.dart';
+import 'package:kurage/cache/speculative_cover_prefetcher.dart';
 import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
 import 'package:provider/provider.dart';
-import 'package:jellybook/providers/connection_manager.dart';
-import 'package:jellybook/providers/theme_provider.dart';
+import 'package:kurage/providers/connection_manager.dart';
+import 'package:kurage/providers/theme_provider.dart';
 
 enum _SeriesAction { downloadRemaining, deleteDownloaded }
 

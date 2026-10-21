@@ -1,23 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:jellybook/screens/login_screen.dart';
+import 'package:kurage/screens/login_screen.dart';
 import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:jellybook/models/entry.dart';
-import 'package:jellybook/models/folder.dart';
-import 'package:jellybook/models/login.dart';
-import 'package:jellybook/screens/home_screen.dart';
-import 'package:jellybook/providers/connection_manager.dart';
-import 'package:jellybook/providers/download_queue.dart';
+import 'package:kurage/models/entry.dart';
+import 'package:kurage/models/folder.dart';
+import 'package:kurage/models/login.dart';
+import 'package:kurage/screens/home_screen.dart';
+import 'package:kurage/providers/connection_manager.dart';
+import 'package:kurage/providers/download_queue.dart';
 import 'dart:io';
 
-import 'package:jellybook/l10n/app_localizations.dart';
+import 'package:kurage/l10n/app_localizations.dart';
 import 'package:provider/provider.dart';
-import 'package:jellybook/providers/language_provider.dart';
-import 'package:jellybook/providers/theme_provider.dart';
+import 'package:kurage/providers/language_provider.dart';
+import 'package:kurage/providers/theme_provider.dart';
 import 'widgets/floating_snackbar.dart';
-import 'package:jellybook/variables.dart';
+import 'package:kurage/variables.dart';
 
 Future<String> get _localPath async {
   // get the directory that normally is located at /storage/emulated/0/Documents/

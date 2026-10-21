@@ -2,15 +2,15 @@
 
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:jellybook/providers/jellyfin_api.dart';
-import 'package:jellybook/providers/fetch_books.dart';
-import 'package:jellybook/providers/folder_provider.dart';
-import 'package:jellybook/providers/supported_formats.dart';
-import 'package:jellybook/models/entry.dart';
-import 'package:jellybook/models/folder.dart';
+import 'package:kurage/providers/jellyfin_api.dart';
+import 'package:kurage/providers/fetch_books.dart';
+import 'package:kurage/providers/folder_provider.dart';
+import 'package:kurage/providers/supported_formats.dart';
+import 'package:kurage/models/entry.dart';
+import 'package:kurage/models/folder.dart';
 import 'package:isar/isar.dart';
 import 'package:package_info_plus/package_info_plus.dart' as p_info;
-import 'package:jellybook/variables.dart';
+import 'package:kurage/variables.dart';
 
 /// Return UI-only folder projections. Do not mutate persisted Folder records;
 /// previously indexed PDFs and downloaded files remain intact in Isar.

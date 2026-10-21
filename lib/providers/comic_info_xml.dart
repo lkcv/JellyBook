@@ -2,9 +2,9 @@
 
 import 'dart:io';
 import 'package:xml/xml.dart' as xml;
-import 'package:jellybook/variables.dart';
+import 'package:kurage/variables.dart';
 import 'package:isar/isar.dart';
-import 'package:jellybook/models/entry.dart';
+import 'package:kurage/models/entry.dart';
 
 Future<void> parseXML(Entry entry) async {
   // find the ComicInfo.xml file

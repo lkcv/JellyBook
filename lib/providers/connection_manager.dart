@@ -1,13 +1,13 @@
 import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:jellybook/providers/jellyfin_api.dart';
+import 'package:kurage/providers/jellyfin_api.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:isar/isar.dart';
-import 'package:jellybook/models/login.dart';
-import 'package:jellybook/providers/login.dart';
-import 'package:jellybook/providers/update_pagenum.dart';
-import 'package:jellybook/variables.dart';
+import 'package:kurage/models/login.dart';
+import 'package:kurage/providers/login.dart';
+import 'package:kurage/providers/update_pagenum.dart';
+import 'package:kurage/variables.dart';
 
 enum ConnectionStatus { validating, online, offline, authFailed }
 

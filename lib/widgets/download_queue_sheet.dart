@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:jellybook/providers/download_queue.dart';
+import 'package:kurage/providers/download_queue.dart';
 
 /// Queue state only; never creates a new cover image provider.
 class DownloadQueueSheet extends StatelessWidget {

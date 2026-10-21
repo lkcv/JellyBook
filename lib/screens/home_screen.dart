@@ -3,21 +3,21 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
-import 'package:jellybook/models/login.dart';
+import 'package:kurage/models/login.dart';
 import 'package:isar/isar.dart';
 import 'package:google_nav_bar/google_nav_bar.dart';
 import 'package:provider/provider.dart';
 
 // Screens imports
-import 'package:jellybook/screens/MainScreens/library_screen.dart';
-import 'package:jellybook/screens/MainScreens/settings_screen.dart';
-import 'package:jellybook/screens/MainScreens/search_screen.dart';
-import 'package:jellybook/screens/login_screen.dart';
-import 'package:jellybook/l10n/app_localizations.dart';
-import 'package:jellybook/variables.dart';
-import 'package:jellybook/providers/connection_manager.dart';
-import 'package:jellybook/providers/theme_provider.dart';
-import 'package:jellybook/themes/accent_palette.dart';
+import 'package:kurage/screens/MainScreens/library_screen.dart';
+import 'package:kurage/screens/MainScreens/settings_screen.dart';
+import 'package:kurage/screens/MainScreens/search_screen.dart';
+import 'package:kurage/screens/login_screen.dart';
+import 'package:kurage/l10n/app_localizations.dart';
+import 'package:kurage/variables.dart';
+import 'package:kurage/providers/connection_manager.dart';
+import 'package:kurage/providers/theme_provider.dart';
+import 'package:kurage/themes/accent_palette.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});

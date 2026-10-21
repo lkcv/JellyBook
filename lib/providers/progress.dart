@@ -2,9 +2,9 @@
 
 // import 'package:hive_flutter/hive_flutter.dart';
 import 'package:isar/isar.dart';
-import 'package:jellybook/models/entry.dart';
-import 'package:jellybook/variables.dart';
-import 'package:jellybook/providers/update_pagenum.dart';
+import 'package:kurage/models/entry.dart';
+import 'package:kurage/variables.dart';
+import 'package:kurage/providers/update_pagenum.dart';
 
 Future<void> saveProgress({
   required int page,

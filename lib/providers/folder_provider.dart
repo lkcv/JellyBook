@@ -3,10 +3,10 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:isar/isar.dart';
-import 'package:jellybook/models/folder.dart';
-import 'package:jellybook/models/entry.dart';
-import 'package:jellybook/providers/supported_formats.dart';
-import 'package:jellybook/variables.dart';
+import 'package:kurage/models/folder.dart';
+import 'package:kurage/models/entry.dart';
+import 'package:kurage/providers/supported_formats.dart';
+import 'package:kurage/variables.dart';
 
 // This function takes the list of entries and creates folders if their parentId is not one of the categories
 // It adds the folder to the list of folders in a isar box

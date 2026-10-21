@@ -4,9 +4,9 @@ import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
-import 'package:jellybook/providers/jellyfin_api.dart';
-import 'package:jellybook/providers/download_exceptions.dart';
-import 'package:jellybook/variables.dart';
+import 'package:kurage/providers/jellyfin_api.dart';
+import 'package:kurage/providers/download_exceptions.dart';
+import 'package:kurage/variables.dart';
 import 'package:path_provider/path_provider.dart';
 
 class _ZipEntry {

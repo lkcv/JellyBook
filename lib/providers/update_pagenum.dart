@@ -4,8 +4,8 @@ import 'dart:convert';
 
 import 'package:package_info_plus/package_info_plus.dart' as p_info;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:jellybook/providers/jellyfin_api.dart';
-import 'package:jellybook/variables.dart';
+import 'package:kurage/providers/jellyfin_api.dart';
+import 'package:kurage/variables.dart';
 
 final _progressQueue = _JellyfinProgressQueue();
 
