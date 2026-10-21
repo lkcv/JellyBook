@@ -20,7 +20,7 @@ import 'package:jellybook/widgets/settings_item.dart';
 import 'package:jellybook/cache/cover_cache.dart';
 import 'package:jellybook/widgets/reader_cache_settings.dart';
 import 'package:jellybook/themes/theme_constants.dart';
-import 'package:jellybook/widgets/jellybook_header.dart';
+import 'package:jellybook/widgets/floating_surface_header.dart';
 import 'package:jellybook/variables.dart';
 import 'package:jellybook/providers/jellyfin_api.dart';
 
@@ -122,7 +122,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         FloatingSurfacePalette.foreground(headerBrightness);
     return Scaffold(
       // Match the Library's compact, theme-aware translucent header.
-      appBar: JellyBookHeader(
+      appBar: FloatingSurfaceHeader(
         topInset: MediaQuery.paddingOf(context).top,
         alignment: Alignment.center,
         children: [

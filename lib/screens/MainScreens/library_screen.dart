@@ -19,7 +19,7 @@ import 'package:isar/isar.dart';
 import 'package:jellybook/models/entry.dart';
 import 'package:jellybook/l10n/app_localizations.dart';
 import 'package:jellybook/themes/theme_constants.dart';
-import 'package:jellybook/widgets/jellybook_header.dart';
+import 'package:jellybook/widgets/floating_surface_header.dart';
 import 'package:jellybook/variables.dart';
 import 'package:jellybook/cache/cover_cache.dart';
 import 'package:jellybook/cache/speculative_cover_prefetcher.dart';
@@ -45,7 +45,7 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
   static const double _gridTopGap = 12;
 
   double _headerHeight(BuildContext context) =>
-      MediaQuery.paddingOf(context).top + JellyBookHeader.toolbarHeight;
+      MediaQuery.paddingOf(context).top + FloatingSurfaceHeader.toolbarHeight;
   late final PagingController<int, Entry> _pagingController =
       PagingController<int, Entry>(
     getNextPageKey: (state) {
@@ -1232,7 +1232,7 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
         ThemeChangeNotifier.defaultAccent;
     return Scaffold(
       extendBodyBehindAppBar: true,
-      appBar: JellyBookHeader(
+      appBar: FloatingSurfaceHeader(
         topInset: topInset,
         alignment: Alignment.center,
         children: [

@@ -5,8 +5,8 @@ import 'package:jellybook/themes/theme_constants.dart';
 
 /// Shared 36dp top bar and translucent concave corners.
 /// Individual screens own their controls, title, and navigation behavior.
-class JellyBookHeader extends StatelessWidget implements PreferredSizeWidget {
-  const JellyBookHeader({
+class FloatingSurfaceHeader extends StatelessWidget implements PreferredSizeWidget {
+  const FloatingSurfaceHeader({
     super.key,
     required this.topInset,
     required this.children,

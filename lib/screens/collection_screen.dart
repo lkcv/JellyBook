@@ -15,7 +15,7 @@ import 'package:flutter/services.dart';
 import 'package:jellybook/models/folder.dart';
 import 'package:jellybook/l10n/app_localizations.dart';
 import 'package:jellybook/themes/theme_constants.dart';
-import 'package:jellybook/widgets/jellybook_header.dart';
+import 'package:jellybook/widgets/floating_surface_header.dart';
 import 'package:jellybook/variables.dart';
 import 'package:jellybook/cache/cover_cache.dart';
 import 'package:jellybook/cache/speculative_cover_prefetcher.dart';
@@ -666,7 +666,7 @@ class _CollectionScreenState extends State<CollectionScreen> with WidgetsBinding
     final headerBrightness = Theme.of(context).brightness;
     final headerForeground =
         FloatingSurfacePalette.foreground(headerBrightness);
-    final header = JellyBookHeader(
+    final header = FloatingSurfaceHeader(
         topInset: MediaQuery.paddingOf(context).top,
         children: [
           // Match the Reader's 18sp centered title and 56dp side margins.
