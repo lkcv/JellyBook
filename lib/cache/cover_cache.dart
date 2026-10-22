@@ -45,16 +45,31 @@ String coverUrl(String url) {
   return '$url${url.contains('?') ? '&' : '?'}maxWidth=400';
 }
 
+/// Construct matching image providers for displayed covers and warmups.
+/// Library passes a decoded width; Collection retains the source-size key.
+ImageProvider? coverImageProvider(String path, {int? pixelWidth}) {
+  if (path.isEmpty || path.toLowerCase() == 'asset') return null;
+  final ImageProvider source;
+  if (path.contains('http')) {
+    source = CachedNetworkImageProvider(
+      coverUrl(path),
+      cacheManager: CoverCacheManager.instance,
+    );
+  } else {
+    source = FileImage(File(path));
+  }
+  return pixelWidth == null
+      ? source
+      : ResizeImage.resizeIfNeeded(pixelWidth, null, source);
+}
+
 /// Load a cover into the disk cache and the in-memory image cache.
 Future<void> precacheCover(BuildContext context, String url) {
   if (url.isEmpty || url.toLowerCase() == 'asset' || !url.contains('http')) {
     return Future.value();
   }
   return precacheImage(
-    CachedNetworkImageProvider(
-      coverUrl(url),
-      cacheManager: CoverCacheManager.instance,
-    ),
+    coverImageProvider(url)!,
     context,
   );
 }

@@ -3,7 +3,6 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:isar/isar.dart';
 import 'package:kurage/models/entry.dart';
 import 'package:kurage/providers/supported_formats.dart';
@@ -18,6 +17,7 @@ import 'package:kurage/themes/theme_constants.dart';
 import 'package:kurage/widgets/floating_surface_header.dart';
 import 'package:kurage/variables.dart';
 import 'package:kurage/cache/cover_cache.dart';
+import 'package:kurage/cache/collection_cover_prewarmer.dart';
 import 'package:kurage/cache/speculative_cover_prefetcher.dart';
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:kurage/providers/server_progress_revision.dart';
@@ -75,26 +75,16 @@ class _CollectionScreenState extends State<CollectionScreen> with WidgetsBinding
   final ValueNotifier<int> _cardProgressRevision = ValueNotifier<int>(0);
   int _progressReadGeneration = 0;
   bool _emptyFilteredPopPending = false;
-  bool _warmScheduled = false;
-  bool _warming = false;
-  bool _warmAgain = false;
   bool _inForeground = true;
-  bool _coverWarmingPaused = false;
   ConnectionManager? _prefetchConnection;
-  int _coverWarmGeneration = 0;
-
-  // Unlike precacheImage(), these listeners retain decoded covers until their
-  // paths leave the moving viewport window or Collection is disposed.
-  static const int _maxPinnedCovers = 42;
-  bool _initialCoversReady = false;
-  final Map<String, ({ImageStream stream, ImageStreamListener listener})>
-      _pinnedCovers = {};
-  final Set<String> _failedCovers = {};
-  final Set<String> _revalidateCovers = {};
-  double? _previousScrollOffset;
-  DateTime? _previousScrollTime;
-  int _scrollDirection = 1;
-  bool _scrollingFast = false;
+  late final CollectionCoverPrewarmer _coverPrewarmer = CollectionCoverPrewarmer(
+    isActive: () => mounted && _inForeground,
+    isCurrentRoute: () => ModalRoute.of(context)?.isCurrent ?? true,
+    visibleRange: _visibleCoverRange,
+    imageConfiguration: () => createLocalImageConfiguration(context),
+    onInitialReady: () => setState(() {}),
+    onWarmComplete: _scheduleSpeculative,
+  );
 
   @override
   void initState() {
@@ -269,11 +259,12 @@ class _CollectionScreenState extends State<CollectionScreen> with WidgetsBinding
   void _stopSpeculative() => SpeculativeCoverPrefetcher.instance.stop(this);
 
   bool get _mayPrefetchCollection => mounted && _inForeground &&
-      !_coverWarmingPaused && _initialCoversReady &&
+      !_coverPrewarmer.isPaused && _coverPrewarmer.initialReady &&
       _prefetchConnection?.status == ConnectionStatus.online &&
       (ModalRoute.of(context)?.isCurrent ?? false);
 
-  bool get _collectionPrefetchBusy => _warming || _warmScheduled ||
+  bool get _collectionPrefetchBusy =>
+      _coverPrewarmer.isWarming || _coverPrewarmer.isScheduled ||
       (_gridController.hasClients &&
           _gridController.position.isScrollingNotifier.value);
 
@@ -309,11 +300,7 @@ class _CollectionScreenState extends State<CollectionScreen> with WidgetsBinding
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _inForeground = true;
-      // Revalidate existing pins after Android may have trimmed image memory.
-      // Keep old listeners attached until replacements are actually ready.
-      _failedCovers.clear();
-      _revalidateCovers.addAll(_pinnedCovers.keys);
-      _scheduleCoverWarming();
+      _coverPrewarmer.revalidate();
       _scheduleSpeculative();
     } else {
       _stopSpeculative();
@@ -330,62 +317,33 @@ class _CollectionScreenState extends State<CollectionScreen> with WidgetsBinding
     _cardProgressRevision.dispose();
     _activeCoverRoute.dispose();
     WidgetsBinding.instance.removeObserver(this);
-    _clearPinnedCovers();
+    _coverPrewarmer.dispose();
     _gridController.removeListener(_onGridScrolled);
     _gridController.dispose();
     super.dispose();
   }
 
-  // A new Future result or an explicit lifecycle/navigation event may start
-  // warming. Ordinary builds of the same list must not restart the queue.
+  // Ordinary builds of the same entry list must not restart warming.
   void _scheduleCoverWarming([List<Entry>? entries]) {
     if (entries != null) {
       if (identical(entries, _latestEntries)) return;
       _latestEntries = entries;
-    }
-    if (!mounted || !_inForeground || _coverWarmingPaused ||
-        _latestEntries == null) {
+      _coverPrewarmer.setCovers([
+        for (final entry in entries) entry.imagePath,
+      ]);
       return;
     }
-    if (_warming) {
-      _warmAgain = true;
-      return;
-    }
-    if (_warmScheduled) return;
-    _warmScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _warmScheduled = false;
-      if (!_canWarmCovers(_coverWarmGeneration)) return;
-      unawaited(_precacheCollectionCovers(_latestEntries!));
-    });
-    WidgetsBinding.instance.ensureVisualUpdate();
+    _coverPrewarmer.schedule();
   }
-
-  bool _canWarmCovers(int generation) =>
-      mounted && _inForeground && !_coverWarmingPaused &&
-      generation == _coverWarmGeneration &&
-      (ModalRoute.of(context)?.isCurrent ?? true);
 
   void _pauseCoverWarming() {
     _stopSpeculative();
-    _coverWarmingPaused = true;
-    // Let already-started image loads finish and enter the cache, but prevent
-    // their old queue from continuing if the user returns quickly.
-    _coverWarmGeneration++;
-    _warmAgain = false;
+    _coverPrewarmer.pause();
   }
 
   void _resumeCoverWarming() {
     if (!mounted) return;
-    _coverWarmingPaused = false;
-    // A reader can evict decoded images under memory pressure. The retained
-    // pin records only tell us that a listener was installed earlier; they
-    // don't prove its image is still ready after the reader closes.
-    // Re-resolve the current viewport first, then its directional lookahead.
-    // _pinCover keeps each existing listener until its replacement resolves.
-    _failedCovers.clear();
-    _revalidateCovers.addAll(_pinnedCovers.keys);
-    _scheduleCoverWarming();
+    _coverPrewarmer.resume();
     _scheduleSpeculative();
   }
 
@@ -414,25 +372,10 @@ class _CollectionScreenState extends State<CollectionScreen> with WidgetsBinding
   }
 
   void _onGridScrolled() {
-    if (!_gridController.hasClients || !_initialCoversReady) return;
-    final now = DateTime.now();
-    final offset = _gridController.offset;
-    final previous = _previousScrollOffset;
-    final previousTime = _previousScrollTime;
-    _previousScrollOffset = offset;
-    _previousScrollTime = now;
-    if (previous != null && previousTime != null) {
-      final delta = offset - previous;
-      if (delta.abs() < 0.5) return;
-      final elapsed = now.difference(previousTime).inMicroseconds;
-      _scrollDirection = delta >= 0 ? 1 : -1;
-      if (elapsed > 0) {
-        _scrollingFast = delta.abs() * 1000000 / elapsed > 1200;
-      }
-    }
-    // Coalesced to one post-frame callback; scrolling never rebuilds the grid.
+    if (!_gridController.hasClients || !_coverPrewarmer.initialReady) return;
+    if (!_coverPrewarmer.recordScroll(_gridController.offset)) return;
     _scheduleSpeculative();
-    _scheduleCoverWarming();
+    _coverPrewarmer.schedule();
   }
 
   // The initial viewport is not mounted yet, so estimate its full height.
@@ -453,189 +396,6 @@ class _CollectionScreenState extends State<CollectionScreen> with WidgetsBinding
       first: math.min(count, firstRow * 3),
       end: math.min(count, (firstRow + rows) * 3),
     );
-  }
-
-  List<String> _prioritizedCovers(List<Entry> entries) {
-    final visible = _visibleCoverRange(entries.length);
-    final viewportCount = math.max(3, visible.end - visible.first);
-    final ahead = viewportCount * (_scrollingFast ? 3 : 2);
-    final behind = viewportCount;
-    final paths = <String>[];
-    final seen = <String>{};
-    void add(int index) {
-      if (index < 0 || index >= entries.length) return;
-      final path = entries[index].imagePath;
-      if (path.isNotEmpty && path.toLowerCase() != 'asset' &&
-          seen.add(path)) {
-        paths.add(path);
-      }
-    }
-
-    // Always prepare the onscreen images first, including after a fling.
-    for (var i = visible.first; i < visible.end; i++) {
-      add(i);
-    }
-    if (_scrollDirection >= 0) {
-      for (var i = visible.end; i < math.min(entries.length, visible.end + ahead); i++) {
-        add(i);
-      }
-      for (var i = visible.first - 1; i >= math.max(0, visible.first - behind); i--) {
-        add(i);
-      }
-    } else {
-      for (var i = visible.first - 1; i >= math.max(0, visible.first - ahead); i--) {
-        add(i);
-      }
-      for (var i = visible.end; i < math.min(entries.length, visible.end + behind); i++) {
-        add(i);
-      }
-    }
-    return paths.take(_maxPinnedCovers).toList();
-  }
-
-  void _releaseCoverPin(String path) {
-    final pin = _pinnedCovers.remove(path);
-    if (pin != null) pin.stream.removeListener(pin.listener);
-    _revalidateCovers.remove(path);
-  }
-
-  void _clearPinnedCovers() {
-    for (final path in _pinnedCovers.keys.toList()) {
-      _releaseCoverPin(path);
-    }
-  }
-
-  Future<void> _pinCover(String path, int generation,
-      {Duration timeout = const Duration(seconds: 4)}) async {
-    if (!_canWarmCovers(generation) ||
-        _failedCovers.contains(path)) {
-      return;
-    }
-    final previous = _pinnedCovers[path];
-    if (previous != null && !_revalidateCovers.contains(path)) return;
-
-    // Use exactly the same provider as _CollectionCoverImage. Changing the
-    // decoded-image key would defeat prewarming and risk opening-animation jank.
-    final ImageProvider provider;
-    if (path.contains('http')) {
-      provider = CachedNetworkImageProvider(
-        coverUrl(path),
-        cacheManager: CoverCacheManager.instance,
-      );
-    } else {
-      provider = FileImage(File(path));
-    }
-    // Resolve errors must never strand the initial loading gate.
-    final configuration = createLocalImageConfiguration(context);
-    final ready = Completer<bool>();
-    final stream = provider.resolve(configuration);
-    final listener = ImageStreamListener(
-      (image, synchronousCall) {
-        image.dispose();
-        if (!ready.isCompleted) ready.complete(true);
-      },
-      onError: (error, stackTrace) {
-        if (!ready.isCompleted) ready.complete(false);
-      },
-    );
-    try {
-      stream.addListener(listener);
-    } catch (_) {
-      _failedCovers.add(path);
-      return;
-    }
-    bool loaded;
-    try {
-      loaded = await ready.future.timeout(timeout, onTimeout: () => false);
-    } catch (_) {
-      loaded = false;
-    }
-    if (!loaded || !_canWarmCovers(generation) ||
-        (_initialCoversReady &&
-            !(_latestEntries == null ? <String>[] :
-                _prioritizedCovers(_latestEntries!)).contains(path))) {
-      stream.removeListener(listener);
-      if (!loaded) _failedCovers.add(path);
-      return;
-    }
-    // The old listener stays alive until its replacement has decoded.
-    _pinnedCovers[path] = (stream: stream, listener: listener);
-    if (previous != null) previous.stream.removeListener(previous.listener);
-    _revalidateCovers.remove(path);
-  }
-
-  Future<void> _precacheCollectionCovers(List<Entry> entries) async {
-    if (_warming) {
-      _warmAgain = true;
-      return;
-    }
-    final generation = _coverWarmGeneration;
-    if (!_canWarmCovers(generation)) return;
-    _warming = true;
-    try {
-      if (!_initialCoversReady) {
-        // Keep the first viewport hidden until its covers have decoded.
-        // A shared deadline prevents a broken/offline image from holding the
-        // Collection spinner indefinitely.
-        final paths = _prioritizedCovers(entries);
-        final visible = _visibleCoverRange(entries.length);
-        final initialCount = math.min(paths.length, <String>{
-          for (var i = visible.first; i < visible.end; i++)
-            if (entries[i].imagePath.isNotEmpty &&
-                entries[i].imagePath.toLowerCase() != 'asset')
-              entries[i].imagePath,
-        }.length);
-        final deadline = DateTime.now().add(const Duration(seconds: 6));
-        for (var i = 0; i < initialCount && _canWarmCovers(generation); i += 2) {
-          final remaining = deadline.difference(DateTime.now());
-          if (remaining <= Duration.zero) break;
-          await Future.wait([
-            for (var j = i; j < math.min(initialCount, i + 2); j++)
-              _pinCover(paths[j], generation, timeout: remaining),
-          ]);
-        }
-        if (_canWarmCovers(generation) && identical(entries, _latestEntries)) {
-          setState(() => _initialCoversReady = true);
-          // The scroll controller will attach when the grid first builds.
-          _warmAgain = true;
-        }
-      } else {
-        // Re-evaluate after each pair of loads. A fast fling never waits for
-        // an obsolete FIFO queue from the previous scroll position.
-        while (_canWarmCovers(generation) && identical(entries, _latestEntries)) {
-          final desired = _prioritizedCovers(entries);
-          final wanted = desired.toSet();
-          for (final path in _pinnedCovers.keys.toList()) {
-            if (!wanted.contains(path)) _releaseCoverPin(path);
-          }
-          final pending = desired.where((path) =>
-              !_failedCovers.contains(path) &&
-              (!_pinnedCovers.containsKey(path) ||
-                  _revalidateCovers.contains(path))).take(2).toList();
-          if (pending.isEmpty) break;
-          await Future.wait([
-            for (final path in pending) _pinCover(path, generation),
-          ]);
-          await Future<void>.delayed(const Duration(milliseconds: 12));
-        }
-      }
-    } catch (error) {
-      // A bad image may fail before its stream listener can be installed.
-      // Never leave the Collection waiting forever for an initial cover.
-      if (!_initialCoversReady && _canWarmCovers(generation) &&
-          identical(entries, _latestEntries)) {
-        setState(() => _initialCoversReady = true);
-        _warmAgain = true;
-      }
-      logger.w('Collection cover warmup failed: $error');
-    } finally {
-      _warming = false;
-      if (_initialCoversReady) _scheduleSpeculative();
-      if (_warmAgain && mounted && _inForeground && !_coverWarmingPaused) {
-        _warmAgain = false;
-        _scheduleCoverWarming();
-      }
-    }
   }
 
   final isar = Isar.getInstance();
@@ -769,7 +529,7 @@ class _CollectionScreenState extends State<CollectionScreen> with WidgetsBinding
             // The first viewport uses the same readiness gate as Library.
             // Keep pins attached until the actual cards subscribe to them.
             _scheduleCoverWarming(snapshot.data as List<Entry>);
-            if (!_initialCoversReady) {
+            if (!_coverPrewarmer.initialReady) {
               return const Center(child: CircularProgressIndicator());
             }
             return Padding(
@@ -1296,18 +1056,9 @@ class _CollectionCoverImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (path.isEmpty || path.toLowerCase() == 'asset') {
+    final provider = coverImageProvider(path);
+    if (provider == null) {
       return Image.asset('assets/images/NoCoverArt.png', fit: BoxFit.cover);
-    }
-
-    final ImageProvider provider;
-    if (path.contains('http')) {
-      provider = CachedNetworkImageProvider(
-        coverUrl(path),
-        cacheManager: CoverCacheManager.instance,
-      );
-    } else {
-      provider = FileImage(File(path));
     }
 
     return Image(

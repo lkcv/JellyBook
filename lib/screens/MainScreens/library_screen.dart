@@ -1,9 +1,7 @@
 // The purpose of this file is to create the library screen (this is part of the list of screens in the bottom navigation bar)
 import 'dart:async';
-import 'dart:io';
 import 'dart:math' as math;
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:kurage/models/folder.dart';
 import 'package:kurage/providers/fetch_categories.dart';
@@ -22,6 +20,7 @@ import 'package:kurage/themes/theme_constants.dart';
 import 'package:kurage/widgets/floating_surface_header.dart';
 import 'package:kurage/variables.dart';
 import 'package:kurage/cache/cover_cache.dart';
+import 'package:kurage/cache/library_cover_prewarmer.dart';
 import 'package:kurage/cache/speculative_cover_prefetcher.dart';
 import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
 import 'package:provider/provider.dart';
@@ -58,37 +57,26 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
   );
 
   late Future<(List<Entry>, List<Folder>)> _categoriesFuture;
-  bool _initialCoversReady = false;
-  // Keep decoded startup covers alive until the first grid frame is painted.
-  final List<({ImageStream stream, ImageStreamListener listener,
-    Completer<void> ready})> _startupCoverPins = [];
-
-  // Once the grid is visible, hold a small moving set of decoded covers in
-  // memory. Scroll position alone retains the grid's widgets, not images a few
-  // rows beyond Flutter's offscreen sliver cache.
-  static const int _maxScrollCoverPins = 48;
-  static const int _maxConcurrentScrollCoverLoads = 2;
-  final Map<String, ({ImageStream stream, ImageStreamListener listener})>
-      _scrollCoverPins = {};
-  final Set<String> _scrollCoverLoading = {};
-  final Set<String> _scrollCoverFailures = {};
-  // After Android resumes, re-resolve existing pins without dropping their
-  // listeners first. At most two replacement streams are live at once.
-  final Set<String> _scrollCoverRefreshPending = {};
-  final Map<String, ({ImageStream stream, ImageStreamListener listener})>
-      _scrollCoverReplacements = {};
-  // Permit one bounded refresh while the retained Library tab is offstage in
-  // Settings; ordinary scroll warming remains limited to the active Library.
-  bool _resumeWarmWhileInactive = false;
-  List<String> _scrollCoverPriority = const [];
-  bool _scrollPumpScheduled = false;
-  String? _scrollWindowKey;
-  int _scrollCatalogVersion = 0;
-  ScrollController? _lastScrollSource;
-  double? _lastScrollOffset;
-  DateTime? _lastScrollAt;
-  double _scrollVelocity = 0;
-  int _scrollDirection = 1;
+  late final LibraryCoverPrewarmer _coverPrewarmer = LibraryCoverPrewarmer(
+    canSchedule: () => mounted && _inForeground && _lastFolders != null,
+    canWarm: () => mounted && _inForeground &&
+        (widget.isActive || _coverPrewarmer.resumeWarmWhileInactive) &&
+        (ModalRoute.of(context)?.isCurrent ?? true),
+    covers: () => _lastFolders == null
+        ? null
+        : _visibleFolders(_lastFolders!),
+    visibleRange: _visibleCoverRange,
+    provider: (path) => _libraryCoverProvider(path, context),
+    context: () => context,
+    filterKey: () => '${_filter.downloadedOnly}:${_filter.readingOnly}',
+    catalogSignature: () => _coverSignature,
+    onInitialReady: () => setState(() {}),
+    onStartupPainted: () {
+      unawaited(DownloadQueue.instance.restoreQueue()
+          .whenComplete(_scheduleSpeculative));
+      _tryPendingSync();
+    },
+  );
 
   static const int _maxSpeculativeSeries = 8;
 
@@ -154,7 +142,7 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
       _hadMatchesWhenLeaving = false;
       // The IndexedStack preserves this tab (and its decoded-image pins).
       // Recheck the current window in case Android reclaimed other images.
-      _scrollWindowKey = null;
+      _coverPrewarmer.invalidateWindow();
       _scheduleCoverWarming();
       _scheduleSpeculative();
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -187,9 +175,7 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
       _readingIdsCache = null;
     });
     _coverSignature = null;
-    _scrollWindowKey = null;
-    _scrollVelocity = 0;
-    _lastScrollSource = null;
+    _coverPrewarmer.filterChanged();
     _scheduleCoverWarming();
     _scheduleSpeculative();
   }
@@ -205,9 +191,6 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
   static const _libraryReturnRefreshInterval = Duration(minutes: 1);
   DateTime? _lastSuccessfulServerRefreshAt;
   DateTime? _lastServerRefreshAttemptAt;
-  bool _warmScheduled = false;
-  bool _warming = false;
-  bool _warmAgain = false;
   String? _coverSignature;
 
   // Tell visible cards to recalculate progress after leaving a collection.
@@ -258,7 +241,7 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
 
   void _tryPendingSync() {
     if (!_startupSyncPending || !mounted || !_inForeground ||
-        !_initialCoversReady || _activeRefresh != null ||
+        !_coverPrewarmer.initialReady || _activeRefresh != null ||
         _connectionManager?.status != ConnectionStatus.online) {
       return;
     }
@@ -269,7 +252,7 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
   // Only revalidate on returning to Library; never poll while it is idle.
   void _refreshOnLibraryReturnIfStale() {
     if (!mounted || !widget.isActive || !_inForeground ||
-        !_initialCoversReady || _activeRefresh != null ||
+        !_coverPrewarmer.initialReady || _activeRefresh != null ||
         _connectionManager?.status != ConnectionStatus.online) {
       return;
     }
@@ -329,29 +312,16 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
     }
   }
 
-  void _releaseStartupCoverPins() {
-    for (final pin in _startupCoverPins) {
-      pin.stream.removeListener(pin.listener);
-      // Let any in-progress warm finish if this widget is disposed.
-      if (!pin.ready.isCompleted) pin.ready.complete();
-    }
-    _startupCoverPins.clear();
-  }
-
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _inForeground = state == AppLifecycleState.resumed;
     if (_inForeground) {
-      // A real background/lock transition may have reclaimed decoded images.
-      // Revalidate the current pins, preserving each until a replacement is
-      // ready. Do it in Settings too, before switching back to Library.
-      if (_wasBackgrounded && _initialCoversReady) {
-        _scrollCoverRefreshPending.addAll(_scrollCoverPins.keys);
-        _scrollCoverFailures.clear();
-        _scrollVelocity = 0;
-        _resumeWarmWhileInactive = !widget.isActive;
+      // Revalidate pins even when Library is retained offstage in Settings.
+      if (_wasBackgrounded && _coverPrewarmer.initialReady) {
+        _coverPrewarmer.revalidate(allowInactive: !widget.isActive);
+      } else {
+        _coverPrewarmer.invalidateWindow();
       }
-      _scrollWindowKey = null;
       _scheduleCoverWarming();
       _scheduleSpeculative();
       // Refresh immediately after an actual background/lock transition,
@@ -369,22 +339,15 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
     }
   }
 
-  bool get _canWarm => mounted && _inForeground &&
-      (widget.isActive || _resumeWarmWhileInactive) &&
-      (ModalRoute.of(context)?.isCurrent ?? true);
-
-  // An inexpensive scroll signal. Work is coalesced into a post-frame pass,
-  // where the new viewport is sampled; no setState or image resolution here.
   void _stopSpeculative() => SpeculativeCoverPrefetcher.instance.stop(this);
 
   bool get _mayPrefetchLibrary => mounted && _inForeground &&
-      widget.isActive && _initialCoversReady && _lastFolders != null &&
+      widget.isActive && _coverPrewarmer.initialReady && _lastFolders != null &&
       _connectionManager?.status == ConnectionStatus.online &&
       (ModalRoute.of(context)?.isCurrent ?? false);
 
-  bool get _libraryPrefetchBusy => _warming || _warmScheduled ||
-      _activeRefresh != null || _scrollPumpScheduled ||
-      _scrollCoverLoading.isNotEmpty ||
+  bool get _libraryPrefetchBusy => _coverPrewarmer.isBusy ||
+      _activeRefresh != null ||
       (_libraryScrollController.hasClients &&
           _libraryScrollController.position.isScrollingNotifier.value);
 
@@ -441,51 +404,12 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
   }
 
   void _onLibraryScroll() {
-    if (!_initialCoversReady || !_canWarm) return;
-    final controller = _libraryScrollController;
-    if (!controller.hasClients) return;
-    if (_lastScrollSource != controller) {
-      _lastScrollSource = controller;
-      _lastScrollOffset = null;
-      _lastScrollAt = null;
-      _scrollVelocity = 0;
-    }
-    final now = DateTime.now();
-    final offset = controller.offset;
-    final lastOffset = _lastScrollOffset;
-    final lastAt = _lastScrollAt;
-    if (lastOffset != null && lastAt != null) {
-      final elapsed = now.difference(lastAt).inMilliseconds;
-      final delta = offset - lastOffset;
-      if (delta.abs() > 0.5 && elapsed >= 8) {
-        _scrollDirection = delta > 0 ? 1 : -1;
-        _scrollVelocity = (_scrollVelocity * 0.4) +
-            ((delta.abs() * 1000 / elapsed) * 0.6);
-      }
-    }
-    _lastScrollOffset = offset;
-    _lastScrollAt = now;
+    if (!_coverPrewarmer.recordScroll(_libraryScrollController)) return;
     _scheduleSpeculative();
     _scheduleCoverWarming();
   }
 
-  void _scheduleCoverWarming() {
-    if (!mounted || !_inForeground || _lastFolders == null) return;
-    if (_warming) {
-      _warmAgain = true;
-      return;
-    }
-    if (_warmScheduled) return;
-    _warmScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _warmScheduled = false;
-      if (_canWarm && _lastFolders != null) {
-        unawaited(_warmVisibleCovers());
-      }
-    });
-    // Ensure a callback is delivered even when resuming to an idle tab.
-    WidgetsBinding.instance.scheduleFrame();
-  }
+  void _scheduleCoverWarming() => _coverPrewarmer.schedule();
 
   // Two-column grid: 8px outer padding, 6px gutters, 0.63 aspect ratio.
   // Prepare the onscreen rows and one adjacent row, not the entire library.
@@ -516,296 +440,14 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
     );
   }
 
-  Future<void> _warmVisibleCovers() async {
-    if (_warming || !_canWarm) return;
-    _warmAgain = false;
-    _warming = true;
-    try {
-      if (_initialCoversReady) {
-        _updateScrollCoverWindow();
-        return;
-      }
-      final allFolders = _lastFolders;
-      if (allFolders == null) return;
-      final folders = _visibleFolders(allFolders);
-      final signatureAtStart = _coverSignature;
-      final range = _visibleCoverRange(folders.length);
-      // At most two concurrent decodes, joining the exact same providers
-      // used by SeriesCard. Avoid competing with navigation/reader work.
-      for (var i = range.first; i < range.end && _canWarm; i += 2) {
-        await Future.wait([
-          for (var j = i; j < math.min(range.end, i + 2); j++)
-            _warmCover(folders[j].image),
-        ]);
-      }
-      if (_canWarm && !_initialCoversReady &&
-          signatureAtStart == _coverSignature) {
-        setState(() => _initialCoversReady = true);
-        // Begin the scrolling prewarmer only after the first grid frame. This
-        // stays separate from the startup pins' release callback.
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _scheduleCoverWarming();
-        });
-        // Image widgets subscribe to the pinned streams in this frame.
-        // Release the extra listeners only after those widgets have mounted.
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _releaseStartupCoverPins();
-          // Recover pending downloads only after startup covers have painted,
-          // so resumed transfers don't compete with the first Library frame.
-          unawaited(DownloadQueue.instance.restoreQueue()
-              .whenComplete(_scheduleSpeculative));
-          // The grid has painted; retry any startup sync waiting on covers.
-          _tryPendingSync();
-        });
-      }
-    } finally {
-      _warming = false;
-      if (_warmAgain && _canWarm) {
-        _warmAgain = false;
-        _scheduleCoverWarming();
-      }
-    }
-  }
-
-  Future<void> _warmCover(String path) async {
-    if (!_canWarm) return;
-    final provider = _libraryCoverProvider(path, context);
-    if (provider == null) return;
-    try {
-      if (!_initialCoversReady) {
-        // Unlike precacheImage, this listener remains attached across frames.
-        // Previously warmed images cannot be evicted before the grid appears.
-        final ready = Completer<void>();
-        final stream = provider.resolve(createLocalImageConfiguration(context));
-        final listener = ImageStreamListener(
-          (image, synchronousCall) {
-            image.dispose();
-            if (!ready.isCompleted) ready.complete();
-          },
-          onError: (error, stackTrace) {
-            // Missing covers are shown by Image.errorBuilder later.
-            if (!ready.isCompleted) ready.complete();
-          },
-        );
-        _startupCoverPins.add((
-          stream: stream,
-          listener: listener,
-          ready: ready,
-        ));
-        stream.addListener(listener);
-        await ready.future;
-      } else {
-        await precacheImage(provider, context, onError: (_, __) {});
-      }
-    } catch (_) {
-      // Offline, unreadable, or missing covers should not block others.
-    }
-  }
-
-  void _releaseScrollCover(String path) {
-    final replacement = _scrollCoverReplacements.remove(path);
-    if (replacement != null) {
-      replacement.stream.removeListener(replacement.listener);
-    }
-    final pin = _scrollCoverPins.remove(path);
-    if (pin != null) pin.stream.removeListener(pin.listener);
-    _scrollCoverLoading.remove(path);
-    _scrollCoverRefreshPending.remove(path);
-  }
-
-  void _releaseScrollCoverPins() {
-    for (final path in _scrollCoverPins.keys.toList()) {
-      _releaseScrollCover(path);
-    }
-    _scrollCoverPriority = const [];
-    _scrollWindowKey = null;
-    _resumeWarmWhileInactive = false;
-  }
-
-  void _scheduleScrollCoverPump() {
-    if (_scrollPumpScheduled || !_initialCoversReady || !_canWarm) return;
-    _scrollPumpScheduled = true;
-    scheduleMicrotask(() {
-      _scrollPumpScheduled = false;
-      if (!_canWarm || !_initialCoversReady) return;
-      // The newest window takes priority. No stale FIFO backlog builds up
-      // during a fast fling or an abrupt reversal.
-      for (final path in _scrollCoverPriority) {
-        if (_scrollCoverLoading.length >= _maxConcurrentScrollCoverLoads) break;
-        if (_scrollCoverLoading.contains(path) ||
-            _scrollCoverFailures.contains(path)) {
-          continue;
-        }
-        if (_scrollCoverPins.containsKey(path)) {
-          if (_scrollCoverRefreshPending.contains(path)) {
-            _refreshScrollCoverPin(path);
-          }
-        } else {
-          _startScrollCoverPin(path);
-        }
-      }
-      // Once Settings' one-time resume pass finishes, stop warming offstage.
-      if (_resumeWarmWhileInactive && _scrollCoverLoading.isEmpty &&
-          !_scrollCoverPriority.any((path) =>
-              _scrollCoverRefreshPending.contains(path) ||
-              (!_scrollCoverPins.containsKey(path) &&
-                  !_scrollCoverFailures.contains(path)))) {
-        _resumeWarmWhileInactive = false;
-      }
-    });
-  }
-
-  // Resolve the same resized provider anew. Retain the old image listener
-  // until the replacement has decoded so a routine resume never creates a
-  // gap in the cached viewport. Failure leaves the original pin in place.
-  void _refreshScrollCoverPin(String path) {
-    final previous = _scrollCoverPins[path];
-    if (previous == null) return;
-    try {
-      final provider = _libraryCoverProvider(path, context);
-      if (provider == null) {
-        _scrollCoverRefreshPending.remove(path);
-        return;
-      }
-      final stream = provider.resolve(createLocalImageConfiguration(context));
-      late final ImageStreamListener listener;
-      listener = ImageStreamListener(
-        (image, synchronousCall) {
-          image.dispose();
-          if (_scrollCoverReplacements[path]?.stream != stream) return;
-          _scrollCoverPins[path] = (stream: stream, listener: listener);
-          _scrollCoverReplacements.remove(path);
-          previous.stream.removeListener(previous.listener);
-          _scrollCoverLoading.remove(path);
-          _scrollCoverRefreshPending.remove(path);
-          _scheduleScrollCoverPump();
-        },
-        onError: (error, stackTrace) {
-          if (_scrollCoverReplacements[path]?.stream != stream) return;
-          _scrollCoverReplacements.remove(path);
-          stream.removeListener(listener);
-          _scrollCoverLoading.remove(path);
-          _scrollCoverRefreshPending.remove(path);
-          _scrollCoverFailures.add(path);
-          _scheduleScrollCoverPump();
-        },
-      );
-      _scrollCoverReplacements[path] = (stream: stream, listener: listener);
-      _scrollCoverLoading.add(path);
-      stream.addListener(listener);
-    } catch (_) {
-      final replacement = _scrollCoverReplacements.remove(path);
-      if (replacement != null) {
-        replacement.stream.removeListener(replacement.listener);
-      }
-      _scrollCoverLoading.remove(path);
-      _scrollCoverRefreshPending.remove(path);
-      _scrollCoverFailures.add(path);
-      _scheduleScrollCoverPump();
-    }
-  }
-
-  void _startScrollCoverPin(String path) {
-    try {
-      final provider = _libraryCoverProvider(path, context);
-      if (provider == null) return;
-      final stream = provider.resolve(createLocalImageConfiguration(context));
-      late final ImageStreamListener listener;
-      listener = ImageStreamListener(
-        (image, synchronousCall) {
-          image.dispose();
-          if (_scrollCoverPins[path]?.stream != stream) return;
-          _scrollCoverLoading.remove(path);
-          _scheduleScrollCoverPump();
-        },
-        onError: (error, stackTrace) {
-          if (_scrollCoverPins[path]?.stream != stream) return;
-          // Don't repeatedly retry a missing image on every scroll frame.
-          _scrollCoverFailures.add(path);
-          _releaseScrollCover(path);
-          _scheduleScrollCoverPump();
-        },
-      );
-      _scrollCoverPins[path] = (stream: stream, listener: listener);
-      _scrollCoverLoading.add(path);
-      stream.addListener(listener);
-    } catch (_) {
-      _scrollCoverFailures.add(path);
-      _releaseScrollCover(path);
-      _scheduleScrollCoverPump();
-    }
-  }
-
-  void _updateScrollCoverWindow() {
-    if (!_canWarm || !_initialCoversReady || _lastFolders == null) return;
-    final folders = _visibleFolders(_lastFolders!);
-    final range = _visibleCoverRange(folders.length);
-    // One viewport behind, 2-3 ahead. Fast swipes widen the leading edge.
-    // The hard cap bounds decoded-memory residency even in huge libraries.
-    final span = math.max(8, range.end - range.first);
-    final fast = _scrollVelocity > 2200;
-    final ahead = math.min(fast ? 36 : 28, span * (fast ? 4 : 3));
-    final behind = math.min(16, span);
-    final key = '$_scrollCatalogVersion:${_filter.downloadedOnly}:'
-        '${_filter.readingOnly}:${range.first}:${range.end}:'
-        '$_scrollDirection:$fast';
-    if (key == _scrollWindowKey) return;
-    _scrollWindowKey = key;
-
-    final priority = <String>[];
-    final wanted = <String>{};
-    void addIndex(int index) {
-      if (index < 0 || index >= folders.length ||
-          priority.length >= _maxScrollCoverPins) {
-        return;
-      }
-      final path = folders[index].image;
-      if (path.isNotEmpty && path.toLowerCase() != 'asset' &&
-          wanted.add(path)) {
-        priority.add(path);
-      }
-    }
-
-    // Resolve covers already on screen first; alternate the lookahead and
-    // lookbehind by distance, biased toward the direction of travel.
-    for (var index = range.first; index < range.end; index++) {
-      addIndex(index);
-    }
-    for (var distance = 0; distance < math.max(ahead, behind); distance++) {
-      if (_scrollDirection >= 0) {
-        if (distance < ahead) addIndex(range.end + distance);
-        if (distance < behind) addIndex(range.first - 1 - distance);
-      } else {
-        if (distance < ahead) addIndex(range.first - 1 - distance);
-        if (distance < behind) addIndex(range.end + distance);
-      }
-    }
-    // Keep the decoded pins across tab switches and app backgrounding, but
-    // release covers outside the new bounded window as scrolling continues.
-    for (final path in _scrollCoverPins.keys.toList()) {
-      if (!wanted.contains(path)) _releaseScrollCover(path);
-    }
-    _scrollCoverPriority = priority;
-    _scheduleScrollCoverPump();
-  }
-
   void _onFoldersLoaded(List<Folder> folders) {
     // Don't prewarm again on progress-notifier rebuilds or tab switches.
     final signature = folders.map((f) => '${f.id}\u0000${f.image}').join('\u0001');
     if (signature == _coverSignature) return;
     _readingIdsCache = null;
     _coverSignature = signature;
-    _scrollCatalogVersion++;
     _scheduleSpeculative();
-    _scrollCoverFailures.clear();
-    _scrollWindowKey = null;
-    // Do not discard every decoded pin on a catalogue refresh. Keep paths
-    // still used by the catalogue; only genuinely obsolete covers go away.
-    // The next window pass updates priorities and releases distant pins.
-    final validPaths = folders.map((folder) => folder.image).toSet();
-    for (final path in _scrollCoverPins.keys.toList()) {
-      if (!validPaths.contains(path)) _releaseScrollCover(path);
-    }
+    _coverPrewarmer.catalogChanged(folders.map((folder) => folder.image).toSet());
     _scheduleCoverWarming();
   }
 
@@ -847,8 +489,7 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
     } else if (status == ConnectionStatus.online) {
       _scheduleSpeculative();
       if (_wasOffline) {
-        _scrollCoverFailures.clear();
-        _scrollWindowKey = null;
+        _coverPrewarmer.connectionRestored();
         _scheduleCoverWarming();
         _wasOffline = false;
         if (mounted) {
@@ -1110,12 +751,8 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
                         _progressRevision.value++;
                         WidgetsBinding.instance.addPostFrameCallback((_) {
                           if (mounted && widget.isActive) {
-                            // Reader decoding may have evicted Library covers.
-                            // Retain old pins until replacements are decoded.
-                            _scrollCoverRefreshPending.addAll(_scrollCoverPins.keys);
-                            _scrollCoverFailures.clear();
-                            _scrollVelocity = 0;
-                            _scrollWindowKey = null;
+                            // Re-resolve visible covers after reader decoding.
+                            _coverPrewarmer.revalidate();
                             _scheduleCoverWarming();
                             _refreshOnLibraryReturnIfStale();
                           }
@@ -1160,8 +797,7 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
     _stopSpeculative();
     _inForeground = false;
     WidgetsBinding.instance.removeObserver(this);
-    _releaseStartupCoverPins();
-    _releaseScrollCoverPins();
+    _coverPrewarmer.dispose();
     _allScrollController.removeListener(_onLibraryScroll);
     _downloadedScrollController.removeListener(_onLibraryScroll);
     _readingScrollController.removeListener(_onLibraryScroll);
@@ -1400,7 +1036,7 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
             // while loading/refreshing, keep showing the last grid if we have one
             if (snapshot.connectionState != ConnectionState.done) {
               final cached = _lastFolders;
-              return cached != null && _initialCoversReady
+              return cached != null && _coverPrewarmer.initialReady
                   ? _buildGrid(cached)
                   : const Center(child: CircularProgressIndicator());
             }
@@ -1409,7 +1045,7 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
               final List<Folder> folders = snapshot.data.$2 ?? <Folder>[];
               _lastFolders = folders;
               _onFoldersLoaded(folders);
-              return _initialCoversReady
+              return _coverPrewarmer.initialReady
                   ? _buildGrid(folders)
                   : const Center(child: CircularProgressIndicator());
             }
@@ -1424,7 +1060,7 @@ class _LibraryScreenState extends State<LibraryScreen> with WidgetsBindingObserv
               if (cached != null && cached.isNotEmpty) {
                 _lastFolders = cached;
                 _onFoldersLoaded(cached);
-                return _initialCoversReady
+                return _coverPrewarmer.initialReady
                     ? _buildGrid(cached)
                     : const Center(child: CircularProgressIndicator());
               }
@@ -1592,25 +1228,13 @@ class _SeriesCardState extends State<SeriesCard> {
   }
 }
 
-// A single provider factory for both the displayed cover and its precache.
-// The shared manager also serves Collection/reader cover warmups.
 ImageProvider? _libraryCoverProvider(String path, BuildContext context) {
   if (path.isEmpty || path.toLowerCase() == 'asset') return null;
-  final ImageProvider source;
-  if (path.contains('http')) {
-    source = CachedNetworkImageProvider(
-      coverUrl(path),
-      cacheManager: CoverCacheManager.instance,
-    );
-  } else {
-    source = FileImage(File(path));
-  }
-  // The rendered grid and the warm queue MUST use the same decoded-image key.
   // Decode near displayed size rather than keeping huge source bitmaps in RAM.
   final tileWidth = (MediaQuery.sizeOf(context).width - 22) / 2;
   final pixelWidth = math.max(1,
       (tileWidth * MediaQuery.devicePixelRatioOf(context)).ceil());
-  return ResizeImage.resizeIfNeeded(pixelWidth, null, source);
+  return coverImageProvider(path, pixelWidth: pixelWidth);
 }
 
 class _LibraryCover extends StatelessWidget {
