@@ -18,6 +18,7 @@ import 'package:kurage/widgets/floating_surface_header.dart';
 import 'package:kurage/variables.dart';
 import 'package:kurage/cache/cover_cache.dart';
 import 'package:kurage/cache/collection_cover_prewarmer.dart';
+import 'package:kurage/cache/collection_page_prefetcher.dart';
 import 'package:kurage/cache/speculative_cover_prefetcher.dart';
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:kurage/providers/server_progress_revision.dart';
@@ -77,6 +78,13 @@ class _CollectionScreenState extends State<CollectionScreen> with WidgetsBinding
   bool _emptyFilteredPopPending = false;
   bool _inForeground = true;
   ConnectionManager? _prefetchConnection;
+  late final CollectionPagePrefetcher _pagePrefetcher =
+      CollectionPagePrefetcher(
+    allowed: () => _mayPrefetchCollection,
+    busy: () => _collectionPrefetchBusy ||
+        SpeculativeCoverPrefetcher.instance.isRunning,
+    onComplete: _scheduleCoverDiskPrefetch,
+  );
   late final CollectionCoverPrewarmer _coverPrewarmer = CollectionCoverPrewarmer(
     isActive: () => mounted && _inForeground,
     isCurrentRoute: () => ModalRoute.of(context)?.isCurrent ?? true,
@@ -256,7 +264,10 @@ class _CollectionScreenState extends State<CollectionScreen> with WidgetsBinding
     }
   }
 
-  void _stopSpeculative() => SpeculativeCoverPrefetcher.instance.stop(this);
+  void _stopSpeculative() {
+    _pagePrefetcher.stop();
+    SpeculativeCoverPrefetcher.instance.stop(this);
+  }
 
   bool get _mayPrefetchCollection => mounted && _inForeground &&
       !_coverPrewarmer.isPaused && _coverPrewarmer.initialReady &&
@@ -273,10 +284,22 @@ class _CollectionScreenState extends State<CollectionScreen> with WidgetsBinding
       _stopSpeculative();
       return;
     }
+    final entries = _latestEntries;
+    if (entries == null) return;
+    final visible = _visibleCoverRange(entries.length);
+    if (_pagePrefetcher.schedule(entries, visible.first, visible.end)) {
+      SpeculativeCoverPrefetcher.instance.stop(this);
+      return;
+    }
+    _scheduleCoverDiskPrefetch();
+  }
+
+  void _scheduleCoverDiskPrefetch() {
+    if (!_mayPrefetchCollection || _pagePrefetcher.hasWork) return;
     SpeculativeCoverPrefetcher.instance.schedule(
       owner: this,
       label: 'Collection',
-      allowed: () => _mayPrefetchCollection,
+      allowed: () => _mayPrefetchCollection && !_pagePrefetcher.hasWork,
       busy: () => _collectionPrefetchBusy,
       urls: _collectionVolumeUrls,
     );
@@ -318,6 +341,7 @@ class _CollectionScreenState extends State<CollectionScreen> with WidgetsBinding
     _activeCoverRoute.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _coverPrewarmer.dispose();
+    _pagePrefetcher.dispose();
     _gridController.removeListener(_onGridScrolled);
     _gridController.dispose();
     super.dispose();
@@ -374,6 +398,7 @@ class _CollectionScreenState extends State<CollectionScreen> with WidgetsBinding
   void _onGridScrolled() {
     if (!_gridController.hasClients || !_coverPrewarmer.initialReady) return;
     if (!_coverPrewarmer.recordScroll(_gridController.offset)) return;
+    _stopSpeculative();
     _scheduleSpeculative();
     _coverPrewarmer.schedule();
   }

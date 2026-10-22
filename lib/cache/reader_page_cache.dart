@@ -272,6 +272,50 @@ class ReaderPageCache {
     return queued;
   }
 
+  // Prefetched pages belong to the normal Reader Cache, but cannot change
+  // reading position or evict pages the user has actually read.
+  static Future<bool> savePrefetchedPage({
+    required String volumeId,
+    required int pageCount,
+    required int pageIndex,
+    required int resumePage,
+    required File file,
+    required bool Function() allowed,
+  }) {
+    final operation = _writeQueue.catchError((Object _) {}).then((_) async {
+      if (!allowed() || pageCount <= 0 || pageIndex < 0 ||
+          pageIndex >= pageCount) return false;
+      final root = await _root();
+      final directory = Directory('${root.path}/${_key(volumeId)}');
+      final manifest = await _readManifest(directory);
+      final previous = manifest['currentPage'];
+      final currentPage = (_positions[volumeId]?.page ??
+          (previous is num ? previous.toInt() : resumePage))
+          .clamp(0, pageCount - 1).toInt();
+      final sourceBytes = await file.length();
+      if (_trackedBytes == null) await _indexCache(root);
+      final limit = (await getLimitMb()) * _bytesPerMb;
+      // Leave room for the manifest and metadata as well as the image.
+      if ((_trackedBytes ?? 0) + sourceBytes + 32768 > limit ||
+          !allowed()) return false;
+      final lastUsed = manifest['lastUsed'];
+      await _saveWindow(
+        volumeId: volumeId,
+        pageCount: pageCount,
+        currentPage: currentPage,
+        lastUsed: lastUsed is num
+            ? lastUsed.toInt()
+            : DateTime.now().millisecondsSinceEpoch,
+        sourceFiles: {pageIndex: file},
+        chapterLabels: const {},
+        speculative: true,
+      );
+      return true;
+    });
+    _writeQueue = operation.then<void>((_) {});
+    return operation;
+  }
+
   static Future<void> _saveWindow({
     required String volumeId,
     required int pageCount,
@@ -279,6 +323,7 @@ class ReaderPageCache {
     required int lastUsed,
     required Map<int, File> sourceFiles,
     required Map<int, String> chapterLabels,
+    bool speculative = false,
   }) async {
     if (pageCount <= 0) return;
 
@@ -306,7 +351,7 @@ class ReaderPageCache {
       final index = entry.key;
       final source = entry.value;
       if (index < 0 || index >= pageCount ||
-          (index - safeCurrent).abs() > 3) {
+          (!speculative && (index - safeCurrent).abs() > 3)) {
         continue;
       }
       try {
@@ -351,10 +396,11 @@ class ReaderPageCache {
       }
     }
 
-    // If the new page has not arrived yet, reopen at the closest retained
-    // page; saving the displayed page below updates this immediately.
+    // Speculative files and metadata-only updates cannot move a reading
+    // position to the nearest available (possibly prefetched) image.
     final cachedIndices = pages.keys.map(int.tryParse).whereType<int>().toList();
-    final persistedCurrent = pages.containsKey('$safeCurrent')
+    final persistedCurrent = speculative || sourceFiles.isEmpty ||
+        pages.containsKey('$safeCurrent')
         ? safeCurrent
         : (cachedIndices.isEmpty
             ? safeCurrent

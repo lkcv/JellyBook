@@ -16,6 +16,7 @@ class SpeculativeCoverPrefetcher {
   int _generation = 0;
   Timer? _timer;
   bool _running = false;
+  bool get isRunning => _running;
   bool _retryWhenIdle = false;
   bool Function()? _allowed;
   bool Function()? _busy;
