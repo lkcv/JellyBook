@@ -1,4 +1,4 @@
-package com.KaraWilson.JellyBook
+package com.lkcv.kurage
 
 import android.app.Notification
 import android.app.NotificationChannel

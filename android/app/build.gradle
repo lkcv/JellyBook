@@ -50,7 +50,7 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.KaraWilson.JellyBook"
+        applicationId "com.lkcv.kurage"
         minSdkVersion flutter.minSdkVersion 
         targetSdkVersion flutter.targetSdkVersion
         multiDexEnabled true
@@ -96,7 +96,7 @@ android {
             }
         }
     }
-    namespace 'com.KaraWilson.JellyBook'
+    namespace 'com.lkcv.kurage'
 
     dependenciesInfo {
         // Disables dependency metadata when building APKs.

@@ -1,4 +1,4 @@
-package com.KaraWilson.JellyBook
+package com.lkcv.kurage
 
 import android.content.Intent
 import android.os.Build
