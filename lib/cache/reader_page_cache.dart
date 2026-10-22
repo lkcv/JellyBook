@@ -17,9 +17,9 @@ class _ReaderPosition {
 ///
 /// This cache lives outside Entry.folderPath, so deleting a downloaded volume
 /// does not delete the reader's recovery copy. Pages remain available until
-/// the global disk budget (300 MiB by default) requires eviction.
+/// the global disk budget (1000 MiB by default) requires eviction.
 class ReaderPageCache {
-  static const int defaultLimitMb = 300;
+  static const int defaultLimitMb = 1000;
   static const int maxCustomLimitMb = 1024 * 1024; // Avoid integer overflow.
   static const String _limitKey = 'reader_cache_limit_mb';
   static const int _bytesPerMb = 1024 * 1024;
@@ -47,7 +47,7 @@ class ReaderPageCache {
     return root;
   }
 
-  /// The configured disk budget in MiB. Existing installs use 300 MiB.
+  /// The configured disk budget in MiB.
   static Future<int> getLimitMb() async {
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getInt(_limitKey);

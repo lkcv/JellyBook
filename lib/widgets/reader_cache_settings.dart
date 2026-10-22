@@ -374,7 +374,7 @@ class _CacheLimitDialogState extends State<_CacheLimitDialog> {
                     const Radio<bool>(
                       value: false,
                     ),
-                    const Expanded(child: Text('300 MB (default)')),
+                    const Expanded(child: Text('1000 MB (default)')),
                   ],
                 ),
               ),
