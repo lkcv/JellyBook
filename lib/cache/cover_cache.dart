@@ -8,7 +8,7 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 class CoverCacheManager {
   static final CacheManager instance = CacheManager(
     Config(
-      'jellybook_image_cache',
+      'kurage_image_cache',
       stalePeriod: const Duration(days: 365),
       maxNrOfCacheObjects: 5000,
     ),
@@ -17,7 +17,7 @@ class CoverCacheManager {
   /// Total bytes currently occupied by the shared cover disk cache.
   /// Decoded Flutter images in RAM are not included.
   static Future<int> getUsageBytes() async {
-    final directory = await IOFileSystem.createDirectory('jellybook_image_cache');
+    final directory = await IOFileSystem.createDirectory('kurage_image_cache');
     var bytes = 0;
     try {
       await for (final entity

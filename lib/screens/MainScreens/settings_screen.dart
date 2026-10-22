@@ -579,7 +579,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final token = prefs.getString('accessToken') ?? '';
     final username = prefs.getString('username') ?? '';
     final version = packageInfo.version;
-    const client = "JellyBook";
+    const client = "Kurage";
     const device = "Unknown Device";
     const deviceId = "Unknown Device id";
 

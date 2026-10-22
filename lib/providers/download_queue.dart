@@ -197,7 +197,7 @@ class DownloadQueue extends ChangeNotifier {
     super.dispose();
   }
 
-  static const _queueStorageKey = 'jellybook_download_queue_v1';
+  static const _queueStorageKey = 'kurage_download_queue_v1';
   Future<void>? _restoreFuture;
   Future<void> _persistenceTail = Future<void>.value();
   bool _restored = false;

@@ -42,7 +42,7 @@ class ReaderPageCache {
 
   static Future<Directory> _root() async {
     final support = await getApplicationSupportDirectory();
-    final root = Directory('${support.path}/jellybook_reader_cache');
+    final root = Directory('${support.path}/kurage_reader_cache');
     await root.create(recursive: true);
     return root;
   }

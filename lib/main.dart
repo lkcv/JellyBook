@@ -64,9 +64,9 @@ Future<void> main() async {
   // set the localPath variable
   localPath = await _localPath;
   // check if localPath file exists
-  if (!await File("$localPath/jellybook.log").exists()) {
+  if (!await File("$localPath/kurage.log").exists()) {
     // create the file
-    await File("$localPath/jellybook.log").create();
+    await File("$localPath/kurage.log").create();
   }
   debugPrint("localPath: $localPath");
 

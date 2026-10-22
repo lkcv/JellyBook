@@ -163,7 +163,7 @@ class LoginProvider {
   ) async {
     try {
       String requestUrl = url.endsWith("/") ? url.substring(0, url.length - 1) : url;
-      const client = "JellyBook";
+      const client = "Kurage";
       String device = "Unknown Device";
       String deviceId = "Unknown Device id";
 
@@ -240,7 +240,7 @@ class LoginProvider {
     }
     if (username.trim().isEmpty) return 'Enter your username.';
 
-    const client = "JellyBook";
+    const client = "Kurage";
     try {
       String device = "Unknown Device";
       String deviceId = "Unknown Device id";

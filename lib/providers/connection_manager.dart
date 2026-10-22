@@ -182,7 +182,7 @@ class ConnectionManager extends ChangeNotifier with WidgetsBindingObserver {
   Future<ConnectionStatus> _checkAuth(String server, String token) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final client = prefs.getString('client') ?? 'JellyBook';
+      final client = prefs.getString('client') ?? 'Kurage';
       final device = prefs.getString('device') ?? 'Unknown Device';
       final deviceId = prefs.getString('deviceId') ?? 'Unknown Device id';
       final version = prefs.getString('version') ?? '';

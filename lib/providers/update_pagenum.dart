@@ -31,7 +31,7 @@ Future<Set<String>> locallyProtectedProgressIds(int sinceRevision) =>
 Future<void> retryPendingProgress() => _progressQueue.retry();
 
 class _JellyfinProgressQueue {
-  static const _storageKey = 'jellybook.pendingPageProgress.v1';
+  static const _storageKey = 'kurage.pendingPageProgress.v1';
   static const _requestTimeout = Duration(seconds: 12);
   final Map<String, int> _pending = <String, int>{};
   final Map<String, int> _localChangeRevisions = <String, int>{};
@@ -192,7 +192,7 @@ class _JellyfinProgressQueue {
     final headers = <String, String>{
       'Accept': 'application/json',
       'Content-Type': 'application/json',
-      'Authorization': 'MediaBrowser Client="JellyBook", '
+      'Authorization': 'MediaBrowser Client="Kurage", '
           'Device="Unknown Device", DeviceId="Unknown Device id", '
           'Version="$version", Token="$token"',
     };

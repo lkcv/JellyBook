@@ -75,7 +75,7 @@ Future<(List<Entry>, List<Folder>)> getServerCategories({
   final token = prefs.getString('accessToken') ?? "";
   final url = prefs.getString('server') ?? "";
   final userId = prefs.getString('UserId') ?? "";
-  final client = prefs.getString('client') ?? "JellyBook";
+  final client = prefs.getString('client') ?? "Kurage";
   final device = prefs.getString('device') ?? "";
   final deviceId = prefs.getString('deviceId') ?? "";
   final version = prefs.getString('version') ?? packageInfo.version;

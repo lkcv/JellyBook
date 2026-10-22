@@ -102,7 +102,7 @@ Future<Entry> downloadEntry(
   final prefs = await SharedPreferences.getInstance();
   final server = prefs.getString('server') ?? entry.url;
   final token = prefs.getString('accessToken') ?? '';
-  final client = prefs.getString('client') ?? 'JellyBook';
+  final client = prefs.getString('client') ?? 'Kurage';
   final device = prefs.getString('device') ?? '';
   final deviceId = prefs.getString('deviceId') ?? '';
   final version = prefs.getString('version') ?? '';
