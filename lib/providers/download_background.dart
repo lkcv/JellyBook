@@ -11,7 +11,7 @@ class DownloadBackground {
   DownloadBackground._();
 
   static const MethodChannel _channel =
-      MethodChannel('jellybook/download_background');
+      MethodChannel('kurage/download_background');
   static bool _started = false;
 
   static Future<void> start() async {

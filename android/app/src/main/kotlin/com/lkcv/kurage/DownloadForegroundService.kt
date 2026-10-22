@@ -25,7 +25,7 @@ class DownloadForegroundService : Service() {
         val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             manager.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "JellyBook downloads", NotificationManager.IMPORTANCE_LOW)
+                NotificationChannel(CHANNEL_ID, "Kurage downloads", NotificationManager.IMPORTANCE_LOW)
             )
         }
         val launch = Intent(this, MainActivity::class.java)
@@ -40,7 +40,7 @@ class DownloadForegroundService : Service() {
         }
         val notification = builder
             .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentTitle("JellyBook downloads")
+            .setContentTitle("Kurage downloads")
             .setContentText("Downloading volumes for offline reading")
             .setContentIntent(openApp)
             .setOngoing(true)
@@ -54,7 +54,7 @@ class DownloadForegroundService : Service() {
 
         if (cpuLock == null) {
             val power = getSystemService(POWER_SERVICE) as PowerManager
-            cpuLock = power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "JellyBook:downloads").apply {
+            cpuLock = power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Kurage:downloads").apply {
                 setReferenceCounted(false)
                 acquire()
             }
@@ -63,7 +63,7 @@ class DownloadForegroundService : Service() {
             try {
                 val wifi = applicationContext.getSystemService(WIFI_SERVICE) as WifiManager
                 @Suppress("DEPRECATION")
-                wifiLock = wifi.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "JellyBook:downloads")
+                wifiLock = wifi.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "Kurage:downloads")
                     .apply { setReferenceCounted(false); acquire() }
             } catch (_: Exception) {
                 // Cellular and Wi-Fi transfers still work without a Wi-Fi lock.
@@ -82,7 +82,7 @@ class DownloadForegroundService : Service() {
     }
 
     companion object {
-        private const val CHANNEL_ID = "jellybook_downloads"
+        private const val CHANNEL_ID = "kurage_downloads"
         private const val NOTIFICATION_ID = 7812
     }
 }

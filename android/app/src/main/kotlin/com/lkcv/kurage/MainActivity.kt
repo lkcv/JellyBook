@@ -9,7 +9,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity: FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "jellybook/download_background")
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "kurage/download_background")
             .setMethodCallHandler { call, result ->
                 val intent = Intent(applicationContext, DownloadForegroundService::class.java)
                 try {
