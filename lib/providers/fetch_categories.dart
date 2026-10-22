@@ -169,8 +169,6 @@ Future<(List<Entry>, List<Folder>)> getServerCategories({
         .where(isSupportedEntry).toList();
     comics.sort((a, b) => a.title.compareTo(b.title));
 
-    prefs.setStringList('comicsIds', comicsIds);
-
     logger.d("comics: ${comics.length}");
 
     // final isar = Isar.getInstance();

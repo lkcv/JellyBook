@@ -23,7 +23,6 @@ Future<Set<String>> getComics(String comicsId) async {
   final device = prefs.getString('device');
   final deviceId = prefs.getString('deviceId');
   final version = prefs.getString('version');
-  prefs.setString('comicsId', comicsId);
   // '$url/Users/$userId/Items?StartIndex=0&Fields=PrimaryImageAspectRatio,SortName,Path,SongCount,ChildCount,MediaSourceCount,Tags,Overview,ParentId&ImageTypeLimit=1&ParentId=$comicsId&Recursive=true&SortBy=SortName&SortOrder=Ascending'),
   var headers = {
     'Accept': 'application/json',

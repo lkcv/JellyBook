@@ -48,7 +48,6 @@ class LoginProvider {
     prefs.setString("server", url);
     prefs.setString("accessToken", data?['AccessToken'] as String? ?? "");
     prefs.setString("UserId", user?['Id'] as String? ?? "");
-    prefs.setString("ServerId", data?['ServerId'] as String? ?? "");
 
     prefs.setString("client", client);
     prefs.setString("device", device);

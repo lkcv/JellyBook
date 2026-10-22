@@ -116,7 +116,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // ThemeManager themeManager = Provider.of<ThemeManager>(context);
     final headerBrightness = Theme.of(context).brightness;
     final headerForeground =
         FloatingSurfacePalette.foreground(headerBrightness);
@@ -933,24 +932,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           prefs?.setString('localeString', value.toString());
 
           setState(() {});
-        },
-      );
-
-  // page transition settings
-  Future<Widget> pageTransitionSettings() async => SettingsItem(
-        // settingKey: 'pageTransition',
-        title:
-            AppLocalizations.of(context)?.pageTransition ?? 'Page Transition',
-        selected: prefs?.getString('pageTransition') ?? 'Page Turn',
-        backgroundColor: Theme.of(context).splashColor,
-        icon: Icons.pageview,
-        values: const <String, String>{
-          'Page Turn': 'Page Turn',
-          'Slide': 'Slide',
-        },
-        onChange: (value) async {
-          SharedPreferences prefs = await SharedPreferences.getInstance();
-          prefs.setString('pageTransition', value.toString());
         },
       );
 
