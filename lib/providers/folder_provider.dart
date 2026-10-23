@@ -6,6 +6,7 @@ import 'package:isar/isar.dart';
 import 'package:kurage/models/folder.dart';
 import 'package:kurage/models/entry.dart';
 import 'package:kurage/providers/supported_formats.dart';
+import 'package:kurage/providers/volume_sort.dart';
 import 'package:kurage/variables.dart';
 
 // This function takes the list of entries and creates folders if their parentId is not one of the categories
@@ -24,11 +25,14 @@ static Future<void> createFolders(
           .where(isSupportedEntry).toList();
       List<String> bookEntryIds = bookEntries.map((entry) => entry.id).toList();
       
-      // Get folder image - use first book's image if folder doesn't have one
-      String folderImage = entry.imagePath;
-      if ((folderImage.isEmpty || folderImage == 'Asset') && bookEntries.isNotEmpty) {
-        folderImage = bookEntries.first.imagePath;
-      }
+      final coverEntries = bookEntries.where((book) =>
+          book.type != EntryType.folder &&
+          book.imagePath.isNotEmpty &&
+          book.imagePath != 'Asset').toList()
+        ..sort(compareVolumeEntries);
+      final folderImage = coverEntries.isNotEmpty
+          ? coverEntries.first.imagePath
+          : entry.imagePath;
       
       // IMPORTANT: Only create folders for non-library items
       // Skip if this entry IS a library category (top-level)
