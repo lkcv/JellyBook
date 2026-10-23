@@ -1,29 +1,22 @@
-// the purpose of this file is to write a extension to the Localizations class to set a new locale
+import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:kurage/models/app_settings.dart';
+import 'package:kurage/providers/app_settings_store.dart';
 
 class LocaleChangeNotifier extends ChangeNotifier {
-  LocaleChangeNotifier(BuildContext context, SharedPreferences prefs) {
-    _locale = Locale(prefs.getString("localeString") ?? "en");
-  }
-  Locale _locale = const Locale("en");
+  LocaleChangeNotifier(AppSettings settings)
+      : _locale = Locale(settings.localeString);
 
-  // async function to get the locale from shared preferences
-  Locale get locale {
-    SharedPreferences.getInstance().then((prefs) {
-      return Locale(prefs.getString("localeString") ?? "en");
-    });
-    return _locale;
-  }
+  Locale _locale;
+
+  Locale get locale => _locale;
 
   set setLocale(String localeString) {
+    if (_locale.toString() == localeString) return;
     _locale = Locale(localeString);
-    // save the locale to shared preferences
-    SharedPreferences.getInstance().then((prefs) {
-      prefs.setString("localeString", localeString);
-      notifyListeners();
-    });
     notifyListeners();
+    unawaited(AppSettingsStore.update((s) => s.localeString = localeString)
+        .catchError((Object error) => debugPrint('Locale save failed: $error')));
   }
 }

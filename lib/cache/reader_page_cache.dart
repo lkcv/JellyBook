@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:kurage/variables.dart';
+import 'package:kurage/providers/app_settings_store.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class _ReaderPosition {
   final int count;
@@ -21,7 +21,6 @@ class _ReaderPosition {
 class ReaderPageCache {
   static const int defaultLimitMb = 1000;
   static const int maxCustomLimitMb = 1024 * 1024; // Avoid integer overflow.
-  static const String _limitKey = 'reader_cache_limit_mb';
   static const int _bytesPerMb = 1024 * 1024;
   static Future<void> _writeQueue = Future<void>.value();
   // Initialized once per process, then updated using only the modified
@@ -49,8 +48,7 @@ class ReaderPageCache {
 
   /// The configured disk budget in MiB.
   static Future<int> getLimitMb() async {
-    final prefs = await SharedPreferences.getInstance();
-    final saved = prefs.getInt(_limitKey);
+    final saved = AppSettingsStore.current.readerCacheLimitMb;
     if (saved == null || saved < 1 || saved > maxCustomLimitMb) {
       return defaultLimitMb;
     }
@@ -72,10 +70,7 @@ class ReaderPageCache {
       throw ArgumentError.value(limitMb, 'limitMb', 'Invalid cache limit');
     }
     final operation = _writeQueue.catchError((Object _) {}).then((_) async {
-      final prefs = await SharedPreferences.getInstance();
-      if (!await prefs.setInt(_limitKey, limitMb)) {
-        throw StateError('Could not save reader cache limit');
-      }
+      await AppSettingsStore.update((s) => s.readerCacheLimitMb = limitMb);
       await _pruneToBudget(await _root());
     });
     _writeQueue = operation;
@@ -284,7 +279,9 @@ class ReaderPageCache {
   }) {
     final operation = _writeQueue.catchError((Object _) {}).then((_) async {
       if (!allowed() || pageCount <= 0 || pageIndex < 0 ||
-          pageIndex >= pageCount) return false;
+          pageIndex >= pageCount) {
+        return false;
+      }
       final root = await _root();
       final directory = Directory('${root.path}/${_key(volumeId)}');
       final manifest = await _readManifest(directory);
@@ -297,7 +294,9 @@ class ReaderPageCache {
       final limit = (await getLimitMb()) * _bytesPerMb;
       // Leave room for the manifest and metadata as well as the image.
       if ((_trackedBytes ?? 0) + sourceBytes + 32768 > limit ||
-          !allowed()) return false;
+          !allowed()) {
+        return false;
+      }
       final lastUsed = manifest['lastUsed'];
       await _saveWindow(
         volumeId: volumeId,

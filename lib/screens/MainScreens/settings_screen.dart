@@ -7,6 +7,7 @@ import 'package:isar/isar.dart';
 import 'package:kurage/models/entry.dart';
 import 'package:kurage/models/folder.dart';
 import 'package:kurage/models/login.dart';
+import 'package:kurage/providers/app_settings_store.dart';
 import 'package:kurage/screens/login_screen.dart';
 import 'package:kurage/providers/theme_provider.dart';
 import 'package:kurage/themes/accent_palette.dart';
@@ -268,10 +269,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       'RTL': l10n?.rtl ?? 'Right to Left',
       'Vertical': l10n?.vertical ?? 'Vertical',
     };
-    final accent = context.watch<ThemeChangeNotifier>().accentColor;
-    final selectedTheme = prefs?.getString('themeSelection') ??
-        prefs?.getString('theme') ?? 'system';
-    final selectedDirection = prefs?.getString('readingDirection') ?? 'LTR';
+    final themeNotifier = context.watch<ThemeChangeNotifier>();
+    final accent = themeNotifier.accentColor;
+    final selectedTheme = themeNotifier.selectedTheme;
+    final selectedDirection = AppSettingsStore.current.readingDirection;
 
     return Card(
       child: Column(
@@ -286,16 +287,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 options: themeOptions,
                 selected: selectedTheme,
               );
-              if (!mounted || selected == null || selected == selectedTheme) {
+              if (!mounted || !context.mounted ||
+                  selected == null || selected == selectedTheme) {
                 return;
               }
-              final sharedPrefs = await SharedPreferences.getInstance();
-              // Persist the selection independently. ThemeChangeNotifier
-              // writes the *applied* theme to 'theme', which may be light or
-              // dark when the selection is 'system'.
-              await sharedPrefs.setString('themeSelection', selected);
-              if (!mounted || !context.mounted) return;
-              prefs = sharedPrefs;
               context.read<ThemeChangeNotifier>().setTheme = selected;
               setState(() {});
             },
@@ -335,10 +330,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               if (!mounted || selected == null || selected == selectedDirection) {
                 return;
               }
-              final sharedPrefs = await SharedPreferences.getInstance();
-              await sharedPrefs.setString('readingDirection', selected);
+              await AppSettingsStore.update((s) => s.readingDirection = selected);
               if (!mounted) return;
-              prefs = sharedPrefs;
               setState(() {});
             },
           ),
@@ -921,16 +914,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             AppLocalizations.of(context)?.localeName.toString() ?? 'System',
         backgroundColor: Theme.of(context).splashColor,
         icon: Icons.language,
-        values:
-            localesMap(context, prefs?.getString('localeString') ?? 'System'),
+        values: localesMap(context, AppSettingsStore.current.localeString),
         onChange: (value) async {
           logger.d(value);
-          // change the locale
           final localeProvider =
               Provider.of<LocaleChangeNotifier>(context, listen: false);
           localeProvider.setLocale = value.toString();
-          prefs?.setString('localeString', value.toString());
-
           setState(() {});
         },
       );

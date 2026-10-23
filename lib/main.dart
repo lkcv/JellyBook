@@ -4,9 +4,11 @@ import 'package:kurage/screens/login_screen.dart';
 import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:kurage/models/app_settings.dart';
 import 'package:kurage/models/entry.dart';
 import 'package:kurage/models/folder.dart';
 import 'package:kurage/models/login.dart';
+import 'package:kurage/providers/app_settings_store.dart';
 import 'package:kurage/screens/home_screen.dart';
 import 'package:kurage/providers/connection_manager.dart';
 import 'package:kurage/providers/download_queue.dart';
@@ -58,8 +60,10 @@ Future<void> main() async {
   // path for isar database
   Directory dir = await getApplicationDocumentsDirectory();
 
-  final isar = await Isar.open([EntrySchema, FolderSchema, LoginSchema],
+  final isar = await Isar.open(
+      [AppSettingsSchema, EntrySchema, FolderSchema, LoginSchema],
       directory: dir.path);
+  await AppSettingsStore.initialize(isar, prefs);
 
   // set the localPath variable
   localPath = await _localPath;
@@ -80,10 +84,9 @@ Future<void> main() async {
       url: logins[0].serverUrl,
       username: logins[0].username,
       password: logins[0].password,
-      prefs: prefs,
     ));
   } else {
-    runApp(MyApp(prefs: prefs));
+    runApp(const MyApp());
   }
 }
 
@@ -91,14 +94,12 @@ class MyApp extends StatelessWidget {
   final String? url;
   final String? username;
   final String? password;
-  final SharedPreferences prefs;
 
   const MyApp({
     super.key,
     this.url,
     this.username,
     this.password,
-    required this.prefs,
   });
 
   @override
@@ -106,25 +107,9 @@ class MyApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider<LocaleChangeNotifier>(
-            create: (context) => LocaleChangeNotifier(context, prefs)),
-        ChangeNotifierProvider<ThemeChangeNotifier>(create: (context) {
-          final notifier = ThemeChangeNotifier(context, prefs);
-          // The settings screen persists the selected theme, but a new provider
-          // otherwise starts with its default theme on every app launch.
-          // The provider persists the effective light/dark theme to 'theme'.
-          // Save the user's chosen mode separately so automatic system changes
-          // never turn the System choice into an explicit Light or Dark choice.
-          // Existing installs migrate their original 'theme' selection here.
-          final selectedTheme = prefs.getString('themeSelection') ??
-              prefs.getString('theme') ?? 'system';
-          if (!prefs.containsKey('themeSelection')) {
-            prefs.setString('themeSelection', selectedTheme);
-          }
-          notifier.setTheme = selectedTheme == 'system'
-              ? _systemThemeForPlatform()
-              : selectedTheme;
-          return notifier;
-        }),
+            create: (context) => LocaleChangeNotifier(AppSettingsStore.current)),
+        ChangeNotifierProvider<ThemeChangeNotifier>(
+            create: (context) => ThemeChangeNotifier(AppSettingsStore.current)),
         ChangeNotifierProvider<ConnectionManager>(
           create: (context) {
             final manager = ConnectionManager();
@@ -140,7 +125,6 @@ class MyApp extends StatelessWidget {
       ],
       builder: (context, _) {
         return _SystemThemeFollower(
-          prefs: prefs,
           child: Consumer2<LocaleChangeNotifier, ThemeChangeNotifier>(
             builder: (context, localeChangeNotifier, themeChangeNotifier, _) {
           Locale locale = localeChangeNotifier.locale;
@@ -168,20 +152,10 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// Resolve the saved 'system' selection against the OS appearance rather than
-// treating it as a fifth fixed color scheme. This works on Android and iOS.
-String _systemThemeForPlatform() =>
-    WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark
-        ? 'dark'
-        : 'light';
-
-// The Settings screen updates the selected mode separately from the effective
-// theme. Observe provider changes and platform brightness without ever changing
-// the stored user selection during automatic OS appearance updates.
+// Keep the effective System theme in memory; only the user's selection is saved.
 class _SystemThemeFollower extends StatefulWidget {
-  const _SystemThemeFollower({required this.prefs, required this.child});
+  const _SystemThemeFollower({required this.child});
 
-  final SharedPreferences prefs;
   final Widget child;
 
   @override
@@ -222,26 +196,17 @@ class _SystemThemeFollowerState extends State<_SystemThemeFollower>
   }
 
   void _syncSystemTheme() {
-    if (!mounted || widget.prefs.getString('themeSelection') != 'system' ||
+    if (!mounted || _themeNotifier?.selectedTheme != 'system' ||
         _updateScheduled) {
       return;
     }
 
-    // The provider can notify listeners during a Settings rebuild. Apply any
-    // correction after that frame instead of notifying during build.
+    // The provider can notify listeners during a Settings rebuild.
     _updateScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _updateScheduled = false;
-      if (!mounted || widget.prefs.getString('themeSelection') != 'system') return;
-      final notifier = _themeNotifier;
-      if (notifier == null) return;
-      final systemBrightness =
-          WidgetsBinding.instance.platformDispatcher.platformBrightness;
-      if (notifier.getTheme.brightness != systemBrightness) {
-        // This setter updates the effective 'theme' key only. It must never
-        // overwrite 'themeSelection', which records the user's System choice.
-        notifier.setTheme = _systemThemeForPlatform();
-      }
+      if (!mounted) return;
+      _themeNotifier?.syncSystemTheme();
     });
   }
 

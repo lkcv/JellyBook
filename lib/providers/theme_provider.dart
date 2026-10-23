@@ -1,49 +1,59 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:kurage/models/app_settings.dart';
+import 'package:kurage/providers/app_settings_store.dart';
 import 'package:kurage/themes/accent_palette.dart';
 
 class ThemeChangeNotifier extends ChangeNotifier {
-  ThemeChangeNotifier(BuildContext context, SharedPreferences prefs)
-      : _prefs = prefs,
-        _accentColor = prefs.getInt('accentColor') == null
+  ThemeChangeNotifier(AppSettings settings)
+      : _accentColor = settings.accentColor == null
             ? null
-            : Color(prefs.getInt('accentColor')!) {
-    _themeMode = (prefs.getString('theme') ?? 'dark').toLowerCase();
+            : Color(settings.accentColor!) {
+    _themeMode = settings.themeSelection;
     _theme = _buildTheme(_themeMode);
   }
 
   static const Color defaultAccent = AccentPalette.defaultAccent;
 
-  final SharedPreferences _prefs;
   Color? _accentColor;
-  String _themeMode = 'dark';
+  String _themeMode = 'system';
   late ThemeData _theme;
 
+  String get selectedTheme => _themeMode;
   Color? get accentColor => _accentColor;
   ThemeData get getTheme => _theme;
 
   Future<String> get getThemeName async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    String theme = prefs.getString("theme") ?? "dark";
-    switch (theme.toLowerCase()) {
-      case "dark":
-        return "Dark";
-      case "light":
-        return "Light";
-      case "amoled":
-        return "Amoled";
-      case "system":
-        return "System";
+    switch (_themeMode) {
+      case 'dark':
+        return 'Dark';
+      case 'light':
+        return 'Light';
+      case 'amoled':
+        return 'Amoled';
+      case 'system':
+        return 'System';
       default:
-        return "Dark";
+        return 'Dark';
     }
   }
 
   set setTheme(String theme) {
+    if (_themeMode == theme) return;
     _themeMode = theme;
     _theme = _buildTheme(theme);
     notifyListeners();
-    _prefs.setString('theme', theme);
+    unawaited(AppSettingsStore.update((s) => s.themeSelection = theme)
+        .catchError((Object error) => debugPrint('Theme save failed: $error')));
+  }
+
+  void syncSystemTheme() {
+    if (_themeMode != 'system') return;
+    final resolved = _buildTheme('system');
+    if (resolved.brightness == _theme.brightness) return;
+    _theme = resolved;
+    notifyListeners();
   }
 
   set setAccentColor(Color? color) {
@@ -51,11 +61,8 @@ class ThemeChangeNotifier extends ChangeNotifier {
     _accentColor = color;
     _theme = _buildTheme(_themeMode);
     notifyListeners();
-    if (color == null) {
-      _prefs.remove('accentColor');
-    } else {
-      _prefs.setInt('accentColor', color.toARGB32());
-    }
+    unawaited(AppSettingsStore.update((s) => s.accentColor = color?.toARGB32())
+        .catchError((Object error) => debugPrint('Accent save failed: $error')));
   }
 
   // Flutter's stock light scheme assigns the deep and pale purples to the

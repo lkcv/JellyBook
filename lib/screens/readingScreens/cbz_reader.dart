@@ -8,6 +8,7 @@ import 'package:isar/isar.dart';
 import 'package:kurage/models/entry.dart';
 import 'package:kurage/providers/progress.dart';
 import 'package:kurage/variables.dart';
+import 'package:kurage/providers/app_settings_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
 import 'package:auto_size_text/auto_size_text.dart';
@@ -218,8 +219,7 @@ class _CbzReaderState extends State<CbzReader>
   Future<void> _load() async {
     try {
       PaintingBinding.instance.imageCache.maximumSizeBytes = 300 << 20;
-      final prefs = await SharedPreferences.getInstance();
-      direction = (prefs.getString('readingDirection') ?? 'ltr').toLowerCase();
+      direction = AppSettingsStore.current.readingDirection.toLowerCase();
       if (!mounted) return;
 
       await getData();
