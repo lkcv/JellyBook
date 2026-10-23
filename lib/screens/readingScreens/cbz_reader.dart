@@ -9,7 +9,7 @@ import 'package:kurage/models/entry.dart';
 import 'package:kurage/providers/progress.dart';
 import 'package:kurage/variables.dart';
 import 'package:kurage/providers/app_settings_store.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:kurage/providers/session_store.dart';
 import 'package:flutter/services.dart';
 import 'package:auto_size_text/auto_size_text.dart';
 import 'dart:collection';
@@ -445,13 +445,9 @@ class _CbzReaderState extends State<CbzReader>
   }
 
   Future<void> _initStream(Entry entry) async {
-    final prefs = await SharedPreferences.getInstance();
-    final server = prefs.getString('server') ?? '';
-    final token = prefs.getString('accessToken') ?? '';
-
-    final headers = {
-      'Authorization': 'MediaBrowser Token="$token"',
-    };
+    final session = SessionStore.current;
+    final server = session.server;
+    final headers = {'Authorization': session.authorization};
 
     _stream = CbzStream(
       url: server,

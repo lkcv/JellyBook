@@ -6,12 +6,9 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:kurage/providers/session_store.dart';
 import 'package:package_info_plus/package_info_plus.dart' as package_info;
-import 'package:isar/isar.dart';
 import 'package:kurage/l10n/app_localizations.dart';
-import 'package:kurage/models/login.dart';
 import 'package:kurage/providers/jellyfin_api.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:kurage/variables.dart';
@@ -29,7 +26,6 @@ class LoginProvider {
     required this.password,
   });
 
-  // Saves everything a successful login needs (prefs, secure storage, isar)
   static Future<void> _saveSession({
     required String url,
     required String username,
@@ -40,48 +36,18 @@ class LoginProvider {
     required String version,
     required Map<String, dynamic>? data,
   }) async {
-    const storage = FlutterSecureStorage();
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
     final user = data?['User'] as Map<String, dynamic>?;
-    final session = data?['SessionInfo'] as Map<String, dynamic>?;
-    logger.d("saving data to cache");
-    prefs.setString("server", url);
-    prefs.setString("accessToken", data?['AccessToken'] as String? ?? "");
-    prefs.setString("UserId", user?['Id'] as String? ?? "");
-
-    prefs.setString("client", client);
-    prefs.setString("device", device);
-    prefs.setString("deviceId", deviceId);
-    prefs.setString("version", version);
-
-    await storage.write(key: "server", value: url);
-    await storage.write(key: "username", value: username);
-    await storage.write(key: "password", value: password);
-    await storage.write(key: "accessToken", value: data?['AccessToken'] as String? ?? "");
-    await storage.write(key: "ServerId", value: data?['ServerId'] as String? ?? "");
-    await storage.write(key: "UserId", value: session?['UserId'] as String? ?? "");
-    await storage.write(key: "client", value: client);
-    await storage.write(key: "device", value: device);
-    await storage.write(key: "deviceId", value: deviceId);
-    await storage.write(key: "version", value: version);
-
-    final isar = Isar.getInstance();
-    final entry = await isar!.logins.where().serverUrlEqualTo(url).findFirst();
-    if (entry == null) {
-      // a different server/user was saved before, remove it
-      List<Login> others = await isar.logins.where().findAll();
-      List<int> otherIds = others
-          .where((l) => l.serverUrl != url)
-          .map((l) => l.isarId)
-          .toList();
-      await isar.writeTxn(() async {
-        isar.logins.deleteAll(otherIds);
-      });
-      await isar.writeTxn(() async {
-        await isar.logins
-            .put(Login(serverUrl: url, username: username, password: password));
-      });
-    }
+    await SessionStore.save(
+      server: url,
+      username: username,
+      userId: user?['Id'] as String? ?? '',
+      token: data?['AccessToken'] as String? ?? '',
+      password: password,
+      client: client,
+      device: device,
+      deviceId: deviceId,
+      version: version,
+    );
   }
 
   // Authentication errors may be plain text, even when the request asks for

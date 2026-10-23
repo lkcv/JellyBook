@@ -12,7 +12,7 @@ import 'package:kurage/providers/download_exceptions.dart';
 import 'package:kurage/providers/supported_formats.dart';
 import 'package:kurage/variables.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:kurage/providers/session_store.dart';
 
 typedef ProgressCallback = void Function(double progress);
 
@@ -99,17 +99,9 @@ Future<Entry> downloadEntry(
   if (await backup.exists() && !await finalDirectory.exists()) {
     await backup.rename(finalDirectory.path);
   }
-  final prefs = await SharedPreferences.getInstance();
-  final server = prefs.getString('server') ?? entry.url;
-  final token = prefs.getString('accessToken') ?? '';
-  final client = prefs.getString('client') ?? 'Kurage';
-  final device = prefs.getString('device') ?? '';
-  final deviceId = prefs.getString('deviceId') ?? '';
-  final version = prefs.getString('version') ?? '';
-  final headers = <String, String>{
-    'Authorization': 'MediaBrowser Client="$client", Device="$device", '
-        'DeviceId="$deviceId", Version="$version", Token="$token"',
-  };
+  final session = SessionStore.current;
+  final server = session.server.isNotEmpty ? session.server : entry.url;
+  final headers = <String, String>{'Authorization': session.authorization};
   final stream = CbzStream(
     url: server,
     itemId: entry.id,

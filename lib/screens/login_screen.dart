@@ -1,11 +1,13 @@
 // This Files purpose is to have a login screen where the user can login into the server
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:kurage/providers/login.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:kurage/providers/connection_manager.dart';
+import 'package:provider/provider.dart';
 import 'package:kurage/screens/home_screen.dart';
 
 import 'package:kurage/l10n/app_localizations.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:kurage/variables.dart';
 import 'package:isar/isar.dart';
 import 'package:kurage/models/login.dart';
@@ -19,27 +21,20 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
 
-  final storage = FlutterSecureStorage();
   final _url = TextEditingController();
   final _username = TextEditingController();
   final _password = TextEditingController();
   bool _passwordVisible = false;
   String _error = '';
   bool _isConnecting = false;
-  SharedPreferences? prefs;
 
   @override
   void initState() {
     super.initState();
-    setSharedPrefs();
     _passwordVisible = false;
     
     // Prefill fields from saved login if available
     _prefillFromSavedLogin();
-  }
-
-  Future<void> setSharedPrefs() async {
-    prefs = await SharedPreferences.getInstance();
   }
 
   Future<void> _prefillFromSavedLogin() async {
@@ -95,6 +90,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
       if (!mounted) return;
       if (result == 'true') {
+        unawaited(context.read<ConnectionManager>().retry());
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => const HomeScreen()),

@@ -2,9 +2,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:kurage/providers/jellyfin_api.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:isar/isar.dart';
-import 'package:kurage/models/login.dart';
+import 'package:kurage/providers/session_store.dart';
 import 'package:kurage/providers/login.dart';
 import 'package:kurage/providers/update_pagenum.dart';
 import 'package:kurage/variables.dart';
@@ -13,17 +11,19 @@ enum ConnectionStatus { validating, online, offline, authFailed }
 
 class ConnectionManager extends ChangeNotifier with WidgetsBindingObserver {
   static const _timeout = Duration(seconds: 5);
-  static const _retryInterval = Duration(seconds: 30);
+  static const _pollInterval = Duration(seconds: 30);
+  static const _offlinePollInterval = Duration(seconds: 5);
 
   ConnectionStatus _status = ConnectionStatus.validating;
   ConnectionStatus get status => _status;
 
   bool _checking = false;
+  bool _recheckRequested = false;
   bool _disposed = false;
   bool _paused = false;
 
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
-  Timer? _retryTimer;
+  Timer? _pollTimer;
 
   void _setStatus(ConnectionStatus s) {
     if (_disposed) return;
@@ -37,6 +37,10 @@ class ConnectionManager extends ChangeNotifier with WidgetsBindingObserver {
         }));
       }
       notifyListeners();
+      if (_pollTimer != null) {
+        _stopPolling();
+        _startPolling();
+      }
     }
   }
 
@@ -50,6 +54,7 @@ class ConnectionManager extends ChangeNotifier with WidgetsBindingObserver {
         .onConnectivityChanged
         .listen(_onConnectivityChanged);
 
+    _startPolling();
     await validateStartup();
   }
 
@@ -57,13 +62,14 @@ class ConnectionManager extends ChangeNotifier with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (_disposed) return;
     if (state == AppLifecycleState.paused) {
-      logger.d('ConnectionManager: app paused, stopping retry timer');
+      logger.d('ConnectionManager: app paused, stopping connection polling');
       _paused = true;
-      _stopRetryTimer();
-    } else if (state == AppLifecycleState.resumed && _paused) {
+      _stopPolling();
+    } else if (state == AppLifecycleState.resumed) {
       logger.d('ConnectionManager: app resumed, revalidating');
       _paused = false;
-      validateStartup(); // restarts the timer itself if still offline
+      _startPolling();
+      unawaited(validateStartup());
     }
   }
 
@@ -71,39 +77,24 @@ class ConnectionManager extends ChangeNotifier with WidgetsBindingObserver {
     logger.d('ConnectionManager: connectivity changed to $result');
     if (_paused) return; // will revalidate on resume
 
-    if (result.contains(ConnectivityResult.none)) {
-      _setStatus(ConnectionStatus.offline);
-      _startRetryTimer();
-    } else {
-      _stopRetryTimer();
-      validateStartup();
-    }
+    unawaited(validateStartup());
   }
 
-  void _startRetryTimer() {
-    if (_paused || _disposed || _retryTimer != null) return;
-
-    logger.d('ConnectionManager: starting 30s retry timer');
-    _retryTimer = Timer.periodic(_retryInterval, (_) async {
+  void _startPolling() {
+    if (_paused || _disposed || _pollTimer != null) return;
+    final interval = _status == ConnectionStatus.offline
+        ? _offlinePollInterval
+        : _pollInterval;
+    _pollTimer = Timer(interval, () {
+      _pollTimer = null;
       if (_disposed || _paused) return;
-      logger.d('ConnectionManager: timer tick, checking if server is reachable');
-
-      if (await _isReachable()) {
-        logger.d('ConnectionManager: server reachable, running full validation');
-        _stopRetryTimer();
-        await validateStartup();
-      } else {
-        logger.d('ConnectionManager: server still unreachable');
-      }
+      unawaited(validateStartup().whenComplete(_startPolling));
     });
   }
 
-  void _stopRetryTimer() {
-    if (_retryTimer != null) {
-      logger.d('ConnectionManager: stopping retry timer');
-      _retryTimer!.cancel();
-      _retryTimer = null;
-    }
+  void _stopPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = null;
   }
 
   @override
@@ -111,7 +102,7 @@ class ConnectionManager extends ChangeNotifier with WidgetsBindingObserver {
     logger.d('ConnectionManager: disposing');
     _disposed = true;
     WidgetsBinding.instance.removeObserver(this);
-    _stopRetryTimer();
+    _stopPolling();
     _connectivitySubscription?.cancel();
     super.dispose();
   }
@@ -119,19 +110,16 @@ class ConnectionManager extends ChangeNotifier with WidgetsBindingObserver {
   /// Validate saved credentials (startup, resume, reconnect, manual retry)
   Future<void> validateStartup() async {
     if (_checking) {
-      logger.d('ConnectionManager: already checking, skipping');
+      _recheckRequested = true;
       return;
     }
+    _recheckRequested = false;
     _checking = true;
-    if (_status != ConnectionStatus.offline) {
-      _setStatus(ConnectionStatus.validating);
-    }
 
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final server =
-          (prefs.getString('server') ?? '').replaceAll(RegExp(r'/+$'), '');
-      final token = prefs.getString('accessToken') ?? '';
+      final session = SessionStore.current;
+      final server = session.server.replaceAll(RegExp(r'/+$'), '');
+      final token = session.token;
 
       if (server.isEmpty || token.isEmpty) {
         logger.d('ConnectionManager: missing saved server/token');
@@ -142,33 +130,31 @@ class ConnectionManager extends ChangeNotifier with WidgetsBindingObserver {
       if (!await _isReachable()) {
         logger.d('ConnectionManager: server unreachable');
         _setStatus(ConnectionStatus.offline);
-        _startRetryTimer();
         return;
       }
 
-      var result = await _checkAuth(server, token);
+      var result = await _checkAuth(server);
       if (result == ConnectionStatus.authFailed) {
         logger.d('ConnectionManager: token rejected, attempting silent re-login');
         result = await _trySilentRelogin(server);
       }
 
       _setStatus(result);
-      if (result == ConnectionStatus.offline) _startRetryTimer();
     } catch (e) {
       logger.d('ConnectionManager: validateStartup error: $e');
       _setStatus(ConnectionStatus.offline);
-      _startRetryTimer();
     } finally {
       _checking = false;
+      if (_recheckRequested && !_disposed && !_paused) {
+        _recheckRequested = false;
+        unawaited(validateStartup());
+      }
     }
   }
 
   Future<bool> _isReachable() async {
     try {
-      final server = (await SharedPreferences.getInstance())
-              .getString('server')
-              ?.replaceAll(RegExp(r'/+$'), '') ??
-          '';
+      final server = SessionStore.current.server.replaceAll(RegExp(r'/+$'), '');
       if (server.isEmpty) return false;
 
       final response =
@@ -179,19 +165,11 @@ class ConnectionManager extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  Future<ConnectionStatus> _checkAuth(String server, String token) async {
+  Future<ConnectionStatus> _checkAuth(String server) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final client = prefs.getString('client') ?? 'Kurage';
-      final device = prefs.getString('device') ?? 'Unknown Device';
-      final deviceId = prefs.getString('deviceId') ?? 'Unknown Device id';
-      final version = prefs.getString('version') ?? '';
-
+      final session = SessionStore.current;
       final response = await JellyfinApi(server).getCurrentUser(
-        headers: {
-          'Authorization':
-              'MediaBrowser Client="$client", Device="$device", DeviceId="$deviceId", Version="$version", Token="$token"',
-        },
+        headers: {'Authorization': session.authorization},
       ).timeout(_timeout);
 
       logger.d('ConnectionManager: /Users/Me -> ${response.statusCode}');
@@ -204,24 +182,18 @@ class ConnectionManager extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  // Re-login with the saved Isar credentials. LoginProvider.silentLogin saves
-  // the new token, so the rest of the app picks it up.
+  // Reauthenticate with the credentials migrated into secure storage.
   Future<ConnectionStatus> _trySilentRelogin(String server) async {
     try {
-      final isar = Isar.getInstance();
-      final login =
-          await isar?.logins.where().serverUrlEqualTo(server).findFirst();
-
-      if (login == null) {
-        logger.d('ConnectionManager: no saved login for this server');
+      final session = SessionStore.current;
+      if (session.username.isEmpty) {
         return ConnectionStatus.authFailed;
       }
-
-      logger.d('ConnectionManager: silent re-login for ${login.username}');
+      logger.d('ConnectionManager: silent re-login for ${session.username}');
       final result = await LoginProvider.silentLogin(
         server,
-        login.username,
-        login.password,
+        session.username,
+        session.password,
       );
 
       switch (result) {
@@ -243,7 +215,6 @@ class ConnectionManager extends ChangeNotifier with WidgetsBindingObserver {
   /// Manual retry (triggered by user action)
   Future<void> retry() async {
     logger.d('ConnectionManager: manual retry triggered');
-    _stopRetryTimer();
     await validateStartup();
   }
 }

@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:package_info_plus/package_info_plus.dart' as p_info;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:kurage/providers/jellyfin_api.dart';
+import 'package:kurage/providers/session_store.dart';
 import 'package:kurage/variables.dart';
 
 final _progressQueue = _JellyfinProgressQueue();
@@ -48,9 +49,9 @@ class _JellyfinProgressQueue {
     await _mutations;
     final prefs = await SharedPreferences.getInstance();
     _load(prefs);
-    final server =
-        (prefs.getString('server') ?? '').replaceFirst(RegExp(r'/+$'), '');
-    final userId = prefs.getString('UserId') ?? '';
+    final session = SessionStore.current;
+    final server = session.server.replaceFirst(RegExp(r'/+$'), '');
+    final userId = session.userId;
     final protected = <String>{
       for (final entry in _localChangeRevisions.entries)
         if (entry.value > sinceRevision) entry.key,
@@ -109,9 +110,9 @@ class _JellyfinProgressQueue {
   Future<void> enqueue(String id, int pageIndex) => _mutate(() async {
         final prefs = await SharedPreferences.getInstance();
         _load(prefs);
-        final server =
-            (prefs.getString('server') ?? '').replaceFirst(RegExp(r'/+$'), '');
-        final userId = prefs.getString('UserId') ?? '';
+        final session = SessionStore.current;
+        final server = session.server.replaceFirst(RegExp(r'/+$'), '');
+        final userId = session.userId;
         if (server.isEmpty || userId.isEmpty || id.isEmpty || pageIndex < 0) {
           logger.w('Progress not queued: missing account/item or invalid page');
           return;
@@ -140,10 +141,10 @@ class _JellyfinProgressQueue {
         await _mutations;
         if (_pending.isEmpty) return;
         final prefs = await SharedPreferences.getInstance();
-        final server =
-            (prefs.getString('server') ?? '').replaceFirst(RegExp(r'/+$'), '');
-        final userId = prefs.getString('UserId') ?? '';
-        final token = prefs.getString('accessToken') ?? '';
+        final session = SessionStore.current;
+        final server = session.server.replaceFirst(RegExp(r'/+$'), '');
+        final userId = session.userId;
+        final token = session.token;
         if (server.isEmpty || userId.isEmpty || token.isEmpty) return;
 
         MapEntry<String, int>? next;

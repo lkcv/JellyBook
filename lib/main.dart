@@ -9,6 +9,7 @@ import 'package:kurage/models/entry.dart';
 import 'package:kurage/models/folder.dart';
 import 'package:kurage/models/login.dart';
 import 'package:kurage/providers/app_settings_store.dart';
+import 'package:kurage/providers/session_store.dart';
 import 'package:kurage/screens/home_screen.dart';
 import 'package:kurage/providers/connection_manager.dart';
 import 'package:kurage/providers/download_queue.dart';
@@ -64,6 +65,7 @@ Future<void> main() async {
       [AppSettingsSchema, EntrySchema, FolderSchema, LoginSchema],
       directory: dir.path);
   await AppSettingsStore.initialize(isar, prefs);
+  await SessionStore.initialize(isar, prefs);
 
   // set the localPath variable
   localPath = await _localPath;
@@ -77,29 +79,16 @@ Future<void> main() async {
   // set the logStoragePath variable
   logStoragePath = "$localPath/Documents/";
 
-  var logins = await isar.logins.where().findAll();
-  if (logins.isNotEmpty) {
-    prefs.setString("username", logins[0].username);
-    runApp(MyApp(
-      url: logins[0].serverUrl,
-      username: logins[0].username,
-      password: logins[0].password,
-    ));
-  } else {
-    runApp(const MyApp());
-  }
+  final loggedIn = (await isar.logins.count()) > 0;
+  runApp(MyApp(loggedIn: loggedIn));
 }
 
 class MyApp extends StatelessWidget {
-  final String? url;
-  final String? username;
-  final String? password;
+  final bool loggedIn;
 
   const MyApp({
     super.key,
-    this.url,
-    this.username,
-    this.password,
+    this.loggedIn = false,
   });
 
   @override
@@ -140,9 +129,7 @@ class MyApp extends StatelessWidget {
             theme: themeData.copyWith(
               snackBarTheme: floatingSnackBarTheme(themeData),
             ),
-            home: url != null && username != null && password != null
-                ? const HomeScreen()
-                : const LoginScreen(),
+            home: loggedIn ? const HomeScreen() : const LoginScreen(),
           );
             },
           ),

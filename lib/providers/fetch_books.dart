@@ -1,6 +1,6 @@
 // the purpose of this file is to fetch books from the database to be displayed in the app
 
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:kurage/providers/session_store.dart';
 import 'package:kurage/providers/jellyfin_api.dart';
 
 // database imports
@@ -15,24 +15,18 @@ import 'package:kurage/variables.dart';
 // get comics
 Future<Set<String>> getComics(String comicsId) async {
   logger.d('getting comics');
-  final prefs = await SharedPreferences.getInstance();
-  final token = prefs.getString('accessToken');
-  final url = prefs.getString('server');
-  final userId = prefs.getString('UserId');
-  final client = prefs.getString('client');
-  final device = prefs.getString('device');
-  final deviceId = prefs.getString('deviceId');
-  final version = prefs.getString('version');
+  final session = SessionStore.current;
+  final url = session.server;
+  final userId = session.userId;
   // '$url/Users/$userId/Items?StartIndex=0&Fields=PrimaryImageAspectRatio,SortName,Path,SongCount,ChildCount,MediaSourceCount,Tags,Overview,ParentId&ImageTypeLimit=1&ParentId=$comicsId&Recursive=true&SortBy=SortName&SortOrder=Ascending'),
   var headers = {
     'Accept': 'application/json',
     'Connection': 'keep-alive',
     'Accept-Language': 'en-US,en;q=0.5',
     'Accept-Encoding': 'gzip, deflate',
-    'Authorization':
-        'MediaBrowser Client="$client", Device="$device", DeviceId="$deviceId", Version="$version", Token="$token"',
+    'Authorization': session.authorization,
   };
-  final api = JellyfinApi(url!);
+  final api = JellyfinApi(url);
   final revisionBeforeFetch = progressRevision();
   // Preserve pages that were pending when this network request began, even if
   // their upload completes before the (possibly older) GET response arrives.
@@ -41,7 +35,7 @@ Future<Set<String>> getComics(String comicsId) async {
   List<dynamic> responseData = [];
   try {
     final response = await api.getItems(
-      userId: userId!,
+      userId: userId,
       headers: headers,
       parentId: comicsId,
     );

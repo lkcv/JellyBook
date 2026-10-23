@@ -9,7 +9,7 @@ import 'package:kurage/providers/supported_formats.dart';
 import 'package:kurage/models/entry.dart';
 import 'package:kurage/models/folder.dart';
 import 'package:isar/isar.dart';
-import 'package:package_info_plus/package_info_plus.dart' as p_info;
+import 'package:kurage/providers/session_store.dart';
 import 'package:kurage/variables.dart';
 
 /// Return UI-only folder projections. Do not mutate persisted Folder records;
@@ -69,16 +69,10 @@ Future<(List<Entry>, List<Folder>)> getServerCategories({
   void Function()? onCacheHit,
 }) async {
   logger.d("getting server categories");
-  final p_info.PackageInfo packageInfo =
-      await p_info.PackageInfo.fromPlatform();
+  final session = SessionStore.current;
   final prefs = await SharedPreferences.getInstance();
-  final token = prefs.getString('accessToken') ?? "";
-  final url = prefs.getString('server') ?? "";
-  final userId = prefs.getString('UserId') ?? "";
-  final client = prefs.getString('client') ?? "Kurage";
-  final device = prefs.getString('device') ?? "";
-  final deviceId = prefs.getString('deviceId') ?? "";
-  final version = prefs.getString('version') ?? packageInfo.version;
+  final url = session.server;
+  final userId = session.userId;
 
   // check if already has books and folders
   final isar = Isar.getInstance();
@@ -102,13 +96,10 @@ Future<(List<Entry>, List<Folder>)> getServerCategories({
     return (booksTemp, withoutLibraries(foldersTemp, booksTemp));
   }
 
-  // turn all the previous logger.d's into a single logger.d with multiple lines
-  logger.i(
-      "accessToken: $token\nserver: $url\nUserId: $userId\nclient: $client\ndevice: $device\ndeviceId: $deviceId\nversion: $version");
-
-  logger.d("got prefs");
-  Map<String, String> headers =
-      getHeaders(url, client, device, deviceId, version, token);
+  Map<String, String> headers = getHeaders(
+    url, session.client, session.device, session.deviceId,
+    session.version, session.token,
+  );
   final api = JellyfinApi(url);
   late final Response<Map<String, dynamic>> response;
   try {

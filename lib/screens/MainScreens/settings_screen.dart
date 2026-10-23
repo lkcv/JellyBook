@@ -8,10 +8,10 @@ import 'package:kurage/models/entry.dart';
 import 'package:kurage/models/folder.dart';
 import 'package:kurage/models/login.dart';
 import 'package:kurage/providers/app_settings_store.dart';
+import 'package:kurage/providers/session_store.dart';
 import 'package:kurage/screens/login_screen.dart';
 import 'package:kurage/providers/theme_provider.dart';
 import 'package:kurage/themes/accent_palette.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart' as p_info;
 import 'package:provider/provider.dart';
@@ -36,7 +36,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   String userName = '';
   String serverUrl = '';
-  SharedPreferences? prefs;
 
   // Cached profile card data so the list does not jump on every visit
   ImageProvider? _profilePic;
@@ -46,10 +45,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     getPackageInfo();
     super.initState();
-    // Settings.init();
-    setSharedPrefs().then((_) {
-      if (mounted) setState(() {});
-    });
     _loadProfileCard();
   }
 
@@ -78,10 +73,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.dispose();
   }
 
-  Future<void> setSharedPrefs() async {
-    prefs = await SharedPreferences.getInstance();
-  }
-
   // Clears the saved login and all cached library data, then returns to the
   // login screen. (Moved here from the library's app bar.)
   Future<void> logout() async {
@@ -101,6 +92,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       logger.i('deleted ${folderIds.length} folders');
       await isar.folders.deleteAll(folderIds);
     });
+    await SessionStore.clear();
     if (!mounted) return;
     Navigator.pushReplacement(
       context,
@@ -564,16 +556,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<ImageProvider?> getProfilePic() async {
-    p_info.PackageInfo packageInfo = await p_info.PackageInfo.fromPlatform();
-    final prefs = await SharedPreferences.getInstance();
-    final server = prefs.getString('server') ?? '';
-    final userId = prefs.getString('UserId') ?? '';
-    final token = prefs.getString('accessToken') ?? '';
-    final username = prefs.getString('username') ?? '';
-    final version = packageInfo.version;
-    const client = "Kurage";
-    const device = "Unknown Device";
-    const deviceId = "Unknown Device id";
+    final session = SessionStore.current;
+    final server = session.server;
+    final userId = session.userId;
+    final username = session.username;
+    if (server.isEmpty || userId.isEmpty) return null;
 
     userName = username;
     serverUrl = server;
@@ -595,8 +582,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       'Accept-Language': 'en-US,en;q=0.5',
       'Accept-Encoding': 'gzip, deflate',
       'Content-Type': 'application/json',
-      "Authorization":
-          "MediaBrowser Client=\"$client\", Device=\"$device\", DeviceId=\"$deviceId\", Version=\"$version\", Token=\"$token\"",
+      'Authorization': session.authorization,
       'Connection': 'keep-alive',
       'Origin': server,
       'Host': server.substring(server.indexOf("//") + 2, server.length),
