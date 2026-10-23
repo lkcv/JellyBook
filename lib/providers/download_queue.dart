@@ -9,6 +9,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:isar/isar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:kurage/models/download_queue_record.dart';
 import 'package:kurage/models/entry.dart';
 import 'package:kurage/providers/download_entry.dart';
 import 'package:kurage/providers/download_background.dart';
@@ -212,20 +213,28 @@ class DownloadQueue extends ChangeNotifier {
   }
 
   Future<void> _loadSavedQueue() async {
+    var removeLegacy = false;
     try {
       final isar = Isar.getInstance();
       if (isar == null) throw StateError('Database unavailable');
+      final records = await isar.downloadQueueRecords.where().findAll();
+      records.sort((a, b) => a.position.compareTo(b.position));
+      final saved = <dynamic>[
+        for (final record in records)
+          {'id': record.entryId, 'state': record.state},
+      ];
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString(_queueStorageKey);
-      dynamic saved;
-      try {
-        saved = raw == null ? null : jsonDecode(raw);
-      } on FormatException catch (error) {
-        // An unreadable journal cannot be recovered, but new downloads must
-        // still work. Do not fail the entire manager initialization.
-        debugPrint('DownloadQueue: invalid saved queue: $error');
+      removeLegacy = raw != null;
+      if (records.isEmpty && raw != null) {
+        try {
+          final legacy = jsonDecode(raw);
+          if (legacy is List) saved.addAll(legacy);
+        } on FormatException catch (error) {
+          debugPrint('DownloadQueue: invalid saved queue: $error');
+        }
       }
-      if (saved is List) {
+      if (saved.isNotEmpty) {
         final recovered = <DownloadJob>[];
         final savedIds = <String>{};
         for (final record in saved) {
@@ -278,25 +287,38 @@ class DownloadQueue extends ChangeNotifier {
     }
     _restored = true;
     // Prune completed/missing entries and merge any in-memory enqueues.
-    await _persistQueue();
+    await _persistQueue(removeLegacy: removeLegacy);
     unawaited(_drain());
   }
 
-  /// Store only IDs/order/states, not archive data, credentials or frequent
-  /// progress callbacks. Serialize writes so older snapshots cannot win.
-  Future<void> _persistQueue() {
-    final snapshot = jsonEncode([
-      for (final job in _jobs)
-        if (job.state == DownloadJobState.queued ||
-            job.state == DownloadJobState.downloading ||
-            _isWaiting(job.state) ||
-            job.state == DownloadJobState.failed)
-          {'id': job.id, 'state': job.state.name},
-    ]);
+  /// Persist only queue order and states; page files remain on disk.
+  /// Serialized transactions keep older snapshots from overwriting newer ones.
+  Future<void> _persistQueue({bool removeLegacy = false}) {
+    final snapshot = <DownloadQueueRecord>[];
+    for (final job in _jobs) {
+      if (job.state == DownloadJobState.queued ||
+          job.state == DownloadJobState.downloading ||
+          _isWaiting(job.state) ||
+          job.state == DownloadJobState.failed) {
+        snapshot.add(DownloadQueueRecord(
+          entryId: job.id,
+          position: snapshot.length,
+          state: job.state.name,
+        ));
+      }
+    }
     _persistenceTail = _persistenceTail.then((_) async {
-      final prefs = await SharedPreferences.getInstance();
-      if (!await prefs.setString(_queueStorageKey, snapshot)) {
-        debugPrint('DownloadQueue: could not persist download queue');
+      final isar = Isar.getInstance();
+      if (isar == null) throw StateError('Database unavailable');
+      await isar.writeTxn(() async {
+        await isar.downloadQueueRecords.clear();
+        if (snapshot.isNotEmpty) {
+          await isar.downloadQueueRecords.putAll(snapshot);
+        }
+      });
+      if (removeLegacy) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(_queueStorageKey);
       }
     }).catchError((Object error) {
       debugPrint('DownloadQueue: could not persist queue: $error');

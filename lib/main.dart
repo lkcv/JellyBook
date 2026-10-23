@@ -5,6 +5,7 @@ import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:kurage/models/app_settings.dart';
+import 'package:kurage/models/download_queue_record.dart';
 import 'package:kurage/models/entry.dart';
 import 'package:kurage/models/folder.dart';
 import 'package:kurage/models/login.dart';
@@ -62,7 +63,13 @@ Future<void> main() async {
   Directory dir = await getApplicationDocumentsDirectory();
 
   final isar = await Isar.open(
-      [AppSettingsSchema, EntrySchema, FolderSchema, LoginSchema],
+      [
+        AppSettingsSchema,
+        DownloadQueueRecordSchema,
+        EntrySchema,
+        FolderSchema,
+        LoginSchema,
+      ],
       directory: dir.path);
   await AppSettingsStore.initialize(isar, prefs);
   await SessionStore.initialize(isar, prefs);
