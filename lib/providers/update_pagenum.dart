@@ -2,18 +2,22 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:isar/isar.dart';
 import 'package:package_info_plus/package_info_plus.dart' as p_info;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:kurage/models/pending_progress_record.dart';
 import 'package:kurage/providers/jellyfin_api.dart';
 import 'package:kurage/providers/session_store.dart';
 import 'package:kurage/variables.dart';
+
+typedef _ProgressKey = ({String server, String userId, String itemId});
 
 final _progressQueue = _JellyfinProgressQueue();
 
 /// Queues a zero-based page index. Each volume retains only its latest page.
 /// Network activity never blocks the reader's page-change callback.
 Future<void> updatePagenum(String id, int pageIndex) {
-  // Observe page changes before any async SharedPreferences or HTTP work.
+  // Observe page changes before any asynchronous database or HTTP work.
   _progressQueue.noteLocalPageChange(id);
   return _progressQueue.enqueue(id, pageIndex);
 }
@@ -34,7 +38,7 @@ Future<void> retryPendingProgress() => _progressQueue.retry();
 class _JellyfinProgressQueue {
   static const _storageKey = 'kurage.pendingPageProgress.v1';
   static const _requestTimeout = Duration(seconds: 12);
-  final Map<String, int> _pending = <String, int>{};
+  final Map<_ProgressKey, int> _pending = <_ProgressKey, int>{};
   final Map<String, int> _localChangeRevisions = <String, int>{};
   int _revision = 0;
   int get revision => _revision;
@@ -44,11 +48,9 @@ class _JellyfinProgressQueue {
   }
 
   Future<Set<String>> protectedItemIds(int sinceRevision) async {
-    // Wait for currently queued SharedPreferences mutations, so offline pages
-    // persisted moments ago are visible to the library importer.
+    // Wait for queued writes so recent offline pages remain protected.
     await _mutations;
-    final prefs = await SharedPreferences.getInstance();
-    _load(prefs);
+    await _ensureLoaded();
     final session = SessionStore.current;
     final server = session.server.replaceFirst(RegExp(r'/+$'), '');
     final userId = session.userId;
@@ -57,24 +59,19 @@ class _JellyfinProgressQueue {
         if (entry.value > sinceRevision) entry.key,
     };
     for (final key in _pending.keys) {
-      try {
-        final parts = (jsonDecode(key) as List).cast<String>();
-        if (parts.length == 3 && parts[0] == server && parts[1] == userId) {
-          protected.add(parts[2]);
-        }
-      } catch (_) {
-        // Malformed legacy queue entries cannot authorize a server restore.
+      if (key.server == server && key.userId == userId) {
+        protected.add(key.itemId);
       }
     }
     return protected;
   }
 
   Future<void> _mutations = Future<void>.value();
-  bool _loaded = false;
+  Future<void>? _loading;
   bool _sending = false;
 
-  // Serialize preference writes, so a slower earlier write cannot overwrite
-  // a later page index or a successful upload acknowledgement.
+  // Serialize writes so an older page cannot overwrite a newer one or an
+  // upload acknowledgement.
   Future<void> _mutate(Future<void> Function() action) {
     final operation = _mutations.then((_) => action());
     _mutations = operation.then<void>((_) {}, onError: (Object e, StackTrace st) {
@@ -83,33 +80,88 @@ class _JellyfinProgressQueue {
     return operation;
   }
 
-  void _load(SharedPreferences prefs) {
-    if (_loaded) return;
-    _loaded = true;
-    final encoded = prefs.getString(_storageKey);
-    if (encoded == null) return;
+  Future<void> _ensureLoaded() async {
     try {
-      final decoded = jsonDecode(encoded);
-      if (decoded is! Map<String, dynamic>) return;
-      for (final entry in decoded.entries) {
-        if (entry.value is int && entry.value >= 0) {
-          _pending[entry.key] = entry.value as int;
-        }
-      }
-    } catch (e) {
-      logger.w('Ignoring invalid saved progress queue: $e');
+      await (_loading ??= _loadSaved());
+    } catch (_) {
+      _loading = null;
+      rethrow;
     }
   }
 
-  Future<void> _persist(SharedPreferences prefs) async {
-    if (!await prefs.setString(_storageKey, jsonEncode(_pending))) {
-      throw StateError('Could not persist pending Jellyfin progress');
+  Future<void> _loadSaved() async {
+    final isar = Isar.getInstance();
+    if (isar == null) throw StateError('Database unavailable');
+    final records = await isar.pendingProgressRecords.where().findAll();
+    records.sort((a, b) => a.position.compareTo(b.position));
+    final saved = <_ProgressKey, int>{};
+    for (final record in records) {
+      if (record.server.isEmpty || record.userId.isEmpty ||
+          record.itemId.isEmpty || record.pageIndex < 0) {
+        continue;
+      }
+      saved[(server: record.server, userId: record.userId,
+          itemId: record.itemId)] = record.pageIndex;
     }
+
+    final prefs = await SharedPreferences.getInstance();
+    final legacy = prefs.getString(_storageKey);
+    if (records.isEmpty && legacy != null) {
+      try {
+        final decoded = jsonDecode(legacy);
+        if (decoded is Map<String, dynamic>) {
+          for (final entry in decoded.entries) {
+            if (entry.value is! int || entry.value < 0) continue;
+            try {
+              final parts = jsonDecode(entry.key);
+              if (parts is! List || parts.length != 3 ||
+                  parts.any((value) => value is! String || value.isEmpty)) {
+                continue;
+              }
+              saved[(server: parts[0] as String, userId: parts[1] as String,
+                  itemId: parts[2] as String)] = entry.value as int;
+            } on FormatException {
+              // Ignore malformed legacy account/item keys.
+            }
+          }
+        }
+      } on FormatException catch (error) {
+        logger.w('Ignoring invalid saved progress queue: $error');
+      }
+      // Keep the old journal until its replacement is committed.
+      await _persistSnapshot(saved);
+    }
+    if (legacy != null && !await prefs.remove(_storageKey)) {
+      throw StateError('Could not remove legacy progress queue');
+    }
+    _pending.addAll(saved);
   }
+
+  Future<void> _persistSnapshot(Map<_ProgressKey, int> snapshot) async {
+    final isar = Isar.getInstance();
+    if (isar == null) throw StateError('Database unavailable');
+    final records = <PendingProgressRecord>[];
+    for (final entry in snapshot.entries) {
+      records.add(PendingProgressRecord(
+        server: entry.key.server,
+        userId: entry.key.userId,
+        itemId: entry.key.itemId,
+        pageIndex: entry.value,
+        position: records.length,
+      ));
+    }
+    await isar.writeTxn(() async {
+      await isar.pendingProgressRecords.clear();
+      if (records.isNotEmpty) {
+        await isar.pendingProgressRecords.putAll(records);
+      }
+    });
+  }
+
+  Future<void> _persist() => _persistSnapshot(_pending);
 
   Future<void> enqueue(String id, int pageIndex) => _mutate(() async {
-        final prefs = await SharedPreferences.getInstance();
-        _load(prefs);
+        await _ensureLoaded();
         final session = SessionStore.current;
         final server = session.server.replaceFirst(RegExp(r'/+$'), '');
         final userId = session.userId;
@@ -118,13 +170,13 @@ class _JellyfinProgressQueue {
           return;
         }
         // Never sync an old account's saved progress to a new account.
-        _pending[jsonEncode(<String>[server, userId, id])] = pageIndex;
-        await _persist(prefs);
+        _pending[(server: server, userId: userId, itemId: id)] = pageIndex;
+        await _persist();
         _start();
       });
 
   Future<void> retry() => _mutate(() async {
-        _load(await SharedPreferences.getInstance());
+        await _ensureLoaded();
         _start();
       });
 
@@ -140,30 +192,22 @@ class _JellyfinProgressQueue {
         // Include any page changes persisted while a request was in flight.
         await _mutations;
         if (_pending.isEmpty) return;
-        final prefs = await SharedPreferences.getInstance();
         final session = SessionStore.current;
         final server = session.server.replaceFirst(RegExp(r'/+$'), '');
         final userId = session.userId;
         final token = session.token;
         if (server.isEmpty || userId.isEmpty || token.isEmpty) return;
 
-        MapEntry<String, int>? next;
-        String? itemId;
+        MapEntry<_ProgressKey, int>? next;
         for (final entry in _pending.entries) {
-          try {
-            final parts = (jsonDecode(entry.key) as List).cast<String>();
-            if (parts.length == 3 &&
-                parts[0] == server && parts[1] == userId) {
-              next = entry;
-              itemId = parts[2];
-              break;
-            }
-          } catch (_) {
-            // Ignore an invalid or obsolete key rather than misroute it.
+          if (entry.key.server == server && entry.key.userId == userId) {
+            next = entry;
+            break;
           }
         }
-        if (next == null || itemId == null) return;
+        if (next == null) return;
         final key = next.key;
+        final itemId = key.itemId;
         final page = next.value;
         try {
           await _report(server, token, itemId, page);
@@ -176,7 +220,7 @@ class _JellyfinProgressQueue {
           // A newer page may have arrived while the HTTP request ran.
           if (_pending[key] == page) {
             _pending.remove(key);
-            await _persist(prefs);
+            await _persist();
           }
         });
       }

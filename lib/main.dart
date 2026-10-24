@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:kurage/models/app_settings.dart';
 import 'package:kurage/models/download_queue_record.dart';
+import 'package:kurage/models/pending_progress_record.dart';
 import 'package:kurage/models/entry.dart';
 import 'package:kurage/models/folder.dart';
 import 'package:kurage/models/login.dart';
@@ -66,6 +67,7 @@ Future<void> main() async {
       [
         AppSettingsSchema,
         DownloadQueueRecordSchema,
+        PendingProgressRecordSchema,
         EntrySchema,
         FolderSchema,
         LoginSchema,
