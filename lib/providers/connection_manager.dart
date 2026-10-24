@@ -1,4 +1,7 @@
 import 'dart:async';
+import 'dart:io';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/widgets.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:kurage/providers/jellyfin_api.dart';
@@ -19,6 +22,7 @@ class ConnectionManager extends ChangeNotifier with WidgetsBindingObserver {
 
   bool _checking = false;
   bool _recheckRequested = false;
+  int _failureRevision = 0;
   bool _disposed = false;
   bool _paused = false;
 
@@ -107,6 +111,48 @@ class ConnectionManager extends ChangeNotifier with WidgetsBindingObserver {
     super.dispose();
   }
 
+  /// A reader request can detect an outage before the next connection poll.
+  /// Only definite transport failures switch offline immediately; HTTP errors
+  /// trigger validation rather than assuming the entire server is down.
+  void reportConnectionFailure(Object error, {required Session session}) {
+    if (_disposed || !identical(session, SessionStore.current)) return;
+
+    if (error is SocketException ||
+        error is DioException &&
+            (error.type == DioExceptionType.connectionError ||
+                error.type == DioExceptionType.connectionTimeout ||
+                error.error is SocketException)) {
+      ++_failureRevision;
+      _setStatus(ConnectionStatus.offline);
+      if (_checking) _recheckRequested = true;
+      return;
+    }
+
+    if (error is DioException) {
+      final status = error.response?.statusCode;
+      if (status != null) {
+        if (status == 401 || status == 403 || status == 408 ||
+            status == 429 || status >= 500) {
+          unawaited(validateStartup());
+        }
+        return;
+      }
+      if (error.error is FileSystemException ||
+          error.error is FormatException) {
+        return;
+      }
+      if (error.type == DioExceptionType.receiveTimeout ||
+          error.type == DioExceptionType.sendTimeout ||
+          error.type == DioExceptionType.badResponse ||
+          error.type == DioExceptionType.unknown) {
+        unawaited(validateStartup());
+      }
+    } else if (error is TimeoutException || error is HttpException ||
+        error is HandshakeException) {
+      unawaited(validateStartup());
+    }
+  }
+
   /// Validate saved credentials (startup, resume, reconnect, manual retry)
   Future<void> validateStartup() async {
     if (_checking) {
@@ -115,6 +161,7 @@ class ConnectionManager extends ChangeNotifier with WidgetsBindingObserver {
     }
     _recheckRequested = false;
     _checking = true;
+    final failureRevision = _failureRevision;
 
     try {
       final session = SessionStore.current;
@@ -123,26 +170,34 @@ class ConnectionManager extends ChangeNotifier with WidgetsBindingObserver {
 
       if (server.isEmpty || token.isEmpty) {
         logger.d('ConnectionManager: missing saved server/token');
-        _setStatus(ConnectionStatus.authFailed);
+        if (failureRevision == _failureRevision) {
+          _setStatus(ConnectionStatus.authFailed);
+        }
         return;
       }
 
       if (!await _isReachable()) {
         logger.d('ConnectionManager: server unreachable');
-        _setStatus(ConnectionStatus.offline);
+        if (failureRevision == _failureRevision) {
+          _setStatus(ConnectionStatus.offline);
+        }
         return;
       }
+      if (failureRevision != _failureRevision) return;
 
       var result = await _checkAuth(server);
+      if (failureRevision != _failureRevision) return;
       if (result == ConnectionStatus.authFailed) {
         logger.d('ConnectionManager: token rejected, attempting silent re-login');
         result = await _trySilentRelogin(server);
       }
 
-      _setStatus(result);
+      if (failureRevision == _failureRevision) _setStatus(result);
     } catch (e) {
       logger.d('ConnectionManager: validateStartup error: $e');
-      _setStatus(ConnectionStatus.offline);
+      if (failureRevision == _failureRevision) {
+        _setStatus(ConnectionStatus.offline);
+      }
     } finally {
       _checking = false;
       if (_recheckRequested && !_disposed && !_paused) {

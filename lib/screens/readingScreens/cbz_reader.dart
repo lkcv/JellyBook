@@ -117,6 +117,7 @@ class _CbzReaderState extends State<CbzReader>
   // Streaming support
   bool _isStreaming = false;
   CbzStream? _stream;
+  Session? _streamSession;
   final Map<int, File> _pageCache = {};
   final Map<int, Future<File>> _pageLoads = {};
   final Map<int, String> _chapterLabels = {};
@@ -315,23 +316,41 @@ class _CbzReaderState extends State<CbzReader>
       if (mounted) _precacheAround(_currentPage);
     } catch (e, s) {
       logger.e('CbzReader: load failed: $e\n$s');
-      if (mounted) {
-        if (widget.continuingVolume &&
-            widget.onContinuationLoadFailed != null) {
-          // Recover the previous volume without leaving the reading session.
-          widget.onContinuationLoadFailed!();
-        } else {
-          final messenger = ScaffoldMessenger.of(context);
-          final nav = Navigator.of(context);
-          messenger.showSnackBar(
-            SnackBar(
-              content: Text('Could not open this volume: $e'),
-              duration: const Duration(seconds: 15),
-              showCloseIcon: true,
-            ),
-          );
-          nav.pop();
-        }
+      if (!mounted) return;
+      final connection = context.read<ConnectionManager>();
+      final session = _streamSession;
+      if (session != null) {
+        connection.reportConnectionFailure(e, session: session);
+      }
+      // Don't reverse the cover mid-expansion when the stream fails early.
+      if (widget.openingReady?.value == false &&
+          !(await _waitUntilCoverExpanded())) {
+        return;
+      }
+      if (!mounted) return;
+      final message = _isStreaming &&
+              connection.status == ConnectionStatus.offline
+          ? 'Server is offline and this page is not cached'
+          : _isStreaming && connection.status == ConnectionStatus.authFailed
+              ? 'Jellyfin authentication failed'
+              : e is FormatException
+                  ? 'Could not read this volume as a CBZ'
+                  : _isStreaming
+                      ? 'Could not load this volume from Jellyfin'
+                      : 'Could not open this volume';
+      if (widget.continuingVolume &&
+          widget.onContinuationLoadFailed != null) {
+        widget.onContinuationLoadFailed!();
+      } else {
+        final messenger = ScaffoldMessenger.of(context);
+        final nav = Navigator.of(context);
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(message),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+        nav.pop();
       }
     }
   }
@@ -382,18 +401,14 @@ class _CbzReaderState extends State<CbzReader>
   Future<void> _finishOpening() async {
     if (widget.openingReady != null && pageNums > 0) {
       if (!await _waitUntilCoverExpanded()) return;
-      try {
-        final file = await _loadPageFile(_currentPage);
-        if (!mounted) return;
-        final provider = FileImage(file);
-        final status = PaintingBinding.instance.imageCache.statusForKey(provider);
-        if (!status.keepAlive && !(status.live && !status.pending)) {
-          _setOpeningState(ReaderOpeningState.loadingPage);
-        }
-        await precacheImage(provider, context);
-      } catch (error) {
-        logger.w('CbzReader: could not precache opening page: $error');
+      final file = await _loadPageFile(_currentPage);
+      if (!mounted) return;
+      final provider = FileImage(file);
+      final status = PaintingBinding.instance.imageCache.statusForKey(provider);
+      if (!status.keepAlive && !(status.live && !status.pending)) {
+        _setOpeningState(ReaderOpeningState.loadingPage);
       }
+      await precacheImage(provider, context);
     }
     if (!mounted) return;
     setState(() => _loading = false);
@@ -446,6 +461,7 @@ class _CbzReaderState extends State<CbzReader>
 
   Future<void> _initStream(Entry entry) async {
     final session = SessionStore.current;
+    _streamSession = session;
     final server = session.server;
     final headers = {'Authorization': session.authorization};
 
