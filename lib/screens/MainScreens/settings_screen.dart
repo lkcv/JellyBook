@@ -618,35 +618,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return imageProvider;
   }
 
-  // Widget themeSettings(BuildContext context) => DropDownSettingsTile(
-  //       settingKey: 'theme',
-  //       title: AppLocalizations.of(context)?.theme ?? 'theme',
-  //       selected: Settings.getValue<String>('theme') ?? 'System',
-  //       leading: const Icon(Icons.color_lens),
-  //       values: <String, String>{
-  //         'System': AppLocalizations.of(context)?.systemTheme ?? 'System',
-  //         'Light': AppLocalizations.of(context)?.lightTheme ?? 'Light',
-  //         'Dark': AppLocalizations.of(context)?.darkTheme ?? 'Dark',
-  //         'Amoled': AppLocalizations.of(context)?.amoledTheme ?? 'Amoled',
-  //         // AppLocalizations.of(context)?.systemTheme ?? 'System': 'System',
-  //         // AppLocalizations.of(context)?.lightTheme ?? 'Light': 'Light',
-  //         // AppLocalizations.of(context)?.darkTheme ?? 'Dark': 'Dark',
-  //         // AppLocalizations.of(context)?.amoledTheme ?? 'Amoled': 'Amoled',
-  //       },
-  //       // give the key and value of the selected theme
-  //       onChange: (value) async {
-  //         debugPrint('Settings theme: ${Settings.getValue<String>('theme')}');
-  //         // debugPrint('Theme changed to $value');
-  //         SharedPreferences prefs = await SharedPreferences.getInstance();
-  //         ThemeChangeNotifier themeChangeNotifier =
-  //             Provider.of<ThemeChangeNotifier>(context, listen: false);
-  //         // set the theme to the english value of the selected theme
-  //         Settings.setValue<String>('theme', value.toString());
-  //         prefs.setString('theme', value.toString().toLowerCase());
-  //         themeChangeNotifier.setTheme = value.toString().toLowerCase();
-  //       },
-  //     );
-
   // static String capitalize(String s) => s[0].toUpperCase() + s.substring(1);
 
   static final isoLangs = {

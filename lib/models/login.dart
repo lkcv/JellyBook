@@ -9,7 +9,6 @@ class Login {
   @Index()
   String serverUrl;
   String username;
-  String password = "";
   String userId = '';
   String client = 'Kurage';
   String device = '';
@@ -19,7 +18,6 @@ class Login {
   Login({
     required this.serverUrl,
     required this.username,
-    this.password = "",
     this.userId = '',
     this.client = 'Kurage',
     this.device = '',

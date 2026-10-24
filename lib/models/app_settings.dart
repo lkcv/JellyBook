@@ -12,6 +12,7 @@ class AppSettings {
   String readingDirection;
   String localeString;
   int? readerCacheLimitMb;
+  List<String> libraryNames;
 
   AppSettings({
     this.themeSelection = 'system',
@@ -19,6 +20,7 @@ class AppSettings {
     this.readingDirection = 'LTR',
     this.localeString = 'en',
     this.readerCacheLimitMb,
+    this.libraryNames = const [],
   });
 
   AppSettings copy() => AppSettings(
@@ -27,5 +29,6 @@ class AppSettings {
         readingDirection: readingDirection,
         localeString: localeString,
         readerCacheLimitMb: readerCacheLimitMb,
+        libraryNames: List<String>.of(libraryNames),
       );
 }

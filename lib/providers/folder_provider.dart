@@ -1,7 +1,5 @@
 // The purpose of this file is to take the list of entries and create folders if their parentId is not one of the categories
 
-import 'package:shared_preferences/shared_preferences.dart';
-
 import 'package:isar/isar.dart';
 import 'package:kurage/models/folder.dart';
 import 'package:kurage/models/entry.dart';
@@ -15,9 +13,6 @@ class CreateFolders {
 static Future<void> createFolders(
       List<Entry> entries, List<String> categories) async {
     final isar = Isar.getInstance();
-  
-    final prefs = await SharedPreferences.getInstance();
-    List<String> categories = prefs.getStringList('categories') ?? [];
     List<Folder> newFolders = [];
     entries.forEach((entry) {
       List<Entry> bookEntries = isar!.entrys

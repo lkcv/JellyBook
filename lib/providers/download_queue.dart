@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:collection';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -8,7 +7,6 @@ import 'package:dio/dio.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:isar/isar.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:kurage/models/download_queue_record.dart';
 import 'package:kurage/models/entry.dart';
 import 'package:kurage/providers/download_entry.dart';
@@ -198,7 +196,6 @@ class DownloadQueue extends ChangeNotifier {
     super.dispose();
   }
 
-  static const _queueStorageKey = 'kurage_download_queue_v1';
   Future<void>? _restoreFuture;
   Future<void> _persistenceTail = Future<void>.value();
   bool _restored = false;
@@ -213,35 +210,18 @@ class DownloadQueue extends ChangeNotifier {
   }
 
   Future<void> _loadSavedQueue() async {
-    var removeLegacy = false;
     try {
       final isar = Isar.getInstance();
       if (isar == null) throw StateError('Database unavailable');
       final records = await isar.downloadQueueRecords.where().findAll();
       records.sort((a, b) => a.position.compareTo(b.position));
-      final saved = <dynamic>[
-        for (final record in records)
-          {'id': record.entryId, 'state': record.state},
-      ];
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_queueStorageKey);
-      removeLegacy = raw != null;
-      if (records.isEmpty && raw != null) {
-        try {
-          final legacy = jsonDecode(raw);
-          if (legacy is List) saved.addAll(legacy);
-        } on FormatException catch (error) {
-          debugPrint('DownloadQueue: invalid saved queue: $error');
-        }
-      }
-      if (saved.isNotEmpty) {
+      if (records.isNotEmpty) {
         final recovered = <DownloadJob>[];
         final savedIds = <String>{};
-        for (final record in saved) {
-          if (record is! Map) continue;
-          final id = record['id'];
-          final state = record['state'];
-          if (id is! String || id.isEmpty) continue;
+        for (final record in records) {
+          final id = record.entryId;
+          final state = record.state;
+          if (id.isEmpty) continue;
           if (state != 'queued' && state != 'downloading' &&
               state != 'waitingForNetwork' && state != 'waitingForServer' &&
               state != 'failed') {
@@ -287,13 +267,13 @@ class DownloadQueue extends ChangeNotifier {
     }
     _restored = true;
     // Prune completed/missing entries and merge any in-memory enqueues.
-    await _persistQueue(removeLegacy: removeLegacy);
+    await _persistQueue();
     unawaited(_drain());
   }
 
   /// Persist only queue order and states; page files remain on disk.
   /// Serialized transactions keep older snapshots from overwriting newer ones.
-  Future<void> _persistQueue({bool removeLegacy = false}) {
+  Future<void> _persistQueue() {
     final snapshot = <DownloadQueueRecord>[];
     for (final job in _jobs) {
       if (job.state == DownloadJobState.queued ||
@@ -316,10 +296,6 @@ class DownloadQueue extends ChangeNotifier {
           await isar.downloadQueueRecords.putAll(snapshot);
         }
       });
-      if (removeLegacy) {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.remove(_queueStorageKey);
-      }
     }).catchError((Object error) {
       debugPrint('DownloadQueue: could not persist queue: $error');
     });

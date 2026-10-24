@@ -9,7 +9,7 @@ import 'package:kurage/providers/cbz_stream.dart';
 import 'package:kurage/providers/download_queue.dart';
 import 'package:kurage/providers/supported_formats.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:kurage/providers/session_store.dart';
 
 class CollectionPagePrefetcher {
   CollectionPagePrefetcher({
@@ -86,11 +86,11 @@ class CollectionPagePrefetcher {
     _running = true;
     var completed = false;
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final server = prefs.getString('server') ?? '';
-      final token = prefs.getString('accessToken') ?? '';
+      final session = SessionStore.current;
+      final server = session.server;
+      final token = session.token;
       if (!_canFetch(generation)) return;
-      if (server.isEmpty) {
+      if (server.isEmpty || token.isEmpty) {
         completed = true;
         return;
       }

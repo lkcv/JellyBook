@@ -1,10 +1,8 @@
 // Synchronize CBZ page indices with Jellyfin without racing rapid page turns.
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:isar/isar.dart';
 import 'package:package_info_plus/package_info_plus.dart' as p_info;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:kurage/models/pending_progress_record.dart';
 import 'package:kurage/providers/jellyfin_api.dart';
 import 'package:kurage/providers/session_store.dart';
@@ -36,7 +34,6 @@ Future<Set<String>> locallyProtectedProgressIds(int sinceRevision) =>
 Future<void> retryPendingProgress() => _progressQueue.retry();
 
 class _JellyfinProgressQueue {
-  static const _storageKey = 'kurage.pendingPageProgress.v1';
   static const _requestTimeout = Duration(seconds: 12);
   final Map<_ProgressKey, int> _pending = <_ProgressKey, int>{};
   final Map<String, int> _localChangeRevisions = <String, int>{};
@@ -104,36 +101,6 @@ class _JellyfinProgressQueue {
           itemId: record.itemId)] = record.pageIndex;
     }
 
-    final prefs = await SharedPreferences.getInstance();
-    final legacy = prefs.getString(_storageKey);
-    if (records.isEmpty && legacy != null) {
-      try {
-        final decoded = jsonDecode(legacy);
-        if (decoded is Map<String, dynamic>) {
-          for (final entry in decoded.entries) {
-            if (entry.value is! int || entry.value < 0) continue;
-            try {
-              final parts = jsonDecode(entry.key);
-              if (parts is! List || parts.length != 3 ||
-                  parts.any((value) => value is! String || value.isEmpty)) {
-                continue;
-              }
-              saved[(server: parts[0] as String, userId: parts[1] as String,
-                  itemId: parts[2] as String)] = entry.value as int;
-            } on FormatException {
-              // Ignore malformed legacy account/item keys.
-            }
-          }
-        }
-      } on FormatException catch (error) {
-        logger.w('Ignoring invalid saved progress queue: $error');
-      }
-      // Keep the old journal until its replacement is committed.
-      await _persistSnapshot(saved);
-    }
-    if (legacy != null && !await prefs.remove(_storageKey)) {
-      throw StateError('Could not remove legacy progress queue');
-    }
     _pending.addAll(saved);
   }
 

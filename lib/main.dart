@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:kurage/screens/login_screen.dart';
 import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:kurage/models/app_settings.dart';
 import 'package:kurage/models/download_queue_record.dart';
 import 'package:kurage/models/pending_progress_record.dart';
@@ -55,8 +54,6 @@ Future<void> main() async {
     DeviceOrientation.portraitDown,
   ]);
 
-  SharedPreferences prefs = await SharedPreferences.getInstance();
-
   // dio allow self signed certificates
   HttpOverrides.global = MyHttpOverrides();
 
@@ -73,8 +70,8 @@ Future<void> main() async {
         LoginSchema,
       ],
       directory: dir.path);
-  await AppSettingsStore.initialize(isar, prefs);
-  await SessionStore.initialize(isar, prefs);
+  await AppSettingsStore.initialize(isar);
+  await SessionStore.initialize(isar);
 
   // set the localPath variable
   localPath = await _localPath;

@@ -22,23 +22,28 @@ const AppSettingsSchema = CollectionSchema(
       name: r'accentColor',
       type: IsarType.long,
     ),
-    r'localeString': PropertySchema(
+    r'libraryNames': PropertySchema(
       id: 1,
+      name: r'libraryNames',
+      type: IsarType.stringList,
+    ),
+    r'localeString': PropertySchema(
+      id: 2,
       name: r'localeString',
       type: IsarType.string,
     ),
     r'readerCacheLimitMb': PropertySchema(
-      id: 2,
+      id: 3,
       name: r'readerCacheLimitMb',
       type: IsarType.long,
     ),
     r'readingDirection': PropertySchema(
-      id: 3,
+      id: 4,
       name: r'readingDirection',
       type: IsarType.string,
     ),
     r'themeSelection': PropertySchema(
-      id: 4,
+      id: 5,
       name: r'themeSelection',
       type: IsarType.string,
     )
@@ -63,6 +68,13 @@ int _appSettingsEstimateSize(
   Map<Type, List<int>> allOffsets,
 ) {
   var bytesCount = offsets.last;
+  bytesCount += 3 + object.libraryNames.length * 3;
+  {
+    for (var i = 0; i < object.libraryNames.length; i++) {
+      final value = object.libraryNames[i];
+      bytesCount += value.length * 3;
+    }
+  }
   bytesCount += 3 + object.localeString.length * 3;
   bytesCount += 3 + object.readingDirection.length * 3;
   bytesCount += 3 + object.themeSelection.length * 3;
@@ -76,10 +88,11 @@ void _appSettingsSerialize(
   Map<Type, List<int>> allOffsets,
 ) {
   writer.writeLong(offsets[0], object.accentColor);
-  writer.writeString(offsets[1], object.localeString);
-  writer.writeLong(offsets[2], object.readerCacheLimitMb);
-  writer.writeString(offsets[3], object.readingDirection);
-  writer.writeString(offsets[4], object.themeSelection);
+  writer.writeStringList(offsets[1], object.libraryNames);
+  writer.writeString(offsets[2], object.localeString);
+  writer.writeLong(offsets[3], object.readerCacheLimitMb);
+  writer.writeString(offsets[4], object.readingDirection);
+  writer.writeString(offsets[5], object.themeSelection);
 }
 
 AppSettings _appSettingsDeserialize(
@@ -90,10 +103,11 @@ AppSettings _appSettingsDeserialize(
 ) {
   final object = AppSettings(
     accentColor: reader.readLongOrNull(offsets[0]),
-    localeString: reader.readStringOrNull(offsets[1]) ?? 'en',
-    readerCacheLimitMb: reader.readLongOrNull(offsets[2]),
-    readingDirection: reader.readStringOrNull(offsets[3]) ?? 'LTR',
-    themeSelection: reader.readStringOrNull(offsets[4]) ?? 'system',
+    libraryNames: reader.readStringList(offsets[1]) ?? const [],
+    localeString: reader.readStringOrNull(offsets[2]) ?? 'en',
+    readerCacheLimitMb: reader.readLongOrNull(offsets[3]),
+    readingDirection: reader.readStringOrNull(offsets[4]) ?? 'LTR',
+    themeSelection: reader.readStringOrNull(offsets[5]) ?? 'system',
   );
   object.isarId = id;
   return object;
@@ -109,12 +123,14 @@ P _appSettingsDeserializeProp<P>(
     case 0:
       return (reader.readLongOrNull(offset)) as P;
     case 1:
-      return (reader.readStringOrNull(offset) ?? 'en') as P;
+      return (reader.readStringList(offset) ?? const []) as P;
     case 2:
-      return (reader.readLongOrNull(offset)) as P;
+      return (reader.readStringOrNull(offset) ?? 'en') as P;
     case 3:
-      return (reader.readStringOrNull(offset) ?? 'LTR') as P;
+      return (reader.readLongOrNull(offset)) as P;
     case 4:
+      return (reader.readStringOrNull(offset) ?? 'LTR') as P;
+    case 5:
       return (reader.readStringOrNull(offset) ?? 'system') as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -342,6 +358,231 @@ extension AppSettingsQueryFilter
         upper: upper,
         includeUpper: includeUpper,
       ));
+    });
+  }
+
+  QueryBuilder<AppSettings, AppSettings, QAfterFilterCondition>
+      libraryNamesElementEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'libraryNames',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<AppSettings, AppSettings, QAfterFilterCondition>
+      libraryNamesElementGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'libraryNames',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<AppSettings, AppSettings, QAfterFilterCondition>
+      libraryNamesElementLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'libraryNames',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<AppSettings, AppSettings, QAfterFilterCondition>
+      libraryNamesElementBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'libraryNames',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<AppSettings, AppSettings, QAfterFilterCondition>
+      libraryNamesElementStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'libraryNames',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<AppSettings, AppSettings, QAfterFilterCondition>
+      libraryNamesElementEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'libraryNames',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<AppSettings, AppSettings, QAfterFilterCondition>
+      libraryNamesElementContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'libraryNames',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<AppSettings, AppSettings, QAfterFilterCondition>
+      libraryNamesElementMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'libraryNames',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<AppSettings, AppSettings, QAfterFilterCondition>
+      libraryNamesElementIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'libraryNames',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<AppSettings, AppSettings, QAfterFilterCondition>
+      libraryNamesElementIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'libraryNames',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<AppSettings, AppSettings, QAfterFilterCondition>
+      libraryNamesLengthEqualTo(int length) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'libraryNames',
+        length,
+        true,
+        length,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<AppSettings, AppSettings, QAfterFilterCondition>
+      libraryNamesIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'libraryNames',
+        0,
+        true,
+        0,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<AppSettings, AppSettings, QAfterFilterCondition>
+      libraryNamesIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'libraryNames',
+        0,
+        false,
+        999999,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<AppSettings, AppSettings, QAfterFilterCondition>
+      libraryNamesLengthLessThan(
+    int length, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'libraryNames',
+        0,
+        true,
+        length,
+        include,
+      );
+    });
+  }
+
+  QueryBuilder<AppSettings, AppSettings, QAfterFilterCondition>
+      libraryNamesLengthGreaterThan(
+    int length, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'libraryNames',
+        length,
+        include,
+        999999,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<AppSettings, AppSettings, QAfterFilterCondition>
+      libraryNamesLengthBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'libraryNames',
+        lower,
+        includeLower,
+        upper,
+        includeUpper,
+      );
     });
   }
 
@@ -992,6 +1233,12 @@ extension AppSettingsQueryWhereDistinct
     });
   }
 
+  QueryBuilder<AppSettings, AppSettings, QDistinct> distinctByLibraryNames() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'libraryNames');
+    });
+  }
+
   QueryBuilder<AppSettings, AppSettings, QDistinct> distinctByLocaleString(
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
@@ -1034,6 +1281,13 @@ extension AppSettingsQueryProperty
   QueryBuilder<AppSettings, int?, QQueryOperations> accentColorProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'accentColor');
+    });
+  }
+
+  QueryBuilder<AppSettings, List<String>, QQueryOperations>
+      libraryNamesProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'libraryNames');
     });
   }
 

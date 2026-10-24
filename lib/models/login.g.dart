@@ -32,28 +32,23 @@ const LoginSchema = CollectionSchema(
       name: r'deviceId',
       type: IsarType.string,
     ),
-    r'password': PropertySchema(
-      id: 3,
-      name: r'password',
-      type: IsarType.string,
-    ),
     r'serverUrl': PropertySchema(
-      id: 4,
+      id: 3,
       name: r'serverUrl',
       type: IsarType.string,
     ),
     r'userId': PropertySchema(
-      id: 5,
+      id: 4,
       name: r'userId',
       type: IsarType.string,
     ),
     r'username': PropertySchema(
-      id: 6,
+      id: 5,
       name: r'username',
       type: IsarType.string,
     ),
     r'version': PropertySchema(
-      id: 7,
+      id: 6,
       name: r'version',
       type: IsarType.string,
     )
@@ -95,7 +90,6 @@ int _loginEstimateSize(
   bytesCount += 3 + object.client.length * 3;
   bytesCount += 3 + object.device.length * 3;
   bytesCount += 3 + object.deviceId.length * 3;
-  bytesCount += 3 + object.password.length * 3;
   bytesCount += 3 + object.serverUrl.length * 3;
   bytesCount += 3 + object.userId.length * 3;
   bytesCount += 3 + object.username.length * 3;
@@ -112,11 +106,10 @@ void _loginSerialize(
   writer.writeString(offsets[0], object.client);
   writer.writeString(offsets[1], object.device);
   writer.writeString(offsets[2], object.deviceId);
-  writer.writeString(offsets[3], object.password);
-  writer.writeString(offsets[4], object.serverUrl);
-  writer.writeString(offsets[5], object.userId);
-  writer.writeString(offsets[6], object.username);
-  writer.writeString(offsets[7], object.version);
+  writer.writeString(offsets[3], object.serverUrl);
+  writer.writeString(offsets[4], object.userId);
+  writer.writeString(offsets[5], object.username);
+  writer.writeString(offsets[6], object.version);
 }
 
 Login _loginDeserialize(
@@ -129,11 +122,10 @@ Login _loginDeserialize(
     client: reader.readStringOrNull(offsets[0]) ?? 'Kurage',
     device: reader.readStringOrNull(offsets[1]) ?? '',
     deviceId: reader.readStringOrNull(offsets[2]) ?? '',
-    password: reader.readStringOrNull(offsets[3]) ?? "",
-    serverUrl: reader.readString(offsets[4]),
-    userId: reader.readStringOrNull(offsets[5]) ?? '',
-    username: reader.readString(offsets[6]),
-    version: reader.readStringOrNull(offsets[7]) ?? '',
+    serverUrl: reader.readString(offsets[3]),
+    userId: reader.readStringOrNull(offsets[4]) ?? '',
+    username: reader.readString(offsets[5]),
+    version: reader.readStringOrNull(offsets[6]) ?? '',
   );
   object.isarId = id;
   return object;
@@ -153,14 +145,12 @@ P _loginDeserializeProp<P>(
     case 2:
       return (reader.readStringOrNull(offset) ?? '') as P;
     case 3:
-      return (reader.readStringOrNull(offset) ?? "") as P;
+      return (reader.readString(offset)) as P;
     case 4:
-      return (reader.readString(offset)) as P;
-    case 5:
       return (reader.readStringOrNull(offset) ?? '') as P;
-    case 6:
+    case 5:
       return (reader.readString(offset)) as P;
-    case 7:
+    case 6:
       return (reader.readStringOrNull(offset) ?? '') as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -740,136 +730,6 @@ extension LoginQueryFilter on QueryBuilder<Login, Login, QFilterCondition> {
     });
   }
 
-  QueryBuilder<Login, Login, QAfterFilterCondition> passwordEqualTo(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'password',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<Login, Login, QAfterFilterCondition> passwordGreaterThan(
-    String value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        include: include,
-        property: r'password',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<Login, Login, QAfterFilterCondition> passwordLessThan(
-    String value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.lessThan(
-        include: include,
-        property: r'password',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<Login, Login, QAfterFilterCondition> passwordBetween(
-    String lower,
-    String upper, {
-    bool includeLower = true,
-    bool includeUpper = true,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.between(
-        property: r'password',
-        lower: lower,
-        includeLower: includeLower,
-        upper: upper,
-        includeUpper: includeUpper,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<Login, Login, QAfterFilterCondition> passwordStartsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'password',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<Login, Login, QAfterFilterCondition> passwordEndsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'password',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<Login, Login, QAfterFilterCondition> passwordContains(
-      String value,
-      {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.contains(
-        property: r'password',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<Login, Login, QAfterFilterCondition> passwordMatches(
-      String pattern,
-      {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.matches(
-        property: r'password',
-        wildcard: pattern,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<Login, Login, QAfterFilterCondition> passwordIsEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'password',
-        value: '',
-      ));
-    });
-  }
-
-  QueryBuilder<Login, Login, QAfterFilterCondition> passwordIsNotEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'password',
-        value: '',
-      ));
-    });
-  }
-
   QueryBuilder<Login, Login, QAfterFilterCondition> serverUrlEqualTo(
     String value, {
     bool caseSensitive = true,
@@ -1431,18 +1291,6 @@ extension LoginQuerySortBy on QueryBuilder<Login, Login, QSortBy> {
     });
   }
 
-  QueryBuilder<Login, Login, QAfterSortBy> sortByPassword() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'password', Sort.asc);
-    });
-  }
-
-  QueryBuilder<Login, Login, QAfterSortBy> sortByPasswordDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'password', Sort.desc);
-    });
-  }
-
   QueryBuilder<Login, Login, QAfterSortBy> sortByServerUrl() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'serverUrl', Sort.asc);
@@ -1541,18 +1389,6 @@ extension LoginQuerySortThenBy on QueryBuilder<Login, Login, QSortThenBy> {
     });
   }
 
-  QueryBuilder<Login, Login, QAfterSortBy> thenByPassword() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'password', Sort.asc);
-    });
-  }
-
-  QueryBuilder<Login, Login, QAfterSortBy> thenByPasswordDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'password', Sort.desc);
-    });
-  }
-
   QueryBuilder<Login, Login, QAfterSortBy> thenByServerUrl() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'serverUrl', Sort.asc);
@@ -1624,13 +1460,6 @@ extension LoginQueryWhereDistinct on QueryBuilder<Login, Login, QDistinct> {
     });
   }
 
-  QueryBuilder<Login, Login, QDistinct> distinctByPassword(
-      {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'password', caseSensitive: caseSensitive);
-    });
-  }
-
   QueryBuilder<Login, Login, QDistinct> distinctByServerUrl(
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
@@ -1682,12 +1511,6 @@ extension LoginQueryProperty on QueryBuilder<Login, Login, QQueryProperty> {
   QueryBuilder<Login, String, QQueryOperations> deviceIdProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'deviceId');
-    });
-  }
-
-  QueryBuilder<Login, String, QQueryOperations> passwordProperty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'password');
     });
   }
 

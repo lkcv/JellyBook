@@ -1,7 +1,6 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:isar/isar.dart';
 import 'package:kurage/models/login.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class Session {
   const Session({
@@ -33,71 +32,33 @@ class Session {
 
 class SessionStore {
   static const _storage = FlutterSecureStorage();
-  static const _legacyKeys = <String>[
-    'server', 'accessToken', 'UserId', 'ServerId', 'username',
+  static const _secureKeys = <String>[
+    'server', 'accessToken', 'password', 'username', 'UserId', 'ServerId',
     'client', 'device', 'deviceId', 'version',
   ];
   static Session _current = const Session();
 
   static Session get current => _current;
 
-  static Future<void> initialize(Isar isar, SharedPreferences prefs) async {
+  static Future<void> initialize(Isar isar) async {
     final login = await isar.logins.where().findFirst();
     if (login == null) {
-      await _clearLegacyPreferences(prefs);
+      _current = const Session();
       return;
     }
 
-    final secureServer = await _storage.read(key: 'server');
-    final sameServer = secureServer == login.serverUrl;
-    final username = sameServer
-        ? (await _storage.read(key: 'username') ?? login.username)
-        : login.username;
-    final password = sameServer
-        ? (await _storage.read(key: 'password') ?? login.password)
-        : login.password;
-    final token = sameServer
-        ? (await _storage.read(key: 'accessToken') ??
-            prefs.getString('accessToken') ?? '')
-        : (prefs.getString('accessToken') ?? '');
-    final session = Session(
+    final sameServer = await _storage.read(key: 'server') == login.serverUrl;
+    _current = Session(
       server: login.serverUrl,
-      username: username,
-      userId: login.userId.isNotEmpty
-          ? login.userId
-          : (prefs.getString('UserId') ??
-              await _storage.read(key: 'UserId') ?? ''),
-      token: token,
-      password: password,
-      client: login.client.isNotEmpty
-          ? login.client : (prefs.getString('client') ?? 'Kurage'),
-      device: login.device.isNotEmpty
-          ? login.device : (prefs.getString('device') ?? ''),
-      deviceId: login.deviceId.isNotEmpty
-          ? login.deviceId : (prefs.getString('deviceId') ?? ''),
-      version: login.version.isNotEmpty
-          ? login.version : (prefs.getString('version') ?? ''),
+      username: login.username,
+      userId: login.userId,
+      token: sameServer ? (await _storage.read(key: 'accessToken') ?? '') : '',
+      password: sameServer ? (await _storage.read(key: 'password') ?? '') : '',
+      client: login.client,
+      device: login.device,
+      deviceId: login.deviceId,
+      version: login.version,
     );
-
-    await _storage.write(key: 'server', value: session.server);
-    await _storage.write(key: 'username', value: session.username);
-    if (token.isNotEmpty) {
-      await _storage.write(key: 'accessToken', value: token);
-    }
-    if (password.isNotEmpty) {
-      await _storage.write(key: 'password', value: password);
-    }
-    login
-      ..username = session.username
-      ..userId = session.userId
-      ..client = session.client
-      ..device = session.device
-      ..deviceId = session.deviceId
-      ..version = session.version
-      ..password = '';
-    await isar.writeTxn(() async => isar.logins.put(login));
-    _current = session;
-    await _clearLegacyPreferences(prefs);
   }
 
   static Future<void> save({
@@ -140,23 +101,12 @@ class SessionStore {
       deviceId: deviceId,
       version: version,
     );
-    await _clearLegacyPreferences(await SharedPreferences.getInstance());
   }
 
   static Future<void> clear() async {
     _current = const Session();
-    for (final key in <String>[
-      ..._legacyKeys,
-      'password',
-    ]) {
+    for (final key in _secureKeys) {
       await _storage.delete(key: key);
-    }
-    await _clearLegacyPreferences(await SharedPreferences.getInstance());
-  }
-
-  static Future<void> _clearLegacyPreferences(SharedPreferences prefs) async {
-    for (final key in _legacyKeys) {
-      await prefs.remove(key);
     }
   }
 }

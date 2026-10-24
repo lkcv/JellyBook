@@ -1,7 +1,7 @@
 // The purpose of this file is to fetch the categories from the database
 
 import 'package:dio/dio.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:kurage/providers/app_settings_store.dart';
 import 'package:kurage/providers/jellyfin_api.dart';
 import 'package:kurage/providers/fetch_books.dart';
 import 'package:kurage/providers/folder_provider.dart';
@@ -70,15 +70,13 @@ Future<(List<Entry>, List<Folder>)> getServerCategories({
 }) async {
   logger.d("getting server categories");
   final session = SessionStore.current;
-  final prefs = await SharedPreferences.getInstance();
   final url = session.server;
   final userId = session.userId;
 
   // check if already has books and folders
   final isar = Isar.getInstance();
-  // Not final: on a first load the prefs are empty here, so this is updated
-  // below once the library names have been fetched from the server.
-  var libraryNames = prefs.getStringList('categories') ?? [];
+  // Updated below once Jellyfin returns the latest library names.
+  var libraryNames = AppSettingsStore.current.libraryNames;
   // Project membership using the entries already loaded for the library.
   // Avoid an extra Isar query during the startup cover prewarm.
   List<Folder> withoutLibraries(List<Folder> folders, List<Entry> books) =>
@@ -168,7 +166,9 @@ Future<(List<Entry>, List<Folder>)> getServerCategories({
       categoriesList.add(data[i]['Name'] as String);
     }
     logger.i("categoriesList: $categoriesList");
-    prefs.setStringList('categories', categoriesList);
+    await AppSettingsStore.update((settings) {
+      settings.libraryNames = List<String>.of(categoriesList);
+    });
     libraryNames = categoriesList;
     await CreateFolders.getFolders(categoriesList);
     List<Folder> folders = withoutLibraries(
